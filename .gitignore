@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+dist-ssr/
+
+# logs
+*.log
+npm-debug.log*
+
+# editor
+.vscode/
+.idea/
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# temp probes
+.probe*.cjs
