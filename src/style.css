@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+/* ===== 军事作战终端主题（保留自定义变量，供 .ss-* 组件类使用） ===== */
+:root {
+  --bg: #0d1016;
+  --bg-deep: #0a0c11;
+  --panel: #151a22;
+  --panel-2: #1a202a;
+  --panel-3: #202838;
+  --ink: #e8e4da;
+  --ink-dim: #7d8698;
+  --ink-faint: #565e6e;
+  --line: #262e3a;
+  --line-soft: #1c222c;
+  --cinnabar: #c94f3d;
+  --cinnabar-soft: #e08a76;
+  --indigo: #5b8ec4;
+  --indigo-soft: #8fb4d8;
+  --amber: #d9a44a;
+  --amber-soft: #e8c377;
+  --ok: #7fae8d;
+  --serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
+  --sans: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+}
+
+/* 保留原有组件类（.ss-btn / .ss-card / .ss-brief 等）——从 ui.ts THEME 迁移 */

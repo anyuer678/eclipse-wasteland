@@ -1,0 +1,26 @@
+{
+  "name": "eclipse-wasteland",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Adventure-mode PVE rebuild (internal codename)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/three": "^0.185.4",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  }
+}
