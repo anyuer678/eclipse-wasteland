@@ -761,7 +761,7 @@ function boot(): void {
       const critMult = (isCrit ? st.critMult : 1) + (isCrit ? runB.critDmgBonus : 0);
       let dmg = damage * streakMult * (stealthTimer > 0 ? 2 * (1 + inventory.roleLevel(selectedRoleId) * 0.15) : 1) * st.attackMult * critMult * runB.dmgMult;
       if (!Number.isFinite(dmg) || dmg <= 0) dmg = damage; // NaN 防护
-      // 高地优势：玩家比目标高 0.6m 以上 → +20% 伤害（刺激战场占高地）
+      // 高地优势：玩家比目标高 0.6m 以上 → +20% 伤害
       const targetY = activeBoss && activeBoss.alive ? activeBoss.center().y : (spawner.all().find((e) => e.alive)?.root.position.y ?? 0);
       if (player.position.y > targetY + 0.6) dmg *= 1.2;
       if (activeBoss && activeBoss.alive) {
@@ -1619,7 +1619,7 @@ function boot(): void {
 
       hitFlash = Math.max(0, hitFlash - dt);
       hurtInvuln = Math.max(0, hurtInvuln - dt);
-      // 毒池陷阱：玩家/敌人踩入持续掉毒伤（刺激战场毒圈感）
+      // 毒池陷阱：玩家/敌人踩入持续掉毒伤
       const pools = (mapRoot?.userData.poisonPools ?? []) as { x: number; z: number; r: number }[];
       if (pools.length > 0 && !inMenu && flow.phase !== 'clear' && flow.phase !== 'failed') {
         for (const pool of pools) {
