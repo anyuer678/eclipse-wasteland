@@ -12,6 +12,9 @@ export interface WaveSpec {
   casters?: number;
 }
 
+/** 元素类型 */
+export type Element = 'physical' | 'fire' | 'ice' | 'energy';
+
 /** BOSS 规格 */
 export interface BossSpec {
   id: string;
@@ -20,6 +23,12 @@ export interface BossSpec {
   color: number;
   /** 技能间隔（秒） */
   skillInterval: number;
+  /** 元素抗性（0=无, 1=低, 2=中, 3=高） */
+  resistance?: Record<Element, number>;
+  /** BOSS 类型标签 */
+  bossType?: 'beast' | 'mech' | 'undead' | 'elemental';
+  /** 多段血条阈值（百分比，触发阶段转换） */
+  phaseThresholds?: number[];
 }
 
 /** 关卡定义 */
@@ -27,7 +36,7 @@ export interface MissionDef {
   id: string;
   name: string;
   /** 地图布局：废弃设施 / 采石场 / 实验室 */
-  mapId: 'facility' | 'quarry' | 'lab';
+  mapId: 'facility' | 'quarry' | 'lab' | 'volcano' | 'ice';
   /** 进入副本前准备时间（秒） */
   introSeconds: number;
   waves: WaveSpec[];

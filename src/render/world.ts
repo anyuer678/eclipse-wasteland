@@ -264,7 +264,7 @@ export class World {
    * 关卡地图：按 mapId 生成不同障碍布局与氛围（调色/灯光/装饰）。
    * 返回障碍物根节点（供切换关卡时移除）；平台数据挂在 userData.platforms。
    */
-  buildMap(mapId: 'facility' | 'quarry' | 'lab'): THREE.Group {
+  buildMap(mapId: 'facility' | 'quarry' | 'lab' | 'volcano' | 'ice'): THREE.Group {
     const root = new THREE.Group();
     const rng = mulberry32(mapId.length * 1337 + mapId.charCodeAt(0));
     const rough = (n: number): number => n + (rng() - 0.5) * 0.6;
@@ -305,6 +305,8 @@ export class World {
       facility: { skyTop: 0x4a90d0, skyHorizon: 0xa8c8e0, fog: 0xb8d4e8, sun: 0xfff2d0, ground: 0x3d6a30, accent: 0x5a9a3a },
       quarry: { skyTop: 0x4a90d0, skyHorizon: 0xc8b888, fog: 0xc8d0a8, sun: 0xffe8b8, ground: 0x6a5a30, accent: 0x8a6a30 },
       lab: { skyTop: 0x4a90d0, skyHorizon: 0x9ac8c0, fog: 0xa8d4d0, sun: 0xffffe8, ground: 0x4a7a50, accent: 0x4a9a70 },
+      volcano: { skyTop: 0x1a0a0a, skyHorizon: 0x3a1a0a, fog: 0x2a1008, sun: 0xff6622, ground: 0x2a1a0a, accent: 0xff4400 },
+      ice: { skyTop: 0x88ccee, skyHorizon: 0xccddff, fog: 0xaabbdd, sun: 0xeeeeff, ground: 0x8899aa, accent: 0x44aaff },
     } as const;
     const pal = PALETTES[mapId];
     // 明亮雾 + 天空渐变球（顶蓝 → 地平浅色）
@@ -673,6 +675,72 @@ export class World {
       root.add(ring);
     }
     root.userData.poisonPools = pools;
+
+    // ---- 熔岩地图特有装饰 ----
+    if (mapId === 'volcano') {
+      const lavaMat = solid(0xff2200, { roughness: 0.3, metalness: 0.1 });
+      lavaMat.emissive = new THREE.Color(0xff4400);
+      lavaMat.emissiveIntensity = 0.6;
+      // 熔岩裂缝（地面红色条带）
+      for (let i = 0; i < 6; i++) {
+        const a = rng() * Math.PI * 2;
+        const d = 4 + rng() * 10;
+        const crack = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.05, 2 + rng() * 3), lavaMat);
+        crack.position.set(Math.cos(a) * d, 0.02, Math.sin(a) * d);
+        crack.rotation.y = a;
+        root.add(crack);
+      }
+      // 火山岩柱
+      const rockMat = solid(0x2a1a0a);
+      for (let i = 0; i < 5; i++) {
+        const a = rng() * Math.PI * 2;
+        const d = 6 + rng() * 8;
+        const h = 1.5 + rng() * 2;
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, h, 8), rockMat);
+        pillar.position.set(Math.cos(a) * d, h / 2, Math.sin(a) * d);
+        pillar.castShadow = true;
+        root.add(pillar);
+      }
+      // 火焰粒子点光源
+      for (let i = 0; i < 3; i++) {
+        const a = rng() * Math.PI * 2;
+        const fire = new THREE.PointLight(0xff6600, 8, 6);
+        fire.position.set(Math.cos(a) * 8, 1.5, Math.sin(a) * 8);
+        root.add(fire);
+      }
+    }
+
+    // ---- 冰霜地图特有装饰 ----
+    if (mapId === 'ice') {
+      const iceMat = solid(0xaaccff, { roughness: 0.2, metalness: 0.4 });
+      iceMat.emissive = new THREE.Color(0x224488);
+      iceMat.emissiveIntensity = 0.15;
+      // 冰晶柱
+      for (let i = 0; i < 7; i++) {
+        const a = rng() * Math.PI * 2;
+        const d = 4 + rng() * 10;
+        const h = 1.5 + rng() * 3;
+        const crystal = new THREE.Mesh(new THREE.ConeGeometry(0.25, h, 5), iceMat);
+        crystal.position.set(Math.cos(a) * d, h / 2, Math.sin(a) * d);
+        crystal.castShadow = true;
+        root.add(crystal);
+      }
+      // 雪堆（扁球体）
+      const snowMat = solid(0xeef4ff);
+      for (let i = 0; i < 8; i++) {
+        const a = rng() * Math.PI * 2;
+        const d = 3 + rng() * 12;
+        const snow = new THREE.Mesh(new THREE.SphereGeometry(0.6 + rng() * 0.5, 8, 6), snowMat);
+        snow.scale.y = 0.35;
+        snow.position.set(Math.cos(a) * d, 0.15, Math.sin(a) * d);
+        root.add(snow);
+      }
+      // 冰面反射光
+      const iceLight = new THREE.PointLight(0x88bbff, 6, 10);
+      iceLight.position.set(0, 3, 0);
+      root.add(iceLight);
+    }
+
     this.add(root);
     return root;
   }

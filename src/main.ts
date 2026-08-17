@@ -573,46 +573,78 @@ function boot(): void {
 
   let prevWave = -1;
   let prevPhase: string = '';
+  /** 连杀计数 */
+  let killStreak = 0;
+  let killStreakTimer = 0;
+
+  /** 全屏大字公告 */
+  function showAnnouncement(text: string, color: string, durationMs: number): void {
+    if (!text) { // 纯黑幕
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:#000;z-index:9999;pointer-events:none;opacity:0;transition:opacity .2s;';
+      document.body.appendChild(ov);
+      requestAnimationFrame(() => { ov.style.opacity = '1'; });
+      setTimeout(() => { ov.style.opacity = '0'; }, durationMs - 200);
+      setTimeout(() => ov.remove(), durationMs);
+      return;
+    }
+    const div = document.createElement('div');
+    div.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:9999;pointer-events:none;';
+    const inner = document.createElement('div');
+    inner.style.cssText = `color:${color};font:bold 48px/1 var(--mono);letter-spacing:.15em;text-shadow:0 2px 20px ${color}88,0 0 60px ${color}44;opacity:0;transition:opacity .3s;`;
+    inner.textContent = text;
+    div.appendChild(inner);
+    document.body.appendChild(div);
+    requestAnimationFrame(() => { inner.style.opacity = '1'; });
+    setTimeout(() => { inner.style.opacity = '0'; }, durationMs - 400);
+    setTimeout(() => div.remove(), durationMs);
+  }
   flow.onPhaseChange = (phase, _mission) => {
-    // BOSS 出现时加入场景（修复 BOSS 不可见），退�?BOSS 阶段时移�?
-    if (activeBoss) {
-      world.scene.remove(activeBoss.root);
-    }
+    if (activeBoss) world.scene.remove(activeBoss.root);
     activeBoss = flow.activeBoss;
-    if (activeBoss) {
-      world.scene.add(activeBoss.root);
-    }
+    if (activeBoss) world.scene.add(activeBoss.root);
     rebuildRayTargets();
-    // 清波宝箱：波次推进掉落；通关（击杀 BOSS）掉大宝�?
+
+    // ---- 波次预告 ----
     if (phase === 'wave' && flow.waveIndex > prevWave) {
       prevWave = flow.waveIndex;
       spawnChest(false);
-      // 塔模式：每 7 层补给层（大宝箱 + 双倍宝箱）
+      const totalWaves = _mission.waves.length;
+      showAnnouncement(`WAVE ${flow.waveIndex + 1} / ${totalWaves}`, '#ffffff', 1800);
+      if ((flow.waveIndex + 1) % 3 === 0) {
+        setTimeout(() => showAnnouncement('\u26a0 精英波来袭', '#ff4444', 2000), 800);
+      }
       if (_mission.tower && flow.waveIndex % 7 === 6) {
-        spawnChest(true);
-        spawnChest(false);
+        spawnChest(true); spawnChest(false);
+        setTimeout(() => showAnnouncement('\u{1F4E6} 补给层 \u00B7 双倍掉落', '#44ff88', 2000), 500);
       }
     }
+
+    // ---- BOSS 登场演出 ----
+    if (phase === 'boss' && activeBoss) {
+      showAnnouncement('', '#000000', 600);
+      setTimeout(() => {
+        showAnnouncement(activeBoss!.spec.name, '#' + activeBoss!.spec.color.toString(16).padStart(6, '0'), 3000);
+        shell.hud.boss(activeBoss!.spec.name, activeBoss!.hp / activeBoss!.spec.hp);
+      }, 600);
+    }
+
     if (phase === 'clear') {
       spawnChest(true);
+      showAnnouncement('\u2726 通关 \u2726', '#ffd700', 3000);
     }
-    // 塔模式：BOSS 击杀 → 掉大宝箱 + 即时奖励（无尽不结算，靠这个给回报）
+
+    // 塔模式：BOSS 击杀 → 掉大宝箱 + 即时奖励
     if (_mission.tower && prevPhase === 'boss' && phase === 'wave') {
       spawnChest(true);
-      // flow.ts 击杀 BOSS 后 waveIndex 已 +1，此处即 BOSS 层数（不再 +1）
       const floor = flow.waveIndex;
       const diffR = difficulty >= 2 ? 3 : difficulty >= 1.5 ? 1.8 : 1;
       const gold = Math.round(20 * (1 + floor * 0.15) * diffR * (1 + runB.luckyGold));
       const mat = Math.round(2 + floor * 0.5);
       inventory.addGold(gold);
-      inventory.addMaterial('合金碎片', mat);
-      addDamagePopup(player.position.clone().add(new THREE.Vector3(0, 1.8, 0)), `塔主击破 · +${gold}金币 +${mat}合金`, '#e8c377');
+      inventory.addMaterial('\u5408\u91d1\u788e\u7247', mat);
     }
     prevPhase = phase;
-    if (phase === 'intro') {
-      shell.hud.hideBoss();
-      shell.hud.root.style.display = 'block';
-    }
   };
   flow.onResult = (result) => {
     paused = true; // 死亡/通关后冻结战斗，等待界面操作
@@ -771,8 +803,23 @@ function boot(): void {
             rebuildRayTargets();
             maybeDropOrb(e.root.position);
             addKillBurst(e.root.position);
-            spawnParticles(e.root.position, 0xffd24a, 4, 3.5); // 击杀金色粒子
-            // 武器熟练度：当前武器击杀计数
+            spawnParticles(e.root.position, 0xffd24a, 4, 3.5);
+            // 连杀系统
+            killStreak += 1;
+            killStreakTimer = 2.5;
+            if (killStreak >= 3) {
+              const streakNames: Record<number, string> = {
+                3: '🔥 三连杀!', 5: '⚡ 五连杀!', 8: '💀 八连杀!',
+                10: '🌟 十连杀!!', 15: '👑 十五连杀!!!', 20: '🏆 无敌!!!',
+              };
+              const msg = streakNames[killStreak] || `🔥 ${killStreak}连杀!`;
+              const color = killStreak >= 10 ? '#ffd700' : killStreak >= 5 ? '#ff6644' : '#ff9944';
+              showAnnouncement(msg, color, 1200);
+              // 连杀回血
+              if (killStreak >= 5) setHp(hp + 5);
+              if (killStreak >= 10) setHp(hp + 10);
+            }
+            // 武器熟练度
             const curG = inventory.getWeapon(arsenal.current.def.id);
             curG.kills += 1;
           }
@@ -878,8 +925,6 @@ function boot(): void {
   let hitFlash = 0;
   let meleeCooldown = 0;
   let lastKills = 0;
-  let killStreak = 0;
-  let killStreakTimer = 0;
 
   // ---------- 玩家属性（六维 + BUFF�?----------
   const buffs = { atk: 0, shield: 0, speed: 0 };
@@ -1380,7 +1425,15 @@ function boot(): void {
       }
       keyState.ascend = snap.key('KeyY');
 
-      // 敌人 AI（隐身时敌人不攻击）
+      // 连杀计时器
+
+    // 连杀计时器
+    if (killStreakTimer > 0) {
+      killStreakTimer -= dt;
+      if (killStreakTimer <= 0) killStreak = 0;
+    }
+
+    // 敌人 AI（隐身时敌人不攻击）
       for (const e of spawner.all()) {
         e.updateFlash(dt);
         e.tickElite(dt);
@@ -1492,10 +1545,6 @@ function boot(): void {
             break;
           }
         }
-      }
-      if (killStreakTimer > 0) {
-        killStreakTimer -= dt;
-        if (killStreakTimer <= 0) killStreak = 0;
       }
 
       tracer.update(dt);

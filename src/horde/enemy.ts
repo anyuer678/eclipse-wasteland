@@ -14,6 +14,9 @@ export type EnemyKind = 'chaser' | 'boomer' | 'spitter' | 'guard' | 'berserker' 
 /** 精英词缀（试炼之塔 / 高波次敌人） */
 export type EliteAffix = 'frantic' | 'armored' | 'regenerating';
 
+/** 元素类型（4 属性抗性） */
+export type Element = 'physical' | 'fire' | 'ice' | 'energy';
+
 export interface EnemyDef {
   kind: EnemyKind;
   hp: number;
@@ -27,6 +30,8 @@ export interface EnemyDef {
   blastRadius: number;
   /** 盾兵/厚甲减伤（0-1） */
   resist?: number;
+  /** 元素抗性（） */
+  elementResist?: Partial<Record<Element, number>>;
 }
 
 export const ELITE_AFFIXES: { kind: EliteAffix; name: string; color: number }[] = [
@@ -36,12 +41,12 @@ export const ELITE_AFFIXES: { kind: EliteAffix; name: string; color: number }[] 
 ];
 
 export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
-  chaser: { kind: 'chaser', hp: 40, speed: 2.6, damage: 4, color: 0xd94a4a, radius: 0.45, range: 0, blastRadius: 0 },
-  boomer: { kind: 'boomer', hp: 70, speed: 1.6, damage: 10, color: 0xd97b2a, radius: 0.55, range: 0, blastRadius: 2.6 },
-  spitter: { kind: 'spitter', hp: 55, speed: 1.9, damage: 4, color: 0x3fb96a, radius: 0.5, range: 14, blastRadius: 0 },
-  guard: { kind: 'guard', hp: 120, speed: 1.3, damage: 6, color: 0x4a6a9a, radius: 0.6, range: 0, blastRadius: 0, resist: 0.35 },
-  berserker: { kind: 'berserker', hp: 30, speed: 3.8, damage: 7, color: 0xb33a8a, radius: 0.42, range: 0, blastRadius: 0 },
-  caster: { kind: 'caster', hp: 50, speed: 2.1, damage: 7, color: 0x8a4ad9, radius: 0.45, range: 16, blastRadius: 0 },
+  chaser: { kind: 'chaser', hp: 40, speed: 2.6, damage: 4, color: 0xd94a4a, radius: 0.45, range: 0, blastRadius: 0, elementResist: { physical: 0, fire: 0, ice: 0, energy: 0 } },
+  boomer: { kind: 'boomer', hp: 70, speed: 1.6, damage: 10, color: 0xd97b2a, radius: 0.55, range: 0, blastRadius: 2.6, elementResist: { physical: 1, fire: 2, ice: 0, energy: 0 } },
+  spitter: { kind: 'spitter', hp: 55, speed: 1.9, damage: 4, color: 0x3fb96a, radius: 0.5, range: 14, blastRadius: 0, elementResist: { physical: 0, fire: 0, ice: 1, energy: 0 } },
+  guard: { kind: 'guard', hp: 120, speed: 1.3, damage: 6, color: 0x4a6a9a, radius: 0.6, range: 0, blastRadius: 0, resist: 0.35, elementResist: { physical: 2, fire: 0, ice: 0, energy: 1 } },
+  berserker: { kind: 'berserker', hp: 30, speed: 3.8, damage: 7, color: 0xb33a8a, radius: 0.42, range: 0, blastRadius: 0, elementResist: { physical: 0, fire: 1, ice: 0, energy: 0 } },
+  caster: { kind: 'caster', hp: 50, speed: 2.1, damage: 7, color: 0x8a4ad9, radius: 0.45, range: 16, blastRadius: 0, elementResist: { physical: 0, fire: 0, ice: 0, energy: 2 } },
 };
 
 export class Enemy {
@@ -310,14 +315,20 @@ export class Enemy {
     return null;
   }
 
-  /** 受伤，返回是否死亡 */
-  takeDamage(amount: number): boolean {
+  /** 按元素类型受伤（），返回是否死亡 */
+  takeDamage(amount: number, element: Element = 'physical'): boolean {
     if (!this.alive) return false;
     // NaN/非正防护：任何异常伤害不传播（防止敌人 HP 变 NaN 导致不死/判定错乱）
     if (!Number.isFinite(amount) || amount <= 0) return false;
     // 厚甲：减伤 50%；盾兵：固定减伤
     const resist = this.elite?.kind === 'armored' ? 0.5 : (this.def.resist ?? 0);
-    const final = amount * (1 - resist);
+    let final = amount * (1 - resist);
+    // 元素抗性（）
+    const elemRes = this.def.elementResist?.[element] ?? 0;
+    if (elemRes > 0) {
+      const reduction = elemRes === 1 ? 0.15 : elemRes === 2 ? 0.35 : 0.55;
+      final *= (1 - reduction);
+    }
     this.hp -= final;
     this.flashTimer = 0.12;
     if (this.barMesh && this.barMaterial) {

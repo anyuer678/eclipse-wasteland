@@ -7,9 +7,9 @@
  */
 import * as THREE from 'three';
 import { solid } from '../render';
-import type { BossSpec } from './types';
+import type { BossSpec, Element } from './types';
 
-export type BossSkill = 'charge' | 'stomp' | 'summon' | 'swipe';
+export type BossSkill = 'charge' | 'stomp' | 'summon' | 'swipe' | 'aoe_blast' | 'summon_elite';
 
 export class Boss {
   readonly spec: BossSpec;
@@ -18,6 +18,10 @@ export class Boss {
   alive = true;
   /** 距离玩家过近（近战判定） */
   readonly meleeRange = 3.2;
+  /** 当前阶段（0=初始，1+=转阶段） */
+  phase = 0;
+  /** 元素抗性 */
+  readonly resistance: Record<Element, number>;
 
   private skillTimer: number;
   private summonCount = 0;
@@ -29,6 +33,7 @@ export class Boss {
     this.root = this.buildMesh(spec);
     this.root.position.set(0, 0, -8);
     this.skillTimer = 2;
+    this.resistance = spec.resistance ?? { physical: 0, fire: 0, ice: 0, energy: 0 };
   }
 
   private buildMesh(spec: BossSpec): THREE.Group {
@@ -96,6 +101,16 @@ export class Boss {
    * 每逻辑帧推进：面向玩家移动 + 技能轮换。
    * 返回本帧产生的技能效果（供玩家系统结算伤害/召唤）。
    */
+  /** 冲锋状态 */
+  private charging = false;
+  private chargeTimer = 0;
+  private chargeDir = new THREE.Vector3();
+  /** 践踏状态 */
+  private stomping = false;
+  private stompTimer = 0;
+  /** 召唤冷却 */
+  private summonCooldown = 0;
+
   update(dt: number, playerPos: THREE.Vector3): {
     skill?: BossSkill;
     melee?: number;
@@ -104,54 +119,130 @@ export class Boss {
     summon?: number;
   } | null {
     if (!this.alive) return null;
-    const spec = this.spec;
 
-    // 面向玩家
     this.root.lookAt(playerPos.x, this.root.position.y, playerPos.z);
-
     const toPlayer = new THREE.Vector3().subVectors(playerPos, this.root.position);
     toPlayer.y = 0;
     const dist = toPlayer.length();
     const dir = dist > 0.001 ? toPlayer.normalize() : new THREE.Vector3();
 
-    // 近战挥击（带冷却）
+    // 冲锋中
+    if (this.charging) {
+      this.chargeTimer -= dt;
+      this.root.position.addScaledVector(this.chargeDir, 14 * dt);
+      if (this.chargeTimer <= 0) {
+        this.charging = false;
+        if (dist < 4) return { skill: 'charge', melee: 18 + this.phase * 5, chargeDir: this.chargeDir };
+      }
+      return null;
+    }
+
+    // 践踏中（跳跃砸地）
+    if (this.stomping) {
+      this.stompTimer -= dt;
+      this.root.position.y = Math.sin(this.stompTimer * 10) * 2.5;
+      if (this.stompTimer <= 0) {
+        this.stomping = false;
+        this.root.position.y = 0;
+        return { skill: 'stomp', stompRadius: 6 + this.phase * 2 };
+      }
+      return null;
+    }
+
+    // 近战挥击
     this.meleeCooldown -= dt;
     if (dist < this.meleeRange && this.meleeCooldown <= 0) {
       this.meleeCooldown = 1.1;
-      return { skill: 'swipe', melee: 10 };
+      return { skill: 'swipe', melee: 12 + this.phase * 3 };
     }
 
-    // 缓慢逼近
-    this.root.position.addScaledVector(dir, 1.3 * dt);
+    this.summonCooldown -= dt;
+    const moveSpeed = 1.3 + this.phase * 0.4;
+    this.root.position.addScaledVector(dir, moveSpeed * dt);
 
     // 技能轮换
     this.skillTimer -= dt;
     if (this.skillTimer <= 0) {
-      this.skillTimer = spec.skillInterval;
-      const pick = this.rng.pick<BossSkill>(['charge', 'stomp', 'summon']);
-      if (pick === 'charge') {
+      this.skillTimer = this.spec.skillInterval * (this.phase > 0 ? 0.7 : 1);
+      const pool: BossSkill[] = this.phase > 0
+        ? ['charge', 'stomp', 'summon', 'aoe_blast', 'summon_elite']
+        : ['charge', 'stomp', 'summon'];
+      const pick = this.rng.pick<BossSkill>(pool);
+
+      if (pick === 'charge' && dist > 3) {
+        this.charging = true;
+        this.chargeTimer = 0.55;
+        this.chargeDir.copy(dir);
+        this.flashBoss(0xff6600);
         return { skill: 'charge', chargeDir: dir.clone() };
       }
       if (pick === 'stomp') {
-        return { skill: 'stomp', stompRadius: 6 };
+        this.stomping = true;
+        this.stompTimer = 0.45;
+        this.flashBoss(0xffaa00);
+        return { skill: 'stomp', stompRadius: 6 + this.phase * 2 };
       }
-      // summon
-      this.summonCount += 1;
-      return { skill: 'summon', summon: 2 + (this.summonCount % 2) };
+      if (pick === 'aoe_blast') {
+        this.flashBoss(0xff0066);
+        return { skill: 'aoe_blast', stompRadius: 8 + this.phase * 3 };
+      }
+      if (pick === 'summon_elite' && this.summonCooldown <= 0) {
+        this.summonCooldown = 5;
+        this.flashBoss(0x8800ff);
+        return { skill: 'summon_elite', summon: 1 };
+      }
+      if (this.summonCooldown <= 0) {
+        this.summonCooldown = 3;
+        this.summonCount += 1;
+        return { skill: 'summon', summon: 2 + (this.summonCount % 2) + this.phase };
+      }
     }
 
     return null;
   }
 
-  /** 受伤，返回是否死亡 */
-  takeDamage(amount: number): boolean {
+  /** 按元素类型受伤，返回是否死亡 */
+  takeDamage(amount: number, element: Element = 'physical'): boolean {
     if (!this.alive) return false;
-    this.hp -= amount;
+    const res = this.resistance[element] ?? 0;
+    // 抗性 0/1/2/3 → 减伤 0%/15%/35%/55%
+    const reduction = res === 0 ? 0 : res === 1 ? 0.15 : res === 2 ? 0.35 : 0.55;
+    const finalDmg = amount * (1 - reduction);
+    this.hp -= finalDmg;
+    // 阶段转换检查
+    this.checkPhaseTransition();
     if (this.hp <= 0) {
       this.alive = false;
       return true;
     }
     return false;
+  }
+
+  private checkPhaseTransition(): void {
+    const thresholds = this.spec.phaseThresholds;
+    if (!thresholds || thresholds.length === 0) return;
+    const hpPct = this.hp / this.spec.hp;
+    for (let i = this.phase; i < thresholds.length; i++) {
+      if (hpPct <= thresholds[i]) {
+        this.phase = i + 1;
+        // 阶段转换：加速技能 + 变色
+        this.skillTimer = Math.min(this.skillTimer, 1.5);
+        this.flashBoss(0xff0000);
+        break;
+      }
+    }
+  }
+
+  private flashBoss(color: number): void {
+    this.root.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        const mat = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        if (mat && mat.emissive) {
+          mat.emissive.setHex(color);
+          setTimeout(() => mat.emissive.setHex(0x000000), 300);
+        }
+      }
+    });
   }
 
   center(): THREE.Vector3 {

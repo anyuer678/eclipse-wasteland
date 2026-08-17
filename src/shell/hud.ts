@@ -37,6 +37,12 @@ export interface HudView {
   hideBoss(): void;
   hit(): void;
   hitConfirm(): void;
+  /** 屏幕震动（） */
+  shake(intensity?: number): void;
+  /** 击杀提示（） */
+  killFeed(text: string, color?: string): void;
+  /** 伤害数字飘字 */
+  damageNumber(x: number, y: number, dmg: number, crit?: boolean): void;
   setSpread(p: number): void;
 }
 
@@ -187,6 +193,28 @@ export function createHud(): HudView {
     hitConfirm() {
       crosshair.classList.add('hit');
       window.setTimeout(() => crosshair.classList.remove('hit'), 90);
+    },
+    shake(intensity = 1) {
+      root.style.transform = `translate(${(Math.random() - 0.5) * 6 * intensity}px, ${(Math.random() - 0.5) * 6 * intensity}px)`;
+      window.setTimeout(() => { root.style.transform = ''; }, 80);
+    },
+    killFeed(text, color = '#ff6644') {
+      const feed = el('div', '', '');
+      feed.style.cssText = `position:fixed;top:${60 + Math.random() * 40}px;right:20px;color:${color};font:bold 13px/1 var(--mono);letter-spacing:.08em;text-shadow:0 1px 4px rgba(0,0,0,.6);z-index:9998;transition:opacity .3s;pointer-events:none;`;
+      feed.textContent = text;
+      document.body.appendChild(feed);
+      window.setTimeout(() => { feed.style.opacity = '0'; }, 1800);
+      window.setTimeout(() => feed.remove(), 2200);
+    },
+    damageNumber(x, y, dmg, crit = false) {
+      const num = el('div', '', '');
+      const size = crit ? 22 : 16;
+      const color = crit ? '#ffcc00' : '#ffffff';
+      num.style.cssText = `position:fixed;left:${x}px;top:${y}px;color:${color};font:bold ${size}px/1 var(--mono);text-shadow:0 1px 3px rgba(0,0,0,.7);z-index:9997;pointer-events:none;transition:all .4s ease-out;opacity:1;`;
+      num.textContent = crit ? `${Math.round(dmg)}!` : String(Math.round(dmg));
+      document.body.appendChild(num);
+      requestAnimationFrame(() => { num.style.transform = 'translateY(-30px)'; num.style.opacity = '0'; });
+      window.setTimeout(() => num.remove(), 500);
     },
     setSpread(p) {
       const gap = CROSSHAIR_GAP + p * 26;
