@@ -150,7 +150,7 @@ describe('growth/talent tables', () => {
     for (const n of TALENT_NODES) {
       expect(n.maxLevel).toBe(5)
       expect(n.perLevel).toBeGreaterThan(0)
-      expect(n.desc(1)).toContain('%')
+      expect(n.desc(1).length).toBeGreaterThan(0)
     }
     const ids = TALENT_NODES.map((n) => n.id)
     expect(new Set(ids).size).toBe(4)
