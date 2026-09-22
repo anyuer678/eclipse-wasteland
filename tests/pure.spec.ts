@@ -118,3 +118,41 @@ describe('growth/upgrade tables', () => {
     expect(Object.keys(ASCENSION_EFFECTS).length).toBeGreaterThanOrEqual(8)
   })
 })
+
+describe('growth/stats', () => {
+  it('baseStats layers growth bonuses', async () => {
+    const { baseStats, fourStats, BUFF_DURATION } = await import('../src/growth/stats')
+    const s = baseStats(0.5, 20, 0.25, { enchant: 10, pinnacle: 5 })
+    expect(s.attackMult).toBeCloseTo(1 + 0.5 + 5 * 0.03)
+    expect(s.critRate).toBeLessThanOrEqual(0.45)
+    expect(s.critRate).toBeGreaterThan(0.06)
+    expect(s.energyRegen).toBeCloseTo(1.25)
+    expect(s.maxHpBonus).toBe(25 + 20)
+    expect(s.fireRateMult).toBeCloseTo(1 + 0.2)
+    const f = fourStats(s)
+    expect(f.power).toBe(Math.round((s.attackMult - 1) * 100))
+    expect(BUFF_DURATION.atk).toBe(20)
+    expect(BUFF_DURATION.shield).toBe(10)
+    expect(BUFF_DURATION.speed).toBe(12)
+  })
+
+  it('critRate hard-capped at 0.45', async () => {
+    const { baseStats } = await import('../src/growth/stats')
+    const s = baseStats(0, 0, 0, { enchant: 1000, pinnacle: 100 })
+    expect(s.critRate).toBe(0.45)
+  })
+})
+
+describe('growth/talent tables', () => {
+  it('four nodes x 5 levels with positive perLevel', async () => {
+    const { TALENT_NODES } = await import('../src/growth/talent')
+    expect(TALENT_NODES).toHaveLength(4)
+    for (const n of TALENT_NODES) {
+      expect(n.maxLevel).toBe(5)
+      expect(n.perLevel).toBeGreaterThan(0)
+      expect(n.desc(1)).toContain('%')
+    }
+    const ids = TALENT_NODES.map((n) => n.id)
+    expect(new Set(ids).size).toBe(4)
+  })
+})
