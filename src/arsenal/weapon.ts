@@ -7,6 +7,14 @@
  */
 import * as THREE from 'three';
 import { clamp } from '../core';
+import {
+  chargeDamageMult,
+  energyAfterShot,
+  fireIntervalSeconds,
+  magCapacity,
+  reloadTimeFor,
+  shotDamage,
+} from './combat';
 import type { WeaponDef } from './defs';
 import type { TracerPool } from './tracer';
 
@@ -69,18 +77,12 @@ export class Weapon {
 
   /** 当前弹夹容量（含扩容） */
   magCap(): number {
-    return Math.ceil(this.def.mag * this.magMult);
+    return magCapacity(this.def.mag, this.magMult);
   }
 
   /** 换弹时长（按武器类型） */
   static reloadTimeFor(def: WeaponDef): number {
-    switch (def.archetype) {
-      case 'sniper': return 2.4;
-      case 'shotgun': return 2.1;
-      case 'smg': return 1.8;
-      case 'rifle': return 1.6;
-      default: return 1.2;
-    }
+    return reloadTimeFor(def.archetype);
   }
 
   /** 触发换弹（弹药不满且未在换弹时） */
@@ -99,7 +101,7 @@ export class Weapon {
     if (s.reloading) {
       s.reloadTimer -= dt;
       if (s.reloadTimer <= 0) {
-        s.ammo = this.magCap();
+        s.ammo = magCapacity(this.def.mag, this.magMult);
         s.reloading = false;
       }
     }
@@ -143,15 +145,15 @@ export class Weapon {
           const origin = ctx.origin.clone().addScaledVector(ctx.direction, 0.5);
           const hit = ctx.resolveHit(origin, ctx.direction);
           ctx.tracer.fire(origin, hit, 0xff5566, 2);
-          ctx.onHitEnemy?.(hit, this.def.damage * m.multiplier * this.growthMech, {});
-          this.fireCooldown = (60 / this.def.rpm) / this.fireRateMult;
+          ctx.onHitEnemy?.(hit, shotDamage(this.def.damage, m.multiplier, this.growthMech), {});
+          this.fireCooldown = fireIntervalSeconds(this.def.rpm, this.fireRateMult);
         }
       }
     } else if (m.kind === 'lockon') {
       const target = ctx.findTarget?.(ctx.origin, m.range) ?? null;
       if (target && ctx.onHitEnemy) {
         ctx.tracer.fire(ctx.origin, target, 0x66e0ff, 2);
-        ctx.onHitEnemy(target, this.def.damage * m.damageFactor * this.growthMech, { lockTarget: true });
+        ctx.onHitEnemy(target, shotDamage(this.def.damage, m.damageFactor, this.growthMech), { lockTarget: true });
       }
     } else if (m.kind === 'overload') {
       this.toggleOverload();
@@ -176,7 +178,7 @@ export class Weapon {
     }
 
     const d = this.def;
-    const interval = 60 / d.rpm / this.fireRateMult;
+    const interval = fireIntervalSeconds(d.rpm, this.fireRateMult);
     this.fireCooldown = interval;
 
     // 蓄力武器：未松开前持续蓄力，不实际开火
@@ -195,7 +197,7 @@ export class Weapon {
     s.charging = false;
     const mech = this.def.mech as { maxMult: number; time: number };
     const t = clamp(s.chargeTime / mech.time, 0, 1);
-    const mult = 1 + (mech.maxMult - 1) * t;
+    const mult = chargeDamageMult(s.chargeTime, mech.maxMult, mech.time);
     s.chargeTime = 0;
     this.discharge(ctx, mult, 1 + t * 1.5);
   }
@@ -207,9 +209,9 @@ export class Weapon {
     s.ammo -= 1;
 
     // 能量累积
-    s.energy = clamp(s.energy + d.energyGain * this.energyGainMult, 0, d.energyMax);
+    s.energy = energyAfterShot(s.energy, d.energyGain, this.energyGainMult, d.energyMax);
 
-    const shotDamage = d.damage * damageMult * this.growthDamage;
+    const shotDmg = shotDamage(d.damage, damageMult, this.growthDamage);
 
     // beam 机制（烈焰风暴）：持续射线耗能量、不耗弹药
     if (d.mech.kind === 'beam') {
@@ -232,7 +234,7 @@ export class Weapon {
       if (ctx.onHitEnemy) {
         const extra: { slow?: number } = {};
         if (d.mech.kind === 'slow') extra.slow = (d.mech as { factor: number }).factor;
-        const hitAny = ctx.onHitEnemy(hit, shotDamage, extra);
+        const hitAny = ctx.onHitEnemy(hit, shotDmg, extra);
         // burst 机制（三连突击）：同一次开火连发多发
         if (d.mech.kind === 'burst') {
           const m = d.mech as { shots: number };
@@ -240,7 +242,7 @@ export class Weapon {
             const dir2 = this.spreadDir(ctx.direction, d.spreadDeg, p + i);
             const hit2 = ctx.resolveHit(origin, dir2);
             ctx.tracer.fire(origin, hit2, d.color, lineIntensity * 0.8);
-            ctx.onHitEnemy?.(hit2, shotDamage, {});
+            ctx.onHitEnemy?.(hit2, shotDmg, {});
           }
         }
         // pierce 机制（穿云狙击）：沿射线穿透多个敌人，伤害递减
@@ -250,13 +252,13 @@ export class Weapon {
           // 跳过第一个（已由主命中处理）
           for (let i = 1; i < rest.length; i++) {
             ctx.tracer.fire(origin, rest[i], d.color, lineIntensity * (1 - i * 0.25));
-            ctx.onHitEnemy?.(rest[i], shotDamage * Math.pow(m.falloff, i), {});
+            ctx.onHitEnemy?.(rest[i], shotDmg * Math.pow(m.falloff, i), {});
           }
         }
         // chain 机制（雷暴投枪）：命中后弹跳
         if (d.mech.kind === 'chain' && hitAny && ctx.onChain) {
           const m = d.mech as { jumps: number; falloff: number };
-          ctx.onChain(hit, shotDamage * 0.7, m.jumps, m.falloff);
+          ctx.onChain(hit, shotDmg * 0.7, m.jumps, m.falloff);
         }
       }
     }
