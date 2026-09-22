@@ -29,9 +29,11 @@ describe('core/math', () => {
     expect(lerp(2, 2, 1)).toBe(2)
   })
   it('angleLerp shortest arc', () => {
-    // from nearly 2π to 0 should not sweep the long way
+    // result may sit near 0 or 2π; normalized delta to 0 must be the short way
     const a = angleLerp(TAU - 0.1, 0.1, 0.5)
-    expect(Math.abs(a)).toBeLessThan(Math.PI)
+    const norm = ((a % TAU) + TAU) % TAU
+    const deltaToZero = Math.min(norm, TAU - norm)
+    expect(deltaToZero).toBeLessThan(0.25)
   })
   it('dist2', () => {
     expect(dist2(0, 0, 3, 4)).toBe(25)
