@@ -6,8 +6,7 @@
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import * as SkeletonUtilsModule from 'three/examples/jsm/utils/SkeletonUtils.js';
-const SkeletonUtils = (SkeletonUtilsModule as { SkeletonUtils?: typeof import('three/examples/jsm/utils/SkeletonUtils.js') }).SkeletonUtils ?? SkeletonUtilsModule;
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 export interface AssetLib {
   /** 获取模型克隆；未加载完成返回 null */
@@ -16,7 +15,14 @@ export interface AssetLib {
   load: (name: string, onDone?: (group: THREE.Group) => void) => void;
 }
 
-export function createAssetLib(base = '/models/'): AssetLib {
+/**
+ * 默认模型目录。
+ * 必须走 Vite 的 BASE_URL（dev 为 `/`，构建后为 `/eclipse-wasteland/`），
+ * 否则写死 `/models/` 会在 GitHub Pages 子路径下请求到站点根 → 全部 GLB 404。
+ */
+export const DEFAULT_MODEL_BASE = `${import.meta.env.BASE_URL}models/`;
+
+export function createAssetLib(base = DEFAULT_MODEL_BASE): AssetLib {
   const loader = new GLTFLoader();
   const cache: Record<string, THREE.Group> = {};
   const pending = new Map<string, ((g: THREE.Group) => void)[]>();
