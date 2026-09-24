@@ -10,5 +10,13 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 700,
+    // three.js 引擎拆独立 vendor chunk：业务改动不失效引擎缓存，且主包不再超限
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [{ name: 'three', test: /[\\/]node_modules[\\/]three[\\/]/ }],
+        },
+      },
+    },
   },
 });
