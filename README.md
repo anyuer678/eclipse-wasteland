@@ -3,6 +3,8 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Tests](https://github.com/anyuer678/eclipse-wasteland/actions/workflows/test.yml/badge.svg)](https://github.com/anyuer678/eclipse-wasteland/actions/workflows/test.yml)
 
+<p align="center"><img src="preview.png" alt="Eclipse 荒原防线 角色选择界面预览" width="800"></p>
+
 浏览器端 FPS PVE 射击游戏：多波次副本、无尽爬塔、Roguelite 局内成长与深度养成系统。
 
 集百家之所长的设计：武器机制、数值体系、敌人设计与养成框架的灵感来自多款经典射击与 Roguelite 游戏，经过重新设计与融合，形成一套原创的 PVE 玩法循环。
