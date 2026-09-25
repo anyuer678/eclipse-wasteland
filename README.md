@@ -1,6 +1,7 @@
 # ECLIPSE 荒原防线
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Tests](https://github.com/anyuer678/eclipse-wasteland/actions/workflows/test.yml/badge.svg)](https://github.com/anyuer678/eclipse-wasteland/actions/workflows/test.yml)
 
 浏览器端 FPS PVE 射击游戏：多波次副本、无尽爬塔、Roguelite 局内成长与深度养成系统。
 
