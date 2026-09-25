@@ -186,6 +186,7 @@ export function createRoleScreen(
       const lvl = inventory.roleLevel(r.id);
       const cost = 6 + lvl * 4;
       const row = el('div', 'ss-brief-row');
+      row.style.gridTemplateColumns = '1fr auto';
       const info = el('div', '', '');
       info.appendChild(el('div', 'ss-brief-name', `${r.name} Lv.${lvl}/5${r.id === currentId ? '（当前）' : ''}`));
       info.appendChild(el('div', 'ss-brief-meta', `${r.desc} · 技能效果 +${lvl * 15}%`));
