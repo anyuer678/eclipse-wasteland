@@ -20,7 +20,7 @@
     "@types/three": "^0.185.4",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1",
+    "vite": "^8.3.3",
     "vitest": "^4.1.10"
   },
   "dependencies": {
