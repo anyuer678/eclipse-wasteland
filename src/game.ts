@@ -1653,7 +1653,7 @@ function boot(): void {
     },
   });
 
-  events.on('boot', (p) => console.log('[bus] boot at', p.time.toFixed(2)));
+  events.on('boot', (p) => console.debug('[bus] boot at', p.time.toFixed(2)));
   events.emit('boot', { time: 0 });
 
   services.register('world', world);
