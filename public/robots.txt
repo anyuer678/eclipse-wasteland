@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://anyuer678.github.io/eclipse-wasteland/sitemap.xml
