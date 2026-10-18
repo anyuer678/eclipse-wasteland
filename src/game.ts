@@ -586,7 +586,10 @@ function boot(): void {
   let killStreak = 0;
   let killStreakTimer = 0;
 
-  /** 全屏大字公告 */
+  /** 全屏大字公告（单例元素，替换式显示，位置在上 1/3 避开准星与 BOSS 血条） */
+  let announceEl: HTMLDivElement | null = null;
+  let announceText: HTMLDivElement | null = null;
+  let announceTimers: number[] = [];
   function showAnnouncement(text: string, color: string, durationMs: number): void {
     if (!text) { // 纯黑幕
       const ov = document.createElement('div');
@@ -597,16 +600,23 @@ function boot(): void {
       setTimeout(() => ov.remove(), durationMs);
       return;
     }
-    const div = document.createElement('div');
-    div.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:9999;pointer-events:none;';
-    const inner = document.createElement('div');
-    inner.style.cssText = `color:${color};font:bold 48px/1 var(--mono);letter-spacing:.15em;text-shadow:0 2px 20px ${color}88,0 0 60px ${color}44;opacity:0;transition:opacity .3s;`;
+    // 单例公告：新公告直接替换旧的（否则连杀/WAVE/BOSS 公告会叠成一团乱码）
+    if (!announceEl || !announceText) {
+      announceEl = document.createElement('div');
+      announceEl.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:flex-start;justify-content:center;padding-top:17vh;z-index:9999;pointer-events:none;';
+      announceText = document.createElement('div');
+      announceEl.appendChild(announceText);
+      document.body.appendChild(announceEl);
+    }
+    for (const t of announceTimers) clearTimeout(t);
+    announceTimers = [];
+    const inner = announceText;
+    inner.style.color = color;
+    inner.style.textShadow = `0 2px 20px ${color}88, 0 0 60px ${color}44`;
+    inner.style.opacity = '0';
     inner.textContent = text;
-    div.appendChild(inner);
-    document.body.appendChild(div);
-    requestAnimationFrame(() => { inner.style.opacity = '1'; });
-    setTimeout(() => { inner.style.opacity = '0'; }, durationMs - 400);
-    setTimeout(() => div.remove(), durationMs);
+    announceTimers.push(window.setTimeout(() => { inner.style.opacity = '1'; }, 30));
+    announceTimers.push(window.setTimeout(() => { inner.style.opacity = '0'; }, Math.max(300, durationMs - 400)));
   }
   flow.onPhaseChange = (phase, _mission) => {
     if (activeBoss) world.scene.remove(activeBoss.root);

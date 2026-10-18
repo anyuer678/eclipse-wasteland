@@ -234,12 +234,20 @@ export class Enemy {
         this.root.position.addScaledVector(dir, speed * dt);
       }
     } else {
-      // chaser / guard / berserker：近战（带攻击冷却）
+      // chaser / guard / berserker：近战（前摇 0.26s 蓄力 → 结算；给玩家反应窗口）
+      if (this.windup > 0) {
+        this.windup -= dt;
+        if (this.windup <= 0) {
+          if (dist < 1.5) return { melee: d.damage }; // 蓄力结束仍在近身范围才命中
+          return null;
+        }
+        return null; // 蓄力中定在原地（前倾姿态就是"要打人了"的提示）
+      }
       if (dist < 1.0) {
         if (this.attackCooldown <= 0) {
           this.attackCooldown = 0.9;
+          this.windup = 0.26;
           this.lunge();
-          return { melee: d.damage };
         }
       } else {
         this.root.position.addScaledVector(dir, speed * dt);
@@ -273,6 +281,8 @@ export class Enemy {
   private attackAnim = 0;
   /** 受击后仰强度 */
   private hitAnim = 0;
+  /** 近战前摇剩余时间（>0 时定在原地蓄力） */
+  private windup = 0;
   private lunge(): void {
     this.attackAnim = 1;
   }
