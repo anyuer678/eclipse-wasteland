@@ -224,7 +224,7 @@ export class Weapon {
     }
 
     // 弹道从准星前方出发（视觉严格沿准星），终点为命中点
-    const origin = ctx.origin.clone().addScaledVector(ctx.direction, 0.5);
+    const origin = _origin.copy(ctx.origin).addScaledVector(ctx.direction, 0.5);
 
     for (let p = 0; p < d.pellets; p++) {
       const dir = this.spreadDir(ctx.direction, d.spreadDeg, p);
@@ -269,17 +269,22 @@ export class Weapon {
     }
   }
 
-  /** 生成散射方向（霰弹弹丸用确定性伪随机扇分布） */
+  /** 生成散射方向（霰弹弹丸用确定性伪随机扇分布）——返回内部临时向量，调用方只可立即使用 */
   private spreadDir(base: THREE.Vector3, spreadDeg: number, seed: number): THREE.Vector3 {
-    if (spreadDeg <= 0.01) return base.clone();
+    if (spreadDeg <= 0.01) return base;
     const spread = THREE.MathUtils.degToRad(spreadDeg);
-    const up = new THREE.Vector3(0, 1, 0);
-    const right = new THREE.Vector3().crossVectors(base, up).normalize();
+    const right = _right.crossVectors(base, _up);
     if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
-    const realUp = new THREE.Vector3().crossVectors(right, base).normalize();
-    const offX = (seed * 1.6180339887 % 1 - 0.5) * 2;
-    const offY = (seed * 2.7182818284 % 1 - 0.5) * 2;
-    const dir = base.clone().addScaledVector(right, offX * spread).addScaledVector(realUp, offY * spread).normalize();
-    return dir;
+    else right.normalize();
+    const realUp = _realUp.crossVectors(right, base).normalize();
+    const offX = ((seed * 1.6180339887) % 1 - 0.5) * 2;
+    const offY = ((seed * 2.7182818284) % 1 - 0.5) * 2;
+    return _dir.copy(base).addScaledVector(right, offX * spread).addScaledVector(realUp, offY * spread).normalize();
   }
 }
+
+const _up = new THREE.Vector3(0, 1, 0);
+const _right = new THREE.Vector3();
+const _realUp = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+const _origin = new THREE.Vector3();

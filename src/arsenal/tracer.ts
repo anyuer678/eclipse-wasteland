@@ -27,6 +27,11 @@ export class TracerPool {
   private activeSparks: ActiveSpark[] = [];
   private readonly world: THREE.Scene;
   private readonly life: number;
+  /** 每次开火复用的临时对象（旧实现每发 new Color + 2 次 clone） */
+  private readonly tmpColor = new THREE.Color();
+  private readonly tmpFrom = new THREE.Vector3();
+  private readonly tmpTo = new THREE.Vector3();
+  private readonly offset = new THREE.Vector3(0.018, 0.018, 0);
 
   constructor(world: THREE.Scene, life = 0.16) {
     this.world = world;
@@ -35,7 +40,7 @@ export class TracerPool {
 
   /** 发射一条弹道亮线：from → to，双线叠加，命中点附火花。颜色自动提亮适配深色场景 */
   fire(from: THREE.Vector3, to: THREE.Vector3, color: number, intensity = 1): void {
-    const bright = new THREE.Color(color).offsetHSL(0, 0, 0.16);
+    const bright = this.tmpColor.setHex(color).offsetHSL(0, 0, 0.16);
     const main = this.acquireLine();
     this.writeLine(main, from, to);
     (main.material as THREE.LineBasicMaterial).color.copy(bright);
@@ -44,9 +49,10 @@ export class TracerPool {
     this.activeLines.push({ line: main, life: this.life * (0.5 + intensity * 0.5), maxLife: this.life });
 
     // 副线（偏移制造体积感）
-    const offset = new THREE.Vector3(0.018, 0.018, 0);
     const sub = this.acquireLine();
-    this.writeLine(sub, from.clone().add(offset), to.clone().add(offset));
+    this.tmpFrom.copy(from).add(this.offset);
+    this.tmpTo.copy(to).add(this.offset);
+    this.writeLine(sub, this.tmpFrom, this.tmpTo);
     (sub.material as THREE.LineBasicMaterial).color.setHex(0x000000);
     (sub.material as THREE.LineBasicMaterial).opacity = Math.min(0.5, intensity * 0.5);
     sub.visible = true;

@@ -246,6 +246,11 @@ export class Boss {
   }
 
   center(): THREE.Vector3 {
-    return this.root.position.clone().add(new THREE.Vector3(0, 2.2, 0));
+    return new THREE.Vector3(this.root.position.x, this.root.position.y + 2.2, this.root.position.z);
+  }
+
+  /** 零分配版本（命中判定每帧调用） */
+  centerInto(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(this.root.position.x, this.root.position.y + 2.2, this.root.position.z);
   }
 }

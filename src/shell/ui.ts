@@ -238,7 +238,7 @@ export const THEME = `
     height: 10px; border: 1px solid var(--line); background: rgba(0,0,0,0.55);
     position: relative;
   }
-  .bar > div { height: 100%; transition: width .09s linear; }
+  .bar > div { height: 100%; transform-origin: left center; transition: transform .09s linear; }
   .bar.hp > div { background: linear-gradient(90deg, #8a2d22, var(--cinnabar)); }
   .bar.energy > div { background: linear-gradient(90deg, #274a6e, var(--indigo)); }
   .bar.bossbar { width: 380px; height: 12px; }
@@ -272,6 +272,15 @@ export const THEME = `
     opacity: 0; transition: opacity .08s ease;
   }
   #ss-damage-vignette.on { opacity: 1; }
+
+  /* 战斗画面压角（电影感，纯 CSS） */
+  #ss-grade {
+    position: fixed; inset: 0; z-index: 12; pointer-events: none;
+    background:
+      radial-gradient(ellipse 78% 72% at 50% 44%, rgba(0,0,0,0) 46%, rgba(6,9,14,0.46) 100%),
+      linear-gradient(180deg, rgba(8,11,16,0.22) 0%, rgba(0,0,0,0) 18%);
+  }
+  #ss-webgl { position: fixed; inset: 0; z-index: 0; }
 `;
 
 export function injectTheme(): void {

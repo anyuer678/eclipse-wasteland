@@ -114,4 +114,9 @@ export class PlayerController {
   eye(): THREE.Vector3 {
     return new THREE.Vector3(this.position.x, this.position.y + this.opts.eyeHeight, this.position.z);
   }
+
+  /** 零分配版本：把眼睛位置写入外部向量（每帧调用，避免 GC 压力） */
+  eyeInto(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(this.position.x, this.position.y + this.opts.eyeHeight, this.position.z);
+  }
 }

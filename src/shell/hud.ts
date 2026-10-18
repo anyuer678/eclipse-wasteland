@@ -118,20 +118,38 @@ export function createHud(): HudView {
   const skillBody = skills.querySelector('.sk-body') as HTMLElement;
   const bossBar = bossWrap.querySelector('.bar.bossbar > div') as HTMLElement;
   const bossName = bossWrap.querySelector('#ss-boss-name') as HTMLElement;
-  // 缓存：内容不变时跳过 DOM 重建（避免每帧 innerHTML 卡顿）
+  // 缓存：内容不变时跳过 DOM 重建（避免每帧 innerHTML / style 写入）
   let cacheSkill = '';
   let cacheSlots = '';
   let cacheWeapon = '';
   let cacheWave = '';
+  let cacheHp = -1;
+  let cacheHpMax = -1;
+  let cacheEnergy = -1;
+  let cacheEnergyMax = -1;
+  let cacheSpread = -1;
 
   return {
     root,
     crosshair,
     update(d) {
-      hpBar.style.width = `${(d.hp / d.maxHp) * 100}%`;
-      energyBar.style.width = `${(d.energy / d.maxEnergy) * 100}%`;
-      hpNum.textContent = `${Math.ceil(d.hp)} / ${d.maxHp}`;
-      energyNum.textContent = `${Math.floor(d.energy)} / ${d.maxEnergy}`;
+      // 血条/能量条用 transform 缩放（不触发布局），且数值未变时不写 DOM
+      const hpPct = d.maxHp > 0 ? Math.min(1, d.hp / d.maxHp) : 0;
+      const enPct = d.maxEnergy > 0 ? Math.min(1, d.energy / d.maxEnergy) : 0;
+      hpBar.style.transform = `scaleX(${hpPct.toFixed(3)})`;
+      energyBar.style.transform = `scaleX(${enPct.toFixed(3)})`;
+      const hpNow = Math.ceil(d.hp);
+      if (hpNow !== cacheHp || d.maxHp !== cacheHpMax) {
+        cacheHp = hpNow;
+        cacheHpMax = d.maxHp;
+        hpNum.textContent = `${hpNow} / ${d.maxHp}`;
+      }
+      const enNow = Math.floor(d.energy);
+      if (enNow !== cacheEnergy || d.maxEnergy !== cacheEnergyMax) {
+        cacheEnergy = enNow;
+        cacheEnergyMax = d.maxEnergy;
+        energyNum.textContent = `${enNow} / ${d.maxEnergy}`;
+      }
       const weaponTxt = `${d.weaponName} · Lv.${d.weaponLevel} 阶${d.weaponAsc} · 伤害×${d.damageMult.toFixed(2)} · 弹药 ${d.ammo}/${d.mag}${d.reloading ? '（换弹中…）' : ''}`;
       if (weaponTxt !== cacheWeapon) {
         cacheWeapon = weaponTxt;
@@ -217,6 +235,8 @@ export function createHud(): HudView {
       window.setTimeout(() => num.remove(), 500);
     },
     setSpread(p) {
+      if (p === cacheSpread) return;
+      cacheSpread = p;
       const gap = CROSSHAIR_GAP + p * 26;
       const pieces = crosshair.children;
       for (let i = 0; i < 4; i++) {

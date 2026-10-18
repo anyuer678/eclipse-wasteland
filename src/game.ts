@@ -7,7 +7,8 @@
  */
 import * as THREE from 'three';
 import { EventBus, FixedLoop, ServiceRegistry, clamp } from './core';
-import { World } from './render';
+import { World, SPAWN_POINT, nearSpawn } from './render';
+import { Fx } from './render/fx';
 import { createAssetLib } from './render/assets';
 import { Input } from './play/input';
 import { PlayerController } from './play/controller';
@@ -59,7 +60,13 @@ function boot(): void {
   const events = new EventBus<{ boot: { time: number }; [k: string]: unknown }>();
   const services = new ServiceRegistry();
 
-  const world = new World({ mount, fogNear: 14, fogFar: 46 });
+  const world = new World({ mount });
+  /** 战斗特效层：粒子 / 冲击环 / 跳字统一走 GPU 与单 canvas */
+  const fx = new Fx(world.scene);
+  // 电影感压角（纯 CSS 合成，零 WebGL 开销）
+  const grade = document.createElement('div');
+  grade.id = 'ss-grade';
+  document.body.appendChild(grade);
 
   const input = new Input();
   input.attach(mount);
@@ -89,7 +96,11 @@ function boot(): void {
     return { enchant, pinnacle };
   };
 
+  /** 属性汇总缓存：computeStats 每帧被多处调用，避免重复遍历武器/背包 */
+  let statsCache: ReturnType<typeof applyBuffs> | null = null;
+
   let refreshGrowth = (): void => {
+    statsCache = null;
     arsenal.refreshGrowth(inventory);
     for (const w of arsenal.weapons) {
       const g = inventory.getWeapon(w.def.id);
@@ -169,10 +180,9 @@ function boot(): void {
   const tracer = new TracerPool(world.scene);
   const spawner = new Spawner(world.scene, 20260813);
 
-  // 开源模型加载：小怪 RobotExpressive（轻量），BOSS=Soldier（放大），枪械 gun_*
+  // 开源模型加载：BOSS=Soldier（放大），枪械 gun_*，环境装饰 env/*（小怪改为程序化合并网格）
   const assets = createAssetLib();
-  assets.load('RobotExpressive', () => rebuildRayTargets());
-  assets.load('Soldier', () => rebuildRayTargets());
+  assets.load('Soldier', () => syncBossModel());
   mountViewmodel();
   world.add(world.camera);
 
@@ -284,7 +294,6 @@ function boot(): void {
     }
   };
 
-  const rayTargets: THREE.Object3D[] = [];
   let activeBoss: import('./campaign').Boss | null = null;
 
   const shell = new Shell(inventory, {
@@ -460,36 +469,30 @@ function boot(): void {
     // 重建关卡地图（移除旧障碍，按 mapId 生成新布局�?
     if (mapRoot) {
       world.scene.remove(mapRoot);
-      // dispose 纹理/材质防显存泄漏
-      mapRoot.traverse((o) => {
-        const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
-        if (!m) return;
-        const mats = Array.isArray(m) ? m : [m];
-        for (const mm of mats) {
-          const tex = (mm as THREE.MeshStandardMaterial).map;
-          tex?.dispose();
-          mm.dispose();
-        }
-      });
+      // 释放地图自建几何/材质（共享纹理与全局材质自动跳过）
+      World.disposeMap(mapRoot);
     }
     mapRoot = world.buildMap(flow.mission.mapId);
-    // 可破坏箱（从地图配置重建）
+    // 可破坏箱（从地图配置重建；mesh 引用用于击碎后隐藏）
     crates.length = 0;
-    for (const c of (mapRoot.userData.crates ?? []) as { x: number; z: number }[]) {
-      crates.push({ x: c.x, z: c.z, hp: 25, alive: true });
+    const crateGroup = mapRoot.userData.crateGroup as THREE.Group | undefined;
+    const crateDefs = (mapRoot.userData.crates ?? []) as { x: number; z: number }[];
+    for (let i = 0; i < crateDefs.length; i++) {
+      const c = crateDefs[i];
+      crates.push({ x: c.x, z: c.z, hp: 25, alive: true, mesh: crateGroup?.children[i] as THREE.Mesh | undefined });
     }
     mountEnv(); // 挂载开源环境素材（Kenney CC0：岩石/树木/灌木）
-    player.position.set(0, 0, 6);
+    player.position.set(SPAWN_POINT.x, 0, SPAWN_POINT.z);
     setHp(maxHp);
     flow.difficulty = difficulty;
     flow.start();
-    rebuildRayTargets();
+    syncBossModel();
     shell.startGame();
   }
 
   let mapRoot: THREE.Group | null = null;
   /** 可破坏箱（打碎掉补给） */
-  interface Crate { x: number; z: number; hp: number; alive: boolean }
+  interface Crate { x: number; z: number; hp: number; alive: boolean; mesh?: THREE.Mesh }
   const crates: Crate[] = [];
 
   // ---------- 开源环境素材（Kenney CC0 nature-kit） ----------
@@ -523,44 +526,43 @@ function boot(): void {
     }
     const list = ENV_MODELS[flow.mission.mapId] ?? [];
     if (list.length === 0) return;
-    envRoot = new THREE.Group();
-    mapRoot?.add(envRoot);
+    const group = new THREE.Group();
+    envRoot = group;
+    mapRoot?.add(group);
+    const hf = (mapRoot?.userData.heightfield as ((x: number, z: number) => number) | undefined) ?? ((): number => 0);
     for (const spec of list) {
       assets.load(spec.name, (src) => {
-        const base = src.clone();
+        // 关卡可能已切换：只在当前 envRoot 仍是本次挂载目标时落地
+        if (envRoot !== group) return;
+        const placements: { x: number; y: number; z: number; scale: number; rotY: number }[] = [];
         for (let i = 0; i < spec.count; i++) {
-          const inst = base.clone();
           const a = Math.random() * Math.PI * 2;
-          // 部分靠近中心（3-8m，出生点可见），部分外围（8-20m）
-          const d = i % 2 === 0 ? 3 + Math.random() * 5 : 8 + Math.random() * 12;
-          inst.position.set(Math.cos(a) * d, spec.y, Math.sin(a) * d);
-          inst.scale.setScalar(spec.scale[0] + Math.random() * (spec.scale[1] - spec.scale[0]));
-          inst.rotation.y = Math.random() * Math.PI * 2;
-          inst.userData.envInst = true;
-          envRoot?.add(inst);
+          // 部分靠近中心（出生点可见），部分外围
+          const d = i % 2 === 0 ? 4 + Math.random() * 6 : 9 + Math.random() * 13;
+          const x = Math.cos(a) * d;
+          const z = Math.sin(a) * d;
+          if (nearSpawn(x, z)) continue; // 出生点附近留白，避免开局被灌木/石头糊脸
+          placements.push({
+            x,
+            // 贴合地形高度（旧实现固定 y=0，坡地上的装饰会浮空）
+            y: hf(x, z) + spec.y,
+            z,
+            scale: spec.scale[0] + Math.random() * (spec.scale[1] - spec.scale[0]),
+            rotY: Math.random() * Math.PI * 2,
+          });
         }
+        // 实例化：每个模型只占 1 个 draw call（旧实现每株草都是一个 Group）
+        world.addInstancedProps(group, src, placements);
       });
     }
   };
 
-  function rebuildRayTargets(): void {
-    rayTargets.length = 0;
-    for (const e of spawner.all()) rayTargets.push(e.root);
-    if (activeBoss) rayTargets.push(activeBoss.root);
-    // 小怪模型（每个敌人独立 clone，避免共�?group �?add 移走�?
-    const needEnemy = spawner.all().some((e) => !e.root.userData.hasModel);
-    if (needEnemy) {
-      for (const e of spawner.all()) {
-        if (!e.root.userData.hasModel) {
-          const g = assets.get('RobotExpressive');
-          if (g) {
-            e.applyModel(g);
-            e.root.userData.hasModel = true;
-          }
-        }
-      }
-    }
-    // BOSS 模型
+  /**
+   * BOSS 模型挂载（开源 Soldier GLB）。
+   * 小怪已改为程序化合并网格，不再需要每次重建射线目标列表——
+   * 旧实现每个逻辑帧都遍历全体敌人重建数组，属于纯浪费。
+   */
+  function syncBossModel(): void {
     if (activeBoss && !activeBoss.root.userData.hasModel) {
       const bg = assets.get('Soldier');
       if (bg) {
@@ -602,7 +604,7 @@ function boot(): void {
     if (activeBoss) world.scene.remove(activeBoss.root);
     activeBoss = flow.activeBoss;
     if (activeBoss) world.scene.add(activeBoss.root);
-    rebuildRayTargets();
+    syncBossModel();
 
     // ---- 波次预告 ----
     if (phase === 'wave' && flow.waveIndex > prevWave) {
@@ -684,66 +686,81 @@ function boot(): void {
     shell.showResult(result);
   };
 
-  /** 射线-球体求交，返回最近正距离�?null */
+  /** 射线-球体求交，返回最近正距离或 null（零分配：命中点写入 hitScratch） */
   function raySphere(origin: THREE.Vector3, dir: THREE.Vector3, center: THREE.Vector3, radius: number): number | null {
-    const oc = origin.clone().sub(center);
-    const b = oc.dot(dir);
-    const c = oc.dot(oc) - radius * radius;
+    const ox = origin.x - center.x;
+    const oy = origin.y - center.y;
+    const oz = origin.z - center.z;
+    const b = ox * dir.x + oy * dir.y + oz * dir.z;
+    const c = ox * ox + oy * oy + oz * oz - radius * radius;
     const disc = b * b - c;
     if (disc < 0) return null;
     const t = -b - Math.sqrt(disc);
     return t > 0 ? t : null;
   }
 
+  /** 每帧复用的临时向量（避免热路径 new Vector3） */
+  const eyeScratch = new THREE.Vector3();
+  const hitScratch = new THREE.Vector3();
+  const centerScratch = new THREE.Vector3();
+
   const fireCtx: FireContext = {
     origin: new THREE.Vector3(),
     direction: new THREE.Vector3(),
     tracer,
     resolveHit(origin, dir) {
-      // 逻辑命中：射线对敌人/BOSS 球体检测（不依赖模�?mesh raycast，稳定可靠）
+      // 逻辑命中：射线对敌人/BOSS 球体检测（不依赖模型 mesh raycast，稳定可靠）
       let bestT = 60;
-      let bestPoint: THREE.Vector3 | null = null;
+      let hit = false;
       // 可破坏箱优先（若命中箱子，先打箱子）
       for (const c of crates) {
         if (!c.alive) continue;
-        const t = raySphere(origin, dir, new THREE.Vector3(c.x, 0.7, c.z), 1.0);
+        hitScratch.set(c.x, 0.7, c.z);
+        const t = raySphere(origin, dir, hitScratch, 1.0);
         if (t !== null && t < bestT) {
           bestT = t;
-          bestPoint = origin.clone().addScaledVector(dir, t);
+          hit = true;
         }
       }
       for (const e of spawner.all()) {
         if (!e.alive) continue;
         // 命中半径放宽到 1.1（容忍地形高度差，玩家平视可打高处敌人）
-        const t = raySphere(origin, dir, e.center(), 1.1);
+        e.centerInto(centerScratch);
+        const t = raySphere(origin, dir, centerScratch, 1.1);
         if (t !== null && t < bestT) {
           bestT = t;
-          bestPoint = origin.clone().addScaledVector(dir, t);
+          hit = true;
         }
       }
       if (activeBoss && activeBoss.alive) {
-        const t = raySphere(origin, dir, activeBoss.center(), 3.2);
+        activeBoss.centerInto(centerScratch);
+        const t = raySphere(origin, dir, centerScratch, 3.2);
         if (t !== null && t < bestT) {
           bestT = t;
-          bestPoint = origin.clone().addScaledVector(dir, t);
+          hit = true;
         }
       }
-      if (bestPoint) return bestPoint;
+      if (hit) return hitScratch.copy(origin).addScaledVector(dir, bestT);
       if (dir.y < -1e-4) {
         const t = -origin.y / dir.y;
-        if (t > 0) return origin.clone().addScaledVector(dir, t);
+        if (t > 0) return hitScratch.copy(origin).addScaledVector(dir, t);
       }
-      return origin.clone().addScaledVector(dir, 60);
+      return hitScratch.copy(origin).addScaledVector(dir, 60);
     },
     onHitEnemy(pos, damage, extra) {
       let hitSomething = false;
       // 可破坏箱：优先扣箱子血（打碎掉补给）
       for (const c of crates) {
         if (!c.alive) continue;
-        if (new THREE.Vector3(c.x, 0.7, c.z).distanceToSquared(pos) < 1.6) {
+        const cdx = c.x - pos.x;
+        const cdz = c.z - pos.z;
+        const cdy = 0.7 - pos.y;
+        if (cdx * cdx + cdy * cdy + cdz * cdz < 1.6) {
           c.hp -= damage;
           if (c.hp <= 0) {
             c.alive = false;
+            // 视觉同步：真正藏掉箱子（旧实现击碎后箱子仍然立在那里）
+            if (c.mesh) c.mesh.visible = false;
             spawnBuffOrb(new THREE.Vector3(c.x, 0.8, c.z));
             maybeDropOrb(new THREE.Vector3(c.x, 0.8, c.z));
             addDamagePopup(new THREE.Vector3(c.x, 1.2, c.z), '箱子击碎', '#ffd24a');
@@ -760,17 +777,19 @@ function boot(): void {
       const critMult = (isCrit ? st.critMult : 1) + (isCrit ? runB.critDmgBonus : 0);
       let dmg = damage * streakMult * (stealthTimer > 0 ? 2 * (1 + inventory.roleLevel(selectedRoleId) * 0.15) : 1) * st.attackMult * critMult * runB.dmgMult;
       if (!Number.isFinite(dmg) || dmg <= 0) dmg = damage; // NaN 防护
-      // 高地优势：玩家比目标高 0.6m 以上 → +20% 伤害
-      const targetY = activeBoss && activeBoss.alive ? activeBoss.center().y : (spawner.all().find((e) => e.alive)?.root.position.y ?? 0);
-      if (player.position.y > targetY + 0.6) dmg *= 1.2;
+      // 高地优势：玩家比命中点低 0.4m 以上 → +20% 伤害（旧实现每次命中扫全部敌人找高度）
+      if (player.position.y > pos.y - 0.6) dmg *= 1.2;
       if (activeBoss && activeBoss.alive) {
-        const bd = activeBoss.center().distanceToSquared(pos);
+        activeBoss.centerInto(centerScratch);
+        const bdx = centerScratch.x - pos.x;
+        const bdy = centerScratch.y - pos.y;
+        const bdz = centerScratch.z - pos.z;
         // 命中球体半径 3.2，判定半径需匹配（distance² < 12）
-        if (bd < 12) {
+        if (bdx * bdx + bdy * bdy + bdz * bdz < 12) {
           const dead = activeBoss.takeDamage(dmg);
           if (dead) {
             flow.kills += 1;
-            rebuildRayTargets();
+            syncBossModel();
             // BOSS 必掉 2 个 BUFF 球
             spawnBuffOrb(activeBoss.root.position.clone());
             spawnBuffOrb(activeBoss.root.position.clone().add(new THREE.Vector3(1.5, 0, 0)));
@@ -780,14 +799,22 @@ function boot(): void {
         }
       }
       if (!hitSomething) {
-        let best: { e: Enemy; d: number } | null = null;
+        let bestE: Enemy | null = null;
+        let bestD = 3.0;
         for (const e of spawner.all()) {
           if (!e.alive) continue;
-          const d = e.center().distanceToSquared(pos);
-          if (best === null || d < best.d) best = { e, d };
+          e.centerInto(centerScratch);
+          const dx = centerScratch.x - pos.x;
+          const dy = centerScratch.y - pos.y;
+          const dz = centerScratch.z - pos.z;
+          const d = dx * dx + dy * dy + dz * dz;
+          if (d <= bestD) {
+            bestD = d;
+            bestE = e;
+          }
         }
-        if (best && best.d <= 3.0) {
-          const e = best.e;
+        if (bestE) {
+          const e = bestE;
           if (extra.slow !== undefined) e.applySlow(extra.slow, 1.6);
           // 烈焰风暴：命中施加灼�?DOT
           if (arsenal.current.def.mech.kind === 'beam') e.applyBurn(2.2, 5);
@@ -799,7 +826,7 @@ function boot(): void {
           const dead = e.takeDamage(finalDmg);
           if (dead) {
             flow.kills += 1;
-            rebuildRayTargets();
+            syncBossModel();
             maybeDropOrb(e.root.position);
             addKillBurst(e.root.position);
             spawnParticles(e.root.position, 0xffd24a, 4, 3.5);
@@ -840,11 +867,15 @@ function boot(): void {
           const splitDmg = dmg * runB.split;
           for (const se of spawner.all()) {
             if (!se.alive) continue;
-            if (se.center().distanceToSquared(pos) > 9) continue;
+            se.centerInto(centerScratch);
+            const sdx = centerScratch.x - pos.x;
+            const sdy = centerScratch.y - pos.y;
+            const sdz = centerScratch.z - pos.z;
+            if (sdx * sdx + sdy * sdy + sdz * sdz > 9) continue;
             const sdead = se.takeDamage(splitDmg);
             if (sdead) {
               flow.kills += 1;
-              rebuildRayTargets();
+              syncBossModel();
             }
           }
         }
@@ -891,7 +922,7 @@ function boot(): void {
         const dead = best.e.takeDamage(dmg);
         if (dead) {
           flow.kills += 1;
-          rebuildRayTargets();
+          syncBossModel();
         }
         fromPos = to;
       }
@@ -925,6 +956,29 @@ function boot(): void {
   let meleeCooldown = 0;
   let lastKills = 0;
 
+  // ---------- 性能采样（调试钩子 __ss.perf 使用） ----------
+  /** 自动开火压力测试开关（仅调试钩子置位，正常运行恒为 false） */
+  let benchFire = false;
+  let perfFrames = 0;
+  let perfAccum = 0;
+  let perfLast = 0;
+  let perfFps = 0;
+  let perfFrameMs = 0;
+  const perfSample = (): void => {
+    const now = performance.now();
+    if (perfLast > 0) {
+      perfAccum += now - perfLast;
+      perfFrames += 1;
+      if (perfAccum >= 500) {
+        perfFrameMs = perfAccum / perfFrames;
+        perfFps = perfFrames > 0 ? 1000 / perfFrameMs : 0;
+        perfAccum = 0;
+        perfFrames = 0;
+      }
+    }
+    perfLast = now;
+  };
+
   // ---------- 玩家属性（六维 + BUFF�?----------
   const buffs = { atk: 0, shield: 0, speed: 0 };
   /** 局内成长（升级选牌） */
@@ -937,8 +991,10 @@ function boot(): void {
     applyMaxHpGrowth();
   };
   const computeStats = (): ReturnType<typeof applyBuffs> => {
+    if (statsCache) return statsCache;
     const base = baseStats(bonuses.dmg, bonuses.hp, bonuses.energyGain, growthSummary());
-    return applyBuffs(base, buffs);
+    statsCache = applyBuffs(base, buffs);
+    return statsCache;
   };
   // 移速倍率应用到玩家控制器（含疾行球 + 局内疾行）
   const applySpeedMult = (): void => {
@@ -978,78 +1034,22 @@ function boot(): void {
         const dead = best.e.takeDamage(runB.thorns);
         if (dead) {
           flow.kills += 1;
-          rebuildRayTargets();
+          syncBossModel();
         }
       }
     }
   };
 
-  // ---------- 伤害跳字（屏幕空间飘字） ----------
-  const popupRoot = document.createElement('div');
-  popupRoot.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:17;overflow:hidden;font-family:monospace;';
-  document.body.appendChild(popupRoot);
-  interface Popup {
-    el: HTMLElement;
-    life: number;
-    maxLife: number;
-    world: THREE.Vector3;
-    vy: number;
-  }
-  const popups: Popup[] = [];
-  // ---------- 击杀爆点特效（金色扩散环） ----------
-  const bursts: { mesh: THREE.Mesh; life: number }[] = [];
-  const addKillBurst = (pos: THREE.Vector3): void => {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.06, 6, 20), new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.9 }));
-    ring.position.copy(pos).add(new THREE.Vector3(0, 1, 0));
-    ring.rotation.x = Math.PI / 2;
-    world.scene.add(ring);
-    bursts.push({ mesh: ring, life: 0.32 });
-  };
-
-  // ---------- 粒子特效（枪口火光/命中火花/受击碎片/击杀粒子） ----------
-  interface Particle { mesh: THREE.Mesh; vel: THREE.Vector3; life: number }
-  const particles: Particle[] = [];
+  // ---------- 特效封装（统一交给 fx：零分配 / 单 draw call / 单 canvas 跳字） ----------
   const spawnParticles = (pos: THREE.Vector3, color: number, count: number, speed: number): void => {
-    for (let i = 0; i < count; i++) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.045), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 }));
-      m.position.copy(pos).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2));
-      const vel = new THREE.Vector3((Math.random() - 0.5) * speed, Math.random() * speed * 0.9 + 0.5, (Math.random() - 0.5) * speed);
-      world.scene.add(m);
-      particles.push({ mesh: m, vel, life: 0.35 });
-    }
+    fx.emit(pos, color, count, speed);
+  };
+  /** 击杀冲击环（贴地扩散） */
+  const addKillBurst = (pos: THREE.Vector3): void => {
+    fx.burst(pos, 0xffd24a, 2.0);
   };
   const addDamagePopup = (worldPos: THREE.Vector3, text: string, color: string, size = 17): void => {
-    const el2 = document.createElement('div');
-    el2.textContent = text;
-    // 大字号 + 双层黑描边 + 同色微光（更醒目）
-    const glow = color.replace('#', '');
-    el2.style.cssText =
-      `position:absolute;color:${color};font-size:${size}px;font-weight:800;` +
-      `text-shadow:0 0 6px rgba(${parseInt(glow.slice(0, 2), 16)},${parseInt(glow.slice(2, 4), 16)},${parseInt(glow.slice(4, 6), 16)},0.55),` +
-      `-2px 0 0 rgba(0,0,0,0.9),2px 0 0 rgba(0,0,0,0.9),0 -2px 0 rgba(0,0,0,0.9),0 2px 0 rgba(0,0,0,0.9);` +
-      `transform:translate(-50%,-50%);white-space:nowrap;font-family:"Cascadia Mono",Consolas,monospace;`;
-    popupRoot.appendChild(el2);
-    popups.push({ el: el2, life: 0.9, maxLife: 0.9, world: worldPos.clone(), vy: 0.7 + Math.random() * 0.35 });
-  };
-  const updatePopups = (dt: number): void => {
-    for (let i = popups.length - 1; i >= 0; i--) {
-      const p = popups[i];
-      p.life -= dt;
-      p.world.y += p.vy * dt;
-      // 世界坐标投影到屏�?
-      const v = p.world.clone().project(world.camera);
-      if (v.z < 1) {
-        const x = ((v.x + 1) / 2) * window.innerWidth;
-        const y = ((-v.y + 1) / 2) * window.innerHeight;
-        p.el.style.left = `${x}px`;
-        p.el.style.top = `${y}px`;
-      }
-      p.el.style.opacity = String(Math.min(1, p.life / p.maxLife));
-      if (p.life <= 0) {
-        p.el.remove();
-        popups.splice(i, 1);
-      }
-    }
+    fx.popup(worldPos, text, color, size);
   };
   let dashCooldown = 0;
   let shieldTimer = 0;
@@ -1150,7 +1150,7 @@ function boot(): void {
     const origin = fireCtx.origin;
     const dir = fireCtx.direction;
     const meleeDamage = 30 * arsenal.current.growthDamage;
-    world.scene.updateMatrixWorld(true);
+    // 逻辑判定不依赖 world matrix（旧实现在这里强制整场景 updateMatrixWorld，开销极大）
 
     let hitSomething = false;
     // 敌人
@@ -1165,7 +1165,7 @@ function boot(): void {
       const dead = e.takeDamage(meleeDamage);
       if (dead) {
         flow.kills += 1;
-        rebuildRayTargets();
+        syncBossModel();
       }
       hitSomething = true;
     }
@@ -1178,7 +1178,7 @@ function boot(): void {
         const dead = activeBoss.takeDamage(meleeDamage);
         if (dead) {
           flow.kills += 1;
-          rebuildRayTargets();
+          syncBossModel();
         }
         hitSomething = true;
       }
@@ -1215,16 +1215,19 @@ function boot(): void {
       player.look(d.dx, d.dy);
       player.update(snap, dt);
 
-      const eye = player.eye();
+      const eye = player.eyeInto(eyeScratch);
       world.camera.position.copy(eye);
       world.camera.rotation.order = 'YXZ';
       world.camera.rotation.y = player.yaw;
       world.camera.rotation.x = player.pitch;
+      // 阴影框跟随玩家（26m 内保持高精度阴影，远处自然淡出）
+      world.focusShadow(player.position.x, player.position.y, player.position.z);
 
       fireCtx.origin.copy(eye);
       fireCtx.direction.set(0, 0, -1).applyQuaternion(world.camera.quaternion).normalize();
 
       arsenal.current.update(dt, fireCtx);
+      if (benchFire && !snap.fire) arsenal.current.fire(fireCtx);
 
       if (snap.fire) {
         arsenal.current.fire(fireCtx);
@@ -1318,7 +1321,7 @@ function boot(): void {
             e.applySlow(0.5, 0.5);
             if (dead) {
               flow.kills += 1;
-              rebuildRayTargets();
+              syncBossModel();
             }
           }
         }
@@ -1356,7 +1359,7 @@ function boot(): void {
             const dead = best.e.takeDamage(summonDmg);
             if (dead) {
               flow.kills += 1;
-              rebuildRayTargets();
+              syncBossModel();
             }
           }
         }
@@ -1405,6 +1408,8 @@ function boot(): void {
       keyState.buff0 = snap.key('Digit0');
 
       // BUFF 计时 + 能量回复（含局内能量涌动）+ 局内再生回血
+      // 属性缓存每逻辑帧失效一次（BUFF 随时间衰减；帧内多次查询共用一次汇总）
+      statsCache = null;
       tickBuffs(buffs, dt);
       applySpeedMult();
       const regen = computeStats().energyRegen + runB.energyRegen;
@@ -1445,7 +1450,7 @@ function boot(): void {
         const died = e.tickBurn(dt);
         if (died) {
           flow.kills += 1;
-          rebuildRayTargets();
+          syncBossModel();
         }
         const evt = e.update(dt, player.position);
         if (evt) {
@@ -1491,39 +1496,15 @@ function boot(): void {
             }
           } else if (bevt.summon) {
             spawner.spawnWave({ chasers: bevt.summon, boomers: 0, spitters: 0 });
-            rebuildRayTargets();
+            syncBossModel();
           }
         }
       }
 
       spawner.sweep();
-      rebuildRayTargets();
       pickChests();
-      updatePopups(dt);
-      // 击杀爆点动画
-      for (let i = bursts.length - 1; i >= 0; i--) {
-        const b = bursts[i];
-        b.life -= dt;
-        const t = 1 - b.life / 0.32;
-        b.mesh.scale.setScalar(1 + t * 5);
-        (b.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, b.life / 0.32);
-        if (b.life <= 0) {
-          world.scene.remove(b.mesh);
-          bursts.splice(i, 1);
-        }
-      }
-      // 粒子动画（飞散 + 下落 + 渐隐）
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.life -= dt;
-        p.vel.y -= 12 * dt;
-        p.mesh.position.addScaledVector(p.vel, dt);
-        (p.mesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, p.life / 0.35);
-        if (p.life <= 0) {
-          world.scene.remove(p.mesh);
-          particles.splice(i, 1);
-        }
-      }
+      // 特效层统一推进（粒子/冲击环在 GPU 侧，跳字在单张 2D canvas）
+      fx.update(dt, world.camera);
       flow.update(dt, hp > 0);
 
       // 击杀成就计数 + 连杀系统 + 局内升级
@@ -1637,7 +1618,7 @@ function boot(): void {
               const dead = e.takeDamage(8 * dt);
               if (dead) {
                 flow.kills += 1;
-                rebuildRayTargets();
+                syncBossModel();
               }
             }
           }
@@ -1646,6 +1627,7 @@ function boot(): void {
       events.emit('frame', { tick: Math.floor(time / dt) });
     },
     onRender: () => {
+      perfSample();
       // 仅战斗/结算画面渲染 3D（菜单态纯 DOM，省渲染开销）
       if (flow.phase !== 'clear' && flow.phase !== 'failed' && !inMenu) {
         world.render();
@@ -1662,11 +1644,77 @@ function boot(): void {
   // 开发期调试钩子（正式发布前移除�?
   const dbg = window as unknown as { __ss?: Record<string, unknown> };
   dbg.__ss = {
+    /** 性能快照：FPS / 绘制调用 / 三角形 / 资源数 / 场上次级对象数 */
+    perf(): Record<string, number> {
+      const info = world.renderer.info;
+      return {
+        fps: +perfFps.toFixed(1),
+        frameMs: +perfFrameMs.toFixed(2),
+        calls: info.render.calls,
+        triangles: info.render.triangles,
+        geometries: info.memory.geometries,
+        textures: info.memory.textures,
+        programs: info.programs?.length ?? 0,
+        dpr: +world.renderer.getPixelRatio().toFixed(2),
+        enemies: spawner.all().length,
+      };
+    },
+    /** 画质档位切换（low/medium/high，auto=true 恢复自动升降档） */
+    setQuality(level: 'low' | 'medium' | 'high', auto = false): string {
+      world.setQuality(level, auto);
+      return world.quality;
+    },
+    /** 直接进入指定副本（跳过菜单，压测用） */
+    enterCombat(index = 0): void {
+      document.querySelectorAll('.ss-screen').forEach((s) => s.classList.add('hidden'));
+      missionIndex = Math.max(0, Math.min(MISSIONS.length - 1, index));
+      flow.mission = MISSIONS[missionIndex];
+      beginMission();
+    },
+    /** 压力测试：一次刷 n 只追击怪（hpMult 拉高避免被打死，便于稳态采样） */
+    spawnStress(n = 20, spread = 14, hpMult = 1e6): void {
+      spawner.spawnWave({ chasers: n, boomers: 0, spitters: 0 }, { hpMult });
+      syncBossModel();
+      const list = spawner.all();
+      for (let i = 0; i < list.length; i++) {
+        const a = (i / Math.max(1, list.length)) * Math.PI * 2;
+        const r = 4 + (i % 5) * (spread / 5);
+        list[i].root.position.set(Math.cos(a) * r, 0, Math.sin(a) * r + 2);
+      }
+    },
+    /** 按兵种刷怪（调试/截图用） */
+    spawnKinds(counts: Partial<Record<string, number>>, hpMult = 1e6): number {
+      spawner.spawnWave(
+        {
+          chasers: counts.chaser ?? 0,
+          boomers: counts.boomer ?? 0,
+          spitters: counts.spitter ?? 0,
+          guards: counts.guard ?? 0,
+          berserkers: counts.berserker ?? 0,
+          casters: counts.caster ?? 0,
+        },
+        { hpMult }
+      );
+      syncBossModel();
+      // 排成一排摆在玩家正前方（截图/对比用）
+      const list = spawner.all();
+      for (let i = 0; i < list.length; i++) {
+        const off = (i - (list.length - 1) / 2) * 1.55;
+        list[i].root.position.set(player.position.x + off, 0, player.position.z - 5);
+      }
+      return list.length;
+    },
+    /** 关卡切换用的环境统计已由 envInfo 提供 */
+
+    /** 开关自动开火（压测命中特效链路） */
+    setBenchFire(on: boolean): void {
+      benchFire = on;
+    },
     teleportEnemies(offsetX: number, offsetZ: number): void {
       for (const e of spawner.all()) {
         e.root.position.set(player.position.x + offsetX, 0, player.position.z + offsetZ);
       }
-      rebuildRayTargets();
+      syncBossModel();
     },
     heal(): void {
       setHp(maxHp);
@@ -1686,8 +1734,9 @@ function boot(): void {
     enemyDump(): { childTypes: string[]; modelApplied: boolean; barOk: boolean; modelVisible: boolean }[] {
       return spawner.all().map((e) => ({
         childTypes: e.root.children.map((c) => `${c.type}[${c.name || ''}] children=${c.children.length} vis=${c.visible}`),
-        modelApplied: !!e.root.userData.hasModel,
-        barOk: !!e['barMesh'],
+        modelApplied: e.root.children.some((c) => (c as THREE.Mesh).isMesh),
+        // 血条为精灵（第 2 个子节点），满血时隐藏
+        barOk: e.root.children.some((c) => (c as THREE.Sprite).isSprite),
         modelVisible: e.root.children.some((c) => c.visible),
       }));
     },
@@ -1750,7 +1799,7 @@ function boot(): void {
         if (e.takeDamage(1e9)) {
           killed += 1;
           flow.kills += 1;
-          rebuildRayTargets();
+          syncBossModel();
           const curG = inventory.getWeapon(arsenal.current.def.id);
           curG.kills += 1;
           addDailyProgress(dailyState, 'kills', 1);
@@ -1785,12 +1834,18 @@ function boot(): void {
       const positions: number[][] = [];
       let instances = 0;
       envRoot?.traverse((o) => {
-        if ((o as THREE.Mesh).isMesh) {
-          const inst = o.parent;
-          if (inst && (inst as THREE.Group).userData.envInst) {
-            instances += 1;
-            scales.push(+(inst as THREE.Group).scale.x.toFixed(2));
-            if (positions.length < 5) positions.push([+(inst as THREE.Group).position.x.toFixed(1), +(inst as THREE.Group).position.z.toFixed(1)]);
+        const inst = o as THREE.InstancedMesh;
+        if (inst.isInstancedMesh) {
+          instances += inst.count;
+          const m = new THREE.Matrix4();
+          for (let i = 0; i < Math.min(inst.count, 6); i++) {
+            inst.getMatrixAt(i, m);
+            const p = new THREE.Vector3();
+            const q = new THREE.Quaternion();
+            const sc = new THREE.Vector3();
+            m.decompose(p, q, sc);
+            scales.push(+sc.x.toFixed(2));
+            if (positions.length < 5) positions.push([+p.x.toFixed(1), +p.z.toFixed(1)]);
           }
         }
       });
@@ -1834,13 +1889,13 @@ function boot(): void {
     skipWave(): void {
       for (const e of spawner.all()) e.alive = false;
       spawner.sweep();
-      rebuildRayTargets();
+      syncBossModel();
     },
     killBoss(): void {
       if (activeBoss && activeBoss.alive) {
         activeBoss.hp = 0;
         activeBoss.alive = false;
-        rebuildRayTargets();
+        syncBossModel();
       }
     },
   };
