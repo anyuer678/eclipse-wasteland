@@ -255,6 +255,8 @@ export class Enemy {
       anim.uMove.value += (target - anim.uMove.value) * Math.min(1, dt * 9);
       this.attackAnim = Math.max(0, this.attackAnim - dt * 3.0);
       anim.uAttack.value = this.attackAnim;
+      this.hitAnim = Math.max(0, this.hitAnim - dt * 5.0);
+      anim.uHit.value = this.hitAnim;
     }
     // 整体落脚起伏
     this.body.position.y = moving ? Math.abs(Math.sin(this.phase)) * 0.035 : Math.sin(this.phase * 0.5) * 0.008;
@@ -263,6 +265,8 @@ export class Enemy {
 
   /** 攻击前倾强度（近战/喷吐时置 1，随后衰减） */
   private attackAnim = 0;
+  /** 受击后仰强度 */
+  private hitAnim = 0;
   private lunge(): void {
     this.attackAnim = 1;
   }
@@ -281,6 +285,7 @@ export class Enemy {
     }
     this.hp -= final;
     this.flashTimer = 0.1;
+    this.hitAnim = 1;
     const pct = Math.max(0, this.hp / this.def.hp);
     this.bar.setHp(pct);
     if (this.barSprite.visible !== pct < 1) this.barSprite.visible = pct < 1;
