@@ -42,21 +42,21 @@ export interface RunState {
 }
 
 export const BOOST_POOL: RunBoost[] = [
-  { id: 'dmg', name: '攻击强化', desc: '伤害 +15%', value: 0.15 },
-  { id: 'spd', name: '攻速强化', desc: '射速 +12%', value: 0.12 },
-  { id: 'crit', name: '暴击强化', desc: '暴击率 +10%', value: 0.1 },
+  { id: 'dmg', name: '攻击强化', desc: '伤害 +22%', value: 0.22 },
+  { id: 'spd', name: '攻速强化', desc: '射速 +16%', value: 0.16 },
+  { id: 'crit', name: '暴击强化', desc: '暴击率 +12%', value: 0.12 },
   { id: 'move', name: '疾行', desc: '移速 +10%', value: 0.1 },
-  { id: 'regen', name: '再生', desc: '每秒回复 1.5 生命', value: 1.5 },
-  { id: 'armor', name: '铁壁', desc: '减伤 +15%', value: 0.15 },
+  { id: 'regen', name: '再生', desc: '每秒回复 2 生命', value: 2 },
+  { id: 'armor', name: '铁壁', desc: '减伤 +18%', value: 0.18 },
   { id: 'split', name: '分裂弹', desc: '命中分裂 2 发（40% 伤害）', value: 0.4 },
-  { id: 'pierce', name: '穿透强化', desc: '伤害 +20%', value: 0.2 },
-  { id: 'vamp', name: '嗜血', desc: '伤害的 3% 回复生命', value: 0.03 },
-  { id: 'energy', name: '能量涌动', desc: '能量回复 +1.5/s', value: 1.5 },
-  { id: 'hp', name: '生命强化', desc: '最大生命 +15', value: 15 },
+  { id: 'pierce', name: '穿透强化', desc: '伤害 +26%', value: 0.26 },
+  { id: 'vamp', name: '嗜血', desc: '伤害的 4% 回复生命', value: 0.04 },
+  { id: 'energy', name: '能量涌动', desc: '能量回复 +2/s', value: 2 },
+  { id: 'hp', name: '生命强化', desc: '最大生命 +20', value: 20 },
   { id: 'elite', name: '精英猎手', desc: '对精英伤害 +30%', value: 0.3 },
   { id: 'mag', name: '扩容弹夹', desc: '弹夹容量 +50%', value: 0.5 },
   { id: 'reload', name: '速装填', desc: '换弹速度 ×2', value: 1 },
-  { id: 'critDmg', name: '致命一击', desc: '暴击伤害 +30%', value: 0.3 },
+  { id: 'critDmg', name: '致命一击', desc: '暴击伤害 +40%', value: 0.4 },
   { id: 'frost', name: '寒霜弹', desc: '命中减速 20%（1.5s）', value: 0.2 },
   { id: 'lucky', name: '幸运', desc: '暴击率 +6% · 金币掉落 +20%', value: 0.06 },
   { id: 'thorns', name: '荆棘', desc: '受伤反弹 5 点伤害', value: 5 },
@@ -71,9 +71,19 @@ export function expNeeded(level: number): number {
   return 5 + level * 2;
 }
 
-/** 击杀获得经验（精英 +2），返回是否升级 */
-export function addKillExp(run: RunState, elite: boolean): boolean {
-  run.exp += elite ? 2 : 1;
+/** 等级压制：玩家对怪物伤害倍率（压制越深收益越高，被压制时打折） */
+export function suppressionDealt(diff: number): number {
+  return diff >= 0 ? Math.min(2, 1 + diff * 0.08) : Math.max(0.55, 1 + diff * 0.06);
+}
+
+/** 等级压制：玩家承受伤害倍率（压制越深越肉，被压制时更脆） */
+export function suppressionTaken(diff: number): number {
+  return diff >= 0 ? Math.max(0.6, 1 - diff * 0.05) : Math.min(2, 1 - diff * 0.08);
+}
+
+/** 击杀获得经验（精英 ×2，经验随怪物等级增长——保证升级节奏跟得上怪物等级），返回是否升级 */
+export function addKillExp(run: RunState, elite: boolean, monsterLevel = 1): boolean {
+  run.exp += (elite ? 2 : 1) + Math.floor(monsterLevel * 0.8);
   let leveled = false;
   while (run.exp >= expNeeded(run.level)) {
     run.exp -= expNeeded(run.level);
@@ -129,18 +139,18 @@ export function runBonuses(run: RunState): {
 } {
   const n = (id: BoostId): number => run.boosts[id] ?? 0;
   return {
-    dmgMult: 1 + n('dmg') * 0.15 + n('pierce') * 0.2,
-    spdMult: 1 + n('spd') * 0.12,
-    critBonus: n('crit') * 0.1 + n('lucky') * 0.06,
-    critDmgBonus: n('critDmg') * 0.3,
+    dmgMult: 1 + n('dmg') * 0.22 + n('pierce') * 0.26,
+    spdMult: 1 + n('spd') * 0.16,
+    critBonus: n('crit') * 0.12 + n('lucky') * 0.06,
+    critDmgBonus: n('critDmg') * 0.4,
     moveMult: 1 + n('move') * 0.1,
-    regenPerSec: n('regen') * 1.5,
-    armorBonus: Math.min(0.6, n('armor') * 0.15),
+    regenPerSec: n('regen') * 2,
+    armorBonus: Math.min(0.6, n('armor') * 0.18),
     split: n('split') * 0.4,
     pierceMult: 1,
-    vamp: n('vamp') * 0.03,
-    energyRegen: n('energy') * 1.5,
-    maxHpBonus: n('hp') * 15,
+    vamp: n('vamp') * 0.04,
+    energyRegen: n('energy') * 2,
+    maxHpBonus: n('hp') * 20,
     eliteDmg: 1 + n('elite') * 0.3,
     magMult: 1 + n('mag') * 0.5,
     reloadMult: 1 + n('reload'),

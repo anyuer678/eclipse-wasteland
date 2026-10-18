@@ -45,6 +45,8 @@ export interface MissionDef {
   rewards: { material: string; amount: number };
   /** 试炼之塔：无限层模式（波次无限推进，每 5 层出 BOSS，仅失败结算） */
   tower?: boolean;
+  /** 基础怪物等级（每波 +1；塔模式随层数增长） */
+  monsterLevel?: number;
 }
 
 /** 副本流程阶段 */

@@ -23,6 +23,8 @@ export interface HudView {
     damageMult: number;
     phase: string;
     wave: number;
+    monsterLevel: number;
+    playerLevel: number;
     totalWaves: number;
     tower?: boolean;
     missionName: string;
@@ -166,7 +168,10 @@ export function createHud(): HudView {
           : d.phase === 'boss'
             ? 'BOSS 战'
             : `波次 ${d.wave + 1} / ${d.totalWaves}`;
-      const waveTxt = `${d.missionName} · ${phaseText}`;
+      // 等级压制：显示怪物等级与压制状态（绿=压制怪物 红=被压制）
+      const lvDiff = d.playerLevel - d.monsterLevel;
+      const supTag = lvDiff >= 2 ? '压制 ↑' : lvDiff <= -2 ? '被压制 ↓' : '势均力敌';
+      const waveTxt = `${d.missionName} · ${phaseText} · 怪物 Lv.${d.monsterLevel}（${supTag}）`;
       if (waveTxt !== cacheWave) {
         cacheWave = waveTxt;
         waveInfo.textContent = waveTxt;

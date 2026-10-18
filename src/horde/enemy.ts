@@ -107,7 +107,10 @@ export class Enemy {
     return this.takeDamage(this.burnDps * dt);
   }
 
-  constructor(def: EnemyDef, rng: { range: (a: number, b: number) => number }, opts?: { hpMult?: number; dmgMult?: number; elite?: EliteAffix }) {
+  /** 怪物等级（等级压制 / 经验结算） */
+  readonly level: number;
+
+  constructor(def: EnemyDef, rng: { range: (a: number, b: number) => number }, opts?: { hpMult?: number; dmgMult?: number; elite?: EliteAffix; level?: number }) {
     const hpMult = opts?.hpMult ?? 1;
     const dmgMult = opts?.dmgMult ?? 1;
     const eliteAffix = opts?.elite;
@@ -128,6 +131,7 @@ export class Enemy {
     const hp = def.hp * hpMult * (this.elite ? 1.5 : 1);
     this.def = { ...def, hp, speed, damage: dmg };
     this.hp = hp;
+    this.level = Math.max(1, Math.round(opts?.level ?? 1));
 
     this.root = new THREE.Group();
     const tpl = getEnemyTemplate(def.kind, def.color);

@@ -20,7 +20,7 @@ import type { WeaponDef, FireContext } from './arsenal';
 import { Enemy, Spawner } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow } from './campaign';
-import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, addDailyProgress, claimDaily } from './growth';
+import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
@@ -718,7 +718,7 @@ function boot(): void {
     if (_mission.tower && prevPhase === 'boss' && phase === 'wave') {
       spawnChest(true);
       const floor = flow.waveIndex;
-      const diffR = difficulty >= 2 ? 3 : difficulty >= 1.5 ? 1.8 : 1;
+      const diffR = difficulty >= 2 ? 3 : difficulty >= 1.5 ? 1.8 : difficulty <= 0.8 ? 0.8 : 1;
       const gold = Math.round(20 * (1 + floor * 0.15) * diffR * (1 + runB.luckyGold));
       const mat = Math.round(2 + floor * 0.5);
       inventory.addGold(gold);
@@ -731,7 +731,7 @@ function boot(): void {
     inMenu = true;
     unlockMouse(); // 结算界面需要鼠标操作
     // 难度奖励倍率（普通 ×1 / 困难 ×1.8 / 噩梦 ×3）× 局内幸运金币
-    const diffReward = (difficulty >= 2 ? 3 : difficulty >= 1.5 ? 1.8 : 1) * (1 + runB.luckyGold);
+    const diffReward = (difficulty >= 2 ? 3 : difficulty >= 1.5 ? 1.8 : difficulty <= 0.8 ? 0.8 : 1) * (1 + runB.luckyGold);
     if (result.phase === 'clear' && result.mission.tower) {
       // 塔模式失败结算：按层数给材料/金币（层数越高越丰厚）
       const floor = result.towerFloor;
@@ -880,6 +880,8 @@ function boot(): void {
       }
       /** 本次命中的跳字聚合键（BOSS / 兵种敌人各自一行不断累加） */
       let popupKey = '';
+      // 等级压制：玩家等级 vs 怪物等级（升级后打同级怪一定更轻松）
+      const supDealt = suppressionDealt(runState.level - flow.monsterLevel);
       // 连杀增伤 + 隐身增伤 + 攻击倍率 + 局内成长 + 暴击（含词缀/暴击球）
       const st = computeStats();
       const curG = inventory.getWeapon(arsenal.current.def.id);
@@ -887,7 +889,7 @@ function boot(): void {
       const streakMult = 1 + Math.min(killStreak, 6) * 0.05;
       const isCrit = Math.random() < st.critRate + critBonus;
       const critMult = (isCrit ? st.critMult : 1) + (isCrit ? runB.critDmgBonus : 0);
-      let dmg = damage * streakMult * (stealthTimer > 0 ? 2 * (1 + inventory.roleLevel(selectedRoleId) * 0.15) : 1) * st.attackMult * critMult * runB.dmgMult;
+      let dmg = damage * supDealt * streakMult * (stealthTimer > 0 ? 2 * (1 + inventory.roleLevel(selectedRoleId) * 0.15) : 1) * st.attackMult * critMult * runB.dmgMult;
       if (!Number.isFinite(dmg) || dmg <= 0) dmg = damage; // NaN 防护
       // 高地优势：玩家比命中点低 0.4m 以上 → +20% 伤害（旧实现每次命中扫全部敌人找高度）
       if (player.position.y > pos.y - 0.6) dmg *= 1.2;
@@ -906,6 +908,8 @@ function boot(): void {
             // BOSS 必掉 2 个 BUFF 球
             spawnBuffOrb(activeBoss.root.position.clone());
             spawnBuffOrb(activeBoss.root.position.clone().add(new THREE.Vector3(1.5, 0, 0)));
+            // BOSS 经验按怪物等级结算
+            addKillExp(runState, true, activeBoss.monsterLevel);
             // 死亡爆点：双环 + 大量火花（一次性事件，允许临时分配）
             const bp = activeBoss.root.position;
             fx.burst(bp, 0xff8844, 5);
@@ -959,6 +963,12 @@ function boot(): void {
           if (dead) {
             flow.kills += 1;
             sfx.kill();
+            if (addKillExp(runState, !!e.elite, e.level)) {
+              paused = true;
+              unlockMouse();
+              shell.hidePause();
+              shell.showLevelUp(runState.level, rollChoices(runState).map((b) => ({ id: b.id, name: b.name, desc: b.desc })));
+            }
             fovKick = Math.max(fovKick, 2.2);
             if (killStreak >= 3) hitStopT = 0.07; // 连杀瞬间顿一拍
             syncBossModel();
@@ -1151,6 +1161,8 @@ function boot(): void {
 
   /** 玩家受伤统一结算（护甲 + 护盾减伤 + 局内铁壁 + 荆棘反弹 + 受击无敌帧） */  let hurtInvuln = 0;
   const applyDamageToPlayer = (v: number): void => {
+    // 等级压制：怪物等级高于玩家时伤害放大
+    v *= suppressionTaken(runState.level - flow.monsterLevel);
     sfx.hurt();
     addShake(0.14, 0.32);
     if (hurtInvuln > 0) return; // 无敌帧：防多敌人同帧秒杀
@@ -1873,6 +1885,8 @@ function boot(): void {
           totalWaves: flow.mission.waves.length,
           tower: !!flow.mission.tower,
           missionName: flow.mission.name,
+          monsterLevel: flow.monsterLevel,
+          playerLevel: runState.level,
           skillLines: skillLinesFor(arsenal.current.def)
             .concat({
               key: '局',

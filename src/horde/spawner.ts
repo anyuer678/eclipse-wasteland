@@ -26,6 +26,8 @@ export interface WaveOptions {
   dmgMult?: number;
   /** 精英概率 0-1 */
   eliteChance?: number;
+  /** 怪物等级（等级压制 / 经验结算） */
+  level?: number;
 }
 
 export class Spawner {
@@ -52,7 +54,7 @@ export class Spawner {
       if (opts?.eliteChance && this.rng.range(0, 1) < opts.eliteChance) {
         elite = ELITE_AFFIXES[Math.floor(this.rng.range(0, ELITE_AFFIXES.length))].kind;
       }
-      const e = new Enemy(ENEMY_DEFS[kind], this.rng, { hpMult: opts?.hpMult, dmgMult: opts?.dmgMult, elite });
+      const e = new Enemy(ENEMY_DEFS[kind], this.rng, { hpMult: opts?.hpMult, dmgMult: opts?.dmgMult, elite, level: opts?.level });
       this.world.add(e.root);
       this.enemies.push(e);
     }

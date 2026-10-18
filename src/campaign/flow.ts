@@ -35,8 +35,14 @@ export class MissionFlow {
 
   onPhaseChange: (phase: FlowPhase, mission: MissionDef, wave: number, totalWaves: number) => void = () => {};
   onResult: (result: FlowResult) => void = () => {};
-  /** 难度系数（普通 1 / 困难 1.5 / 噩梦 2.2） */
+  /** 难度系数（轻松 0.7 / 普通 1 / 困难 1.5 / 噩梦 2.2） */
   difficulty = 1;
+  /** 当前怪物等级（波次/BOSS 刷新时更新，供等级压制结算） */
+  monsterLevel = 1;
+  /** 难度对应的怪物等级偏移 */
+  get levelOffset(): number {
+    return this.difficulty >= 2 ? 4 : this.difficulty >= 1.5 ? 2 : this.difficulty <= 0.8 ? -2 : 0;
+  }
 
   constructor(mission: MissionDef, spawner: Spawner, seed: number) {
     this.mission = mission;
@@ -96,7 +102,11 @@ export class MissionFlow {
           this.emitPhase();
         } else if (this.mission.boss) {
           this.phase = 'boss';
+          const bossLvl = Math.max(1, (this.mission.monsterLevel ?? 1) + this.waveIndex + this.levelOffset + 2);
           this.boss = new Boss(this.mission.boss, this.rng);
+          this.boss.monsterLevel = bossLvl;
+          this.boss.hp = Math.round(this.boss.hp * (1 + 0.32 * (bossLvl - 1)) * this.difficulty);
+          this.monsterLevel = bossLvl;
           this.emitPhase();
         } else {
           this.finishClear();
@@ -138,25 +148,36 @@ export class MissionFlow {
         berserkers: floor >= 6 ? Math.min(Math.floor(floor / 3), 6) : 0,
         casters: floor >= 3 ? Math.min(Math.floor(floor / 2), 5) : 0,
       };
-      const hpMult = (1 + (floor - 1) * 0.08) * this.difficulty;
-      const dmgMult = (1 + (floor - 1) * 0.06) * this.difficulty;
+      const lvl = (this.mission.monsterLevel ?? 1) + Math.floor(floor * 1.5) + this.levelOffset;
+      const hpMult = this.difficulty * (1 + 0.32 * (lvl - 1));
+      const dmgMult = this.difficulty * (1 + 0.2 * (lvl - 1));
       // 精英层（每 3 层）：精英概率翻倍
-      let eliteChance = Math.min(0.05 + floor * 0.02, 0.35);
-      if (floor % 3 === 0) eliteChance = Math.min(0.5, eliteChance * 2);
-      this.spawner.spawnWave(spec, { hpMult, dmgMult, eliteChance });
+      let eliteChance = Math.min(0.05 + floor * 0.02 + lvl * 0.004, 0.4);
+      if (floor % 3 === 0) eliteChance = Math.min(0.55, eliteChance * 2);
+      this.monsterLevel = Math.max(1, lvl);
+      this.spawner.spawnWave(spec, { hpMult, dmgMult, eliteChance, level: this.monsterLevel });
       return;
     }
+    const lvl = (this.mission.monsterLevel ?? 1) + this.waveIndex + this.levelOffset;
+    this.monsterLevel = Math.max(1, lvl);
     const spec = this.mission.waves[this.waveIndex];
-    this.spawner.spawnWave(spec as WaveSpec, { hpMult: this.difficulty, dmgMult: this.difficulty });
+    this.spawner.spawnWave(spec as WaveSpec, {
+      hpMult: this.difficulty * (1 + 0.32 * (lvl - 1)),
+      dmgMult: this.difficulty * (1 + 0.2 * (lvl - 1)),
+      eliteChance: Math.min(0.4, 0.04 + lvl * 0.005),
+      level: this.monsterLevel,
+    });
   }
 
-  /** 塔模式 BOSS 规格：随层数强化 */
+  /** 塔模式 BOSS 规格：随层数与怪物等级强化 */
   private towerBossSpec(): BossSpec {
     const floor = this.waveIndex + 1;
+    const lvl = Math.max(1, (this.mission.monsterLevel ?? 1) + Math.floor(floor * 1.5) + this.levelOffset + 2);
+    this.monsterLevel = lvl;
     return {
       id: 'tower-boss',
       name: `塔主·第${floor}层`,
-      hp: Math.round(600 * (1 + (floor - 5) * 0.25)),
+      hp: Math.round(600 * (1 + (floor - 5) * 0.25) * (1 + 0.32 * (lvl - 1)) * this.difficulty),
       color: 0x5a2bd9,
       skillInterval: Math.max(2, 3.2 - Math.floor(floor / 10) * 0.3),
     };

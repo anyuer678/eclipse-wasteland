@@ -118,9 +118,10 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
   const diffRow = el('div', 'ss-diff-row', '');
   diffRow.appendChild(el('span', '', '难度：'));
   const DIFFS: { d: number; label: string; hint: string }[] = [
-    { d: 1, label: '普通', hint: '敌人 ×1 · 奖励 ×1' },
-    { d: 1.5, label: '困难', hint: '敌人 ×1.5 · 奖励 ×1.8' },
-    { d: 2.2, label: '噩梦', hint: '敌人 ×2.2 · 奖励 ×3' },
+    { d: 0.7, label: '轻松', hint: '怪物等级 -2 · 敌人 ×0.7 · 奖励 ×0.8' },
+    { d: 1, label: '标准', hint: '怪物等级 ±0 · 敌人 ×1 · 奖励 ×1' },
+    { d: 1.5, label: '困难', hint: '怪物等级 +2 · 敌人 ×1.5 · 奖励 ×1.8' },
+    { d: 2.2, label: '噩梦', hint: '怪物等级 +4 · 敌人 ×2.2 · 奖励 ×3' },
   ];
   let curDiff = 1;
   const btns: HTMLElement[] = [];

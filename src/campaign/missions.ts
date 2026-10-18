@@ -10,6 +10,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'm1-facility',
     name: '废弃设施',
+    monsterLevel: 1,
     mapId: 'facility',
     introSeconds: 3,
     waves: [
@@ -27,6 +28,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'm2-quarry',
     name: '废弃矿场',
+    monsterLevel: 4,
     mapId: 'quarry',
     introSeconds: 3,
     waves: [
@@ -44,6 +46,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'm3-lab',
     name: '废弃实验室',
+    monsterLevel: 7,
     mapId: 'lab',
     introSeconds: 3,
     waves: [
@@ -62,6 +65,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'm4-volcano',
     name: '熔岩深渊',
+    monsterLevel: 10,
     mapId: 'volcano',
     introSeconds: 4,
     waves: [
@@ -79,6 +83,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'm5-ice',
     name: '冰霜要塞',
+    monsterLevel: 13,
     mapId: 'ice',
     introSeconds: 4,
     waves: [
@@ -96,6 +101,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'm6-cyber',
     name: '赛博都市',
+    monsterLevel: 16,
     mapId: 'lab',
     introSeconds: 4,
     waves: [
@@ -113,6 +119,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'tower',
     name: '试炼之塔',
+    monsterLevel: 19,
     mapId: 'facility',
     introSeconds: 3,
     waves: [{ chasers: 4, boomers: 0, spitters: 0 }],

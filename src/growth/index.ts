@@ -7,7 +7,7 @@ export { ACHIEVEMENTS, loadAchievements, addProgress, grantReward } from './achi
 export type { AchievementDef, AchievementState } from './achievements';
 export { baseStats, applyBuffs, applyBuff, tickBuffs, BUFF_DURATION, fourStats, powerScore } from './stats';
 export type { PlayerStats, BuffState, BuffKind } from './stats';
-export { newRun, expNeeded, addKillExp, rollChoices, applyChoice, runBonuses, BOOST_POOL } from './run';
+export { newRun, expNeeded, addKillExp, rollChoices, applyChoice, runBonuses, BOOST_POOL, suppressionDealt, suppressionTaken } from './run';
 export type { RunState, RunBoost, BoostId } from './run';
 export { genDailyTasks, todayKey, loadDaily, saveDaily, addDailyProgress, claimDaily } from './daily';
 export type { DailyTask, DailyKind, DailyState } from './daily';

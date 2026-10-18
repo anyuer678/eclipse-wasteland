@@ -21,6 +21,8 @@ export class Boss {
   alive = true;
   /** 距离玩家过近（近战判定） */
   readonly meleeRange = 3.2;
+  /** 怪物等级（经验结算 / 等级压制） */
+  monsterLevel = 1;
   /** 当前阶段（0=初始，1+=转阶段） */
   phase = 0;
   /** 元素抗性 */
