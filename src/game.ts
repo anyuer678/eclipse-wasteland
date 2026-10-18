@@ -18,6 +18,7 @@ import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
 import type { WeaponDef, FireContext } from './arsenal';
 import { Enemy, Spawner } from './horde';
+import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, addDailyProgress, claimDaily } from './growth';
 import { Arsenal } from './play/arsenal';
@@ -592,6 +593,8 @@ function boot(): void {
   let killStreakTimer = 0;
 
   /** 雷达小地图（上 1/3 之外的右上角，每 2 帧画一次） */
+  /** 敌人远程弹丸（真飞行物，可躲） */
+  const projectiles = new ProjectilePool(world.scene, fx);
   const radar = new Radar(148, 34);
   let radarFrame = 0;
 
@@ -656,6 +659,7 @@ function boot(): void {
     if (activeBoss) world.scene.remove(activeBoss.root);
     activeBoss = flow.activeBoss;
     bossPhaseSeen = -1;
+    projectiles.clear();
     if (activeBoss) world.scene.add(activeBoss.root);
     syncBossModel();
 
@@ -1593,17 +1597,14 @@ function boot(): void {
             shell.hud.hit();
           }
           if (evt.spit) {
-            tracer.fire(evt.spit.from, evt.spit.to, 0x3fb96a, 1.5);
-            applyDamageToPlayer(evt.spit.damage);
-            shell.hud.hit();
+            // 真弹丸：飞行时间可躲，命中后统一结算
+            projectiles.spawn(evt.spit.from, evt.spit.to, 0x3fb96a, 13, evt.spit.damage);
           }
           if (evt.cast) {
-            // 弹幕法师三连弹：紫色弹道 + 伤害
+            // 弹幕法师三连弹：紫色弹丸
             for (const c of evt.cast) {
-              tracer.fire(c.from, c.to, 0xcc88ff, 1.6);
-              applyDamageToPlayer(c.damage);
+              projectiles.spawn(c.from, c.to, 0xcc88ff, 11, c.damage);
             }
-            shell.hud.hit();
           }
         }
       }
@@ -1630,6 +1631,13 @@ function boot(): void {
           b.root.position.x += nx * push;
           b.root.position.z += nz * push;
         }
+      }
+
+      // 敌人弹丸推进与命中
+      const projDmg = projectiles.update(dt, player.position);
+      if (projDmg > 0) {
+        applyDamageToPlayer(projDmg);
+        shell.hud.hit();
       }
 
       // BOSS AI
