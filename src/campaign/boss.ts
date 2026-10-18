@@ -79,11 +79,42 @@ export class Boss {
       g.add(arm);
     }
 
+    // 技能预警圈（贴地红环，随 root 平移/转向，圆形不受朝向影响）
+    const ring = new THREE.RingGeometry(0.82, 1, 40);
+    ring.rotateX(-Math.PI / 2);
+    this.telegraph = new THREE.Mesh(
+      ring,
+      new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.3, depthWrite: false })
+    );
+    this.telegraph.position.y = 0.06;
+    this.telegraph.visible = false;
+    g.add(this.telegraph);
+
     g.userData.boss = this;
     return g;
   }
 
+  /** 显示预警圈 radius 秒（范围 = 技能半径） */
+  private showTelegraph(radius: number, duration: number): void {
+    if (!this.telegraph) return;
+    this.telegraph.scale.setScalar(radius);
+    this.telegraph.visible = true;
+    this.telegraphT = duration;
+  }
+
+  private tickTelegraph(dt: number): void {
+    if (!this.telegraph || this.telegraphT <= 0) return;
+    this.telegraphT -= dt;
+    const mat = this.telegraph.material as THREE.MeshBasicMaterial;
+    mat.opacity = 0.22 + 0.18 * Math.abs(Math.sin(this.telegraphT * 18));
+    if (this.telegraphT <= 0) this.telegraph.visible = false;
+  }
+
   /** 动画混合器（开源模型自带 Idle/Walk/Run，接上后 BOSS 不再像雕像） */
+  /** 技能预警圈：践踏/弹幕落点可读，玩家有时间走位 */
+  private telegraph: THREE.Mesh | null = null;
+  private telegraphT = 0;
+  private blastWindup = 0;
   private model: THREE.Group | null = null;
   /** 骨骼引用（挥臂动作用；Soldier 是 Mixamo 绑定） */
   private armR: THREE.Object3D | null = null;
@@ -191,6 +222,7 @@ export class Boss {
     this.root.lookAt(playerPos.x, this.root.position.y, playerPos.z);
     // 动画推进放最前面：蓄力/践踏这些早退分支也要继续播
     this.mixer?.update(dt);
+    this.tickTelegraph(dt);
     // 受击闪红 + 技能前摇姿态（叠加在骨骼动画之上）
     this.flash = Math.max(0, this.flash - dt * 6);
     const e = this.flash * 0.55;
@@ -212,6 +244,17 @@ export class Boss {
     toPlayer.y = 0;
     const dist = toPlayer.length();
     const dir = dist > 0.001 ? toPlayer.normalize() : new THREE.Vector3();
+
+    // 弹幕蓄力结束：结算范围伤害（蓄力期间定在原地）
+    if (this.blastWindup > 0) {
+      this.blastWindup -= dt;
+      if (this.blastWindup > 0) return null;
+      this.telegraphT = 0;
+      if (this.telegraph) this.telegraph.visible = false;
+      this.flashBoss(0xff0066);
+      if (dist < 8 + this.phase * 3) return { skill: 'aoe_blast', stompRadius: 8 + this.phase * 3 };
+      return null;
+    }
 
     // 冲锋中
     if (this.charging) {
@@ -282,12 +325,16 @@ export class Boss {
       if (pick === 'stomp') {
         this.stomping = true;
         this.stompTimer = 0.45;
+        this.showTelegraph(6 + this.phase * 2, 0.5);
         this.flashBoss(0xffaa00);
         return { skill: 'stomp', stompRadius: 6 + this.phase * 2 };
       }
       if (pick === 'aoe_blast') {
-        this.flashBoss(0xff0066);
-        return { skill: 'aoe_blast', stompRadius: 8 + this.phase * 3 };
+        this.blastWindup = 0.55;
+        this.showTelegraph(8 + this.phase * 3, 0.6);
+        this.pose = 1;
+        this.poseDir = -1; // 后仰蓄力
+        return null;
       }
       if (pick === 'summon_elite' && this.summonCooldown <= 0) {
         this.summonCooldown = 5;
