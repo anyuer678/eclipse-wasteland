@@ -779,6 +779,25 @@ function boot(): void {
   const hitScratch = new THREE.Vector3();
   const centerScratch = new THREE.Vector3();
 
+  /** 弹道被掩体遮挡时截断：沿射线采样，命中障碍即返回交点（敌人弹丸穿墙修复） */
+  const clipToObstacles = (from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3 => {
+    const obs = (mapRoot?.userData.obstacles ?? []) as { x: number; z: number; hw: number; hd: number; top: number }[];
+    if (obs.length === 0) return to;
+    const steps = 10;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const x = from.x + (to.x - from.x) * t;
+      const y = from.y + (to.y - from.y) * t;
+      const z = from.z + (to.z - from.z) * t;
+      for (const o of obs) {
+        if (y < o.top - 0.05 && Math.abs(x - o.x) < o.hw && Math.abs(z - o.z) < o.hd) {
+          return new THREE.Vector3(x, y, z);
+        }
+      }
+    }
+    return to;
+  };
+
   // 音频上下文要在用户手势后创建/恢复（浏览器自动播放策略）
   const unlockAudio = (): void => sfx.resume();
   window.addEventListener('pointerdown', unlockAudio);
@@ -1620,15 +1639,15 @@ function boot(): void {
             shell.hud.hit();
           }
           if (evt.spit) {
-            // 真弹丸：飞行时间可躲，命中后统一结算
+            // 真弹丸：飞行时间可躲，命中后统一结算；弹道被掩体截断
             sfx.spit();
-            projectiles.spawn(evt.spit.from, evt.spit.to, 0x3fb96a, 13, evt.spit.damage);
+            projectiles.spawn(evt.spit.from, clipToObstacles(evt.spit.from, evt.spit.to), 0x3fb96a, 13, evt.spit.damage);
           }
           if (evt.cast) {
             // 弹幕法师三连弹：紫色弹丸
             sfx.spit();
             for (const c of evt.cast) {
-              projectiles.spawn(c.from, c.to, 0xcc88ff, 11, c.damage);
+              projectiles.spawn(c.from, clipToObstacles(c.from, c.to), 0xcc88ff, 11, c.damage);
             }
           }
         }
