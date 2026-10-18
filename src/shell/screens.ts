@@ -142,19 +142,41 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
   }
   diffRow.appendChild(hintEl);
   screen.appendChild(diffRow);
-  const brief = el('div', 'ss-brief', '');
+  const brief = el('div', '', '');
+  brief.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;width:min(900px,94vw);';
   MISSIONS.forEach((m, i) => {
-    const row = el('div', 'ss-brief-row');
-    row.appendChild(el('div', 'ss-brief-num', String(i + 1).padStart(2, '0')));
-    const info = el('div', '', '');
-    info.appendChild(el('div', 'ss-brief-name', m.name + (m.tower ? '（无尽）' : '')));
-    info.appendChild(el('div', 'ss-brief-meta', m.tower
-      ? `无限层 · 每 5 层 BOSS · 敌人逐层强化 · 精英词缀`
-      : `波次 ${m.waves.length} · BOSS ${m.boss ? m.boss.name : '无'} · 奖励 ${m.rewards.material}×${m.rewards.amount}`));
-    row.appendChild(info);
-    row.appendChild(el('div', 'ss-brief-cta', m.tower ? '挑战' : '出击'));
-    row.addEventListener('click', () => cb.onStartMission(m.id));
-    brief.appendChild(row);
+    const baseLv = m.monsterLevel ?? 1;
+    const card = el('div', 'ss-grid-card', '');
+    card.style.cssText = 'padding:16px 18px;';
+    // 头部：编号 + 名称 + 等级徽章
+    const head = el('div', '', '');
+    head.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;';
+    head.appendChild(el('div', 'ss-grid-name', m.name + (m.tower ? '（无尽）' : '')));
+    const chip = el('span', 'lv-chip' + (i > 1 ? ' hot' : ''), `怪物 Lv.${baseLv}+`);
+    head.appendChild(chip);
+    card.appendChild(head);
+    // 信息行
+    const meta = el('div', '', '');
+    meta.style.cssText = 'font-size:11.5px;color:var(--ink-dim);line-height:1.8;font-family:var(--mono);';
+    meta.innerHTML = m.tower
+      ? `无限层 · 每 5 层 BOSS<br>敌人逐层强化 · 精英词缀`
+      : `波次 ${m.waves.length} · BOSS ${m.boss ? m.boss.name : '无'}<br>奖励 ${m.rewards.material}×${m.rewards.amount}`;
+    card.appendChild(meta);
+    // 推荐等级条
+    const progWrap = el('div', 'prog', '');
+    const progBar = el('div', '', '');
+    progBar.style.width = Math.min(100, baseLv * 4.5) + '%';
+    progWrap.appendChild(progBar);
+    card.appendChild(progWrap);
+    const rec = el('div', '', '');
+    rec.style.cssText = 'font-size:10.5px;color:var(--ink-faint);font-family:var(--mono);margin-bottom:12px;';
+    rec.textContent = `建议玩家等级 ${Math.max(1, baseLv - 1)}+`;
+    card.appendChild(rec);
+    // CTA
+    const cta = button('', m.tower ? '挑战无尽' : '出击任务', () => cb.onStartMission(m.id));
+    cta.style.cssText = 'min-width:0;width:100%;padding:8px 0;font-size:12px;';
+    card.appendChild(cta);
+    brief.appendChild(card);
   });
   screen.appendChild(brief);
   screen.appendChild(button('', '返回', () => cb.onBackToMenu()));
@@ -335,6 +357,7 @@ export function createForgeScreen(
       cb.onUpgrade();
       refresh();
     };
+    const upLevelCap = (): number => Math.max(g.level, Math.min(40, Math.ceil((g.level + 1) / 10) * 10));
     const upCost = (g.level + 1) * 2;
     const asCost = 5 + g.ascension * 5;
     const runeCost = 3 + g.rune * 2;
@@ -342,11 +365,18 @@ export function createForgeScreen(
     const piCostM = 6 + g.pinnacle * 3;
     const piCostG = 40 + g.pinnacle * 20;
 
-    const module = (title: string, value: string, btnHtml: HTMLElement): HTMLElement => {
+    /** 模块：标题行 + 进度条 + 效果 + 按钮（cur/cap 驱动进度条） */
+    const module = (title: string, cur: number, cap: number, value: string, btnHtml: HTMLElement): HTMLElement => {
       const m = el('div', 'fg-module', '');
       const t = el('div', 'fg-module-title', '');
       t.innerHTML = `<b>${title}</b><span>${value}</span>`;
       m.appendChild(t);
+      const pct = cap > 0 ? Math.min(100, (cur / cap) * 100) : 0;
+      const prog = el('div', 'prog' + (pct >= 100 ? ' full' : ''), '');
+      const bar = el('div', '', '');
+      bar.style.width = pct.toFixed(1) + '%';
+      prog.appendChild(bar);
+      m.appendChild(prog);
       m.appendChild(btnHtml);
       return m;
     };
@@ -365,7 +395,7 @@ export function createForgeScreen(
     const body = el('div', '', '');
     body.appendChild(module(
       '同步强化',
-      `Lv.${g.level} · 每级 +5% 伤害`,
+      g.level, upLevelCap(), `Lv.${g.level} · 每级 +5% 伤害`,
       btnRow([
         mk(`+1（合金×${upCost}）`, inventory.material('合金碎片') < upCost, () => run(() => tryUpgrade(d, inventory))),
         mk('+5', inventory.material('合金碎片') < upCost * 5, () => run(() => tryUpgradeN(d, inventory, 5))),
@@ -375,14 +405,14 @@ export function createForgeScreen(
     ));
     body.appendChild(module(
       '进阶',
-      `阶${g.ascension} / ${MAX_ASCENSION} · 机制强化 + 配件`,
+      g.ascension, MAX_ASCENSION, `阶${g.ascension} · 机制强化 + 配件`,
       btnRow([
         mk(`进阶（核心×${asCost}）`, inventory.material('核心晶体') < asCost || g.ascension >= MAX_ASCENSION, () => run(() => tryAscend(d, inventory))),
       ])
     ));
     body.appendChild(module(
       '符文',
-      `Lv.${g.rune} / ${MAX_RUNE} · 每级 +2% · 每 2 级解锁词缀`,
+      g.rune, MAX_RUNE, `Lv.${g.rune} · 每级 +2% · 每 2 级解锁词缀`,
       btnRow([
         mk(`+1（核心×${runeCost}）`, inventory.material('核心晶体') < runeCost || g.rune >= MAX_RUNE, () => run(() => tryRuneUpgrade(d, inventory))),
         mk('+5', g.rune >= MAX_RUNE, () => run(() => { for (let i = 0; i < 5; i++) if (!tryRuneUpgrade(d, inventory)) break; })),
@@ -390,7 +420,7 @@ export function createForgeScreen(
     ));
     body.appendChild(module(
       '附魔',
-      `Lv.${g.enchant} / ${MAX_ENCHANT} · 暴击 +${critPct}% · 攻速 +${spdPct}%`,
+      g.enchant, MAX_ENCHANT, `Lv.${g.enchant} · 暴击 +${critPct}% · 攻速 +${spdPct}%`,
       btnRow([
         mk(`+1（核心×${enCost}）`, inventory.material('核心晶体') < enCost || g.enchant >= MAX_ENCHANT, () => run(() => tryEnchant(d, inventory))),
         mk('+5', g.enchant >= MAX_ENCHANT, () => run(() => tryEnchantN(d, inventory, 5))),
@@ -399,7 +429,7 @@ export function createForgeScreen(
     ));
     body.appendChild(module(
       '巅峰突破',
-      `Lv.${g.pinnacle} / ${MAX_PINNACLE} · 伤害 +${Math.round(g.pinnacle * PINNACLE_DMG_STEP * 100)}% · 生命 +${hpBonus}`,
+      g.pinnacle, MAX_PINNACLE, `Lv.${g.pinnacle} · 伤害 +${Math.round(g.pinnacle * PINNACLE_DMG_STEP * 100)}% · 生命 +${hpBonus}`,
       btnRow([
         mk(`突破（合金×${piCostM} 金币×${piCostG}）`, inventory.material('合金碎片') < piCostM || inventory.gold < piCostG || g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacle(d, inventory))),
         mk('+5', g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacleN(d, inventory, 5))),
@@ -502,43 +532,53 @@ export function createTalentScreen(
   screen.appendChild(el('div', 'ss-title', '天赋'));
   screen.appendChild(el('div', 'ss-subtitle', '击杀与通关获取天赋点'));
   const card = el('div', 'ss-card', '');
-  card.style.minWidth = '520px';
+  card.style.cssText = 'width:min(720px,94vw);padding:20px 24px;';
   const pts = el('div', 'row', '');
   card.appendChild(pts);
-  const list = el('div', '', '');
-  card.appendChild(list);
+  const grid = el('div', '', '');
+  grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;';
+  card.appendChild(grid);
+  const tip = el('div', 'ss-tip', '');
+  tip.style.marginTop = '14px';
+  tip.textContent = '天赋点获取：每击杀 15 个敌人 +1 · 每通关一关 +2';
+  card.appendChild(tip);
   screen.appendChild(card);
   screen.appendChild(button('', '返回', () => cb.onBack()));
 
   const refresh = (): void => {
     pts.innerHTML = `<span>可用天赋点</span><b>${inventory.talentPoints}</b>`;
-    list.innerHTML = '';
+    grid.innerHTML = '';
     for (const node of TALENT_NODES) {
       const lvl = talentLevel(talentState, node.id);
-      const row = el('div', 'ss-brief-row');
-      row.style.gridTemplateColumns = '1fr auto';
-      const info = el('div', '', '');
-      info.appendChild(el('div', 'ss-brief-name', `${node.name} Lv.${lvl}/${node.maxLevel}`));
-      info.appendChild(el('div', 'ss-brief-meta', node.desc(lvl)));
-      row.appendChild(info);
-      const cta = el('div', 'ss-brief-cta', lvl >= node.maxLevel ? '已满' : '升级');
-      if (lvl < node.maxLevel) {
-        if (inventory.talentPoints <= 0) {
-          cta.style.color = 'var(--ink-faint)';
-          cta.style.borderColor = 'var(--line)';
-          cta.title = '天赋点不足（击杀 15 个敌人或通关获取）';
-        } else {
-          cta.addEventListener('click', () => {
-            cb.onUpgrade(node.id);
-            refresh();
-          });
-        }
-      } else {
-        cta.style.color = 'var(--ink-dim)';
-        cta.style.borderColor = 'var(--line)';
-      }
-      row.appendChild(cta);
-      list.appendChild(row);
+      const maxed = lvl >= node.maxLevel;
+      const cell = el('div', '', '');
+      cell.style.cssText =
+        'border:1px solid ' + (maxed ? 'var(--ok)' : 'var(--line)') + ';background:var(--panel-2);padding:14px 16px;';
+      // 头部：名称 + 等级徽章
+      const head = el('div', '', '');
+      head.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;';
+      head.appendChild(el('div', 'ss-brief-name', node.name));
+      const chip = el('span', 'lv-chip' + (maxed ? ' ' : ''), `Lv.${lvl}/${node.maxLevel}`);
+      head.appendChild(chip);
+      cell.appendChild(head);
+      // 效果
+      cell.appendChild(el('div', 'ss-brief-meta', node.desc(lvl)));
+      // 进度条
+      const prog = el('div', 'prog' + (maxed ? ' full' : ''), '');
+      const bar = el('div', '', '');
+      bar.style.width = (lvl / node.maxLevel) * 100 + '%';
+      prog.appendChild(bar);
+      cell.appendChild(prog);
+      // 升级按钮
+      const btn = button('', maxed ? '已满' : `升级（1 点）`, () => {
+        cb.onUpgrade(node.id);
+        refresh();
+      });
+      btn.style.cssText = 'min-width:0;width:100%;padding:7px 0;font-size:12px;margin-top:4px;';
+      btn.disabled = maxed || inventory.talentPoints <= 0;
+      if (inventory.talentPoints <= 0 && !maxed) btn.title = '天赋点不足（击杀 15 个敌人或通关获取）';
+      cell.appendChild(btn);
+      grid.appendChild(cell);
     }
   };
   return { screen, refresh };

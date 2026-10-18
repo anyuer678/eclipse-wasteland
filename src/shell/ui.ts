@@ -215,6 +215,16 @@ export const THEME = `
   .fg-btns { display: flex; gap: 8px; flex-wrap: wrap; }
   .fg-btns .ss-btn { min-width: 0; padding: 7px 14px; font-size: 12px; letter-spacing: 0.12em; }
 
+  /* ===== 进度条（强化/天赋等级可视化） ===== */
+  .prog { height: 6px; background: var(--line-soft); position: relative; margin: 7px 0 9px; }
+  .prog > div { height: 100%; background: linear-gradient(90deg, var(--indigo), var(--indigo-soft)); transition: width .18s ease; }
+  .prog.full > div { background: linear-gradient(90deg, var(--ok), #7fae8d); }
+  .lv-chip {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+    padding: 1px 8px; border: 1px solid var(--line); background: var(--panel-3); color: var(--ink-dim);
+  }
+  .lv-chip.hot { color: #fff; background: var(--cinnabar); border-color: var(--cinnabar); }
+
   /* 难度选择 */
   .ss-diff-row { display: flex; gap: 8px; justify-content: center; align-items: center; margin-bottom: 18px; font-size: 12px; color: var(--ink-dim); }
   .ss-diff-item {
