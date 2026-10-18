@@ -295,6 +295,8 @@ function boot(): void {
   };
 
   let activeBoss: import('./campaign').Boss | null = null;
+  /** 已记录的 BOSS 阶段（转阶段演出用；-1 = 尚未记录） */
+  let bossPhaseSeen = -1;
 
   const shell = new Shell(inventory, {
     onStartMission: (missionId) => {
@@ -622,6 +624,7 @@ function boot(): void {
   flow.onPhaseChange = (phase, _mission) => {
     if (activeBoss) world.scene.remove(activeBoss.root);
     activeBoss = flow.activeBoss;
+    bossPhaseSeen = -1;
     if (activeBoss) world.scene.add(activeBoss.root);
     syncBossModel();
 
@@ -1548,6 +1551,17 @@ function boot(): void {
 
       // BOSS AI
       if (activeBoss && activeBoss.alive) {
+        // 转阶段演出：吼叫 + 公告 + 冲击环（bossPhase<0 表示刚记录，不触发）
+        if (activeBoss.phase !== bossPhaseSeen) {
+          if (bossPhaseSeen >= 0) {
+            sfx.roar();
+            showAnnouncement('⚠ 狂暴化', '#ff4444', 1500);
+            fx.burst(activeBoss.root.position, 0xff4a22, 6);
+            activeBoss.centerInto(centerScratch);
+            fx.emit(centerScratch, 0xff5a22, 22, 6.5, 2);
+          }
+          bossPhaseSeen = activeBoss.phase;
+        }
         const bevt = activeBoss.update(dt, player.position);
         if (bevt) {
           if (bevt.melee !== undefined) {

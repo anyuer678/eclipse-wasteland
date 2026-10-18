@@ -190,32 +190,55 @@ export class Enemy {
 
     if (d.kind === 'spitter') {
       this.spitCooldown -= dt;
+      // 出手前摇：蓄力期间定住（前倾），给玩家躲弹道的窗口
+      if (this.spitWindup > 0) {
+        this.spitWindup -= dt;
+        if (this.spitWindup <= 0) {
+          if (dist <= d.range + 2) {
+            this.spitCooldown = 2.2;
+            const from = this.root.position.clone().add(new THREE.Vector3(0, 1.4, 0));
+            const to = playerPos.clone().add(new THREE.Vector3(0, 1.2, 0));
+            return { spit: { from, to, damage: d.damage } };
+          }
+          return null;
+        }
+        return null;
+      }
       if (dist <= d.range && this.spitCooldown <= 0) {
-        this.spitCooldown = 2.2;
+        this.spitWindup = 0.42;
         this.lunge();
-        const from = this.root.position.clone().add(new THREE.Vector3(0, 1.4, 0));
-        const to = playerPos.clone().add(new THREE.Vector3(0, 1.2, 0));
-        return dist <= d.range ? { spit: { from, to, damage: d.damage } } : null;
+        return null;
       }
       if (dist > 3) this.root.position.addScaledVector(dir, speed * 0.55 * dt);
     } else if (d.kind === 'caster') {
       // 弹幕法师：保持中距离，蓄力三连弹
       this.spitCooldown -= dt;
+      if (this.castWindup > 0) {
+        this.castWindup -= dt;
+        if (this.castWindup <= 0) {
+          if (dist <= d.range + 2) {
+            this.spitCooldown = 2.4;
+            this.lunge();
+            const from = this.root.position.clone().add(new THREE.Vector3(0, 1.6, 0));
+            const casts: { from: THREE.Vector3; to: THREE.Vector3; damage: number }[] = [];
+            for (let i = 0; i < 3; i++) {
+              const wobble = new THREE.Vector3((Math.random() - 0.5) * 2.2, (Math.random() - 0.5) * 1.4, 0);
+              casts.push({ from, to: playerPos.clone().add(new THREE.Vector3(0, 1.2, 0)).add(wobble), damage: d.damage });
+            }
+            return { cast: casts };
+          }
+          return null;
+        }
+        return null;
+      }
       if (dist < 5) {
         this.root.position.addScaledVector(dir, -speed * dt);
       } else if (dist > d.range - 2) {
         this.root.position.addScaledVector(dir, speed * dt);
       }
       if (dist <= d.range && this.spitCooldown <= 0) {
-        this.spitCooldown = 2.4;
+        this.castWindup = 0.5;
         this.lunge();
-        const from = this.root.position.clone().add(new THREE.Vector3(0, 1.6, 0));
-        const casts: { from: THREE.Vector3; to: THREE.Vector3; damage: number }[] = [];
-        for (let i = 0; i < 3; i++) {
-          const wobble = new THREE.Vector3((Math.random() - 0.5) * 2.2, (Math.random() - 0.5) * 1.4, 0);
-          casts.push({ from, to: playerPos.clone().add(new THREE.Vector3(0, 1.2, 0)).add(wobble), damage: d.damage });
-        }
-        return { cast: casts };
       }
     } else if (d.kind === 'boomer') {
       if (dist < 1.1) {
@@ -283,6 +306,9 @@ export class Enemy {
   private hitAnim = 0;
   /** 近战前摇剩余时间（>0 时定在原地蓄力） */
   private windup = 0;
+  /** 喷毒 / 施法前摇剩余时间 */
+  private spitWindup = 0;
+  private castWindup = 0;
   private lunge(): void {
     this.attackAnim = 1;
   }

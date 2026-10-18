@@ -30,6 +30,32 @@ export class Sfx {
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+    this.startAmbient();
+  }
+
+  /** 环境底噪：循环棕噪声过低通，音量极低（风声/荒原氛围） */
+  private ambient: { src: AudioBufferSourceNode } | null = null;
+  private startAmbient(): void {
+    if (!this.ctx || !this.master || this.ambient) return;
+    const len = Math.floor(this.ctx.sampleRate * 3);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    let acc = 0;
+    for (let i = 0; i < len; i++) {
+      acc = acc * 0.985 + (Math.random() * 2 - 1) * 0.05;
+      data[i] = Math.max(-1, Math.min(1, acc * 3));
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 340;
+    const g = this.ctx.createGain();
+    g.gain.value = 0.045;
+    src.connect(filter).connect(g).connect(this.master);
+    src.start();
+    this.ambient = { src };
   }
 
   setMuted(m: boolean): void {
