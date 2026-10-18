@@ -666,6 +666,16 @@ function boot(): void {
     activeBoss = flow.activeBoss;
     bossPhaseSeen = -1;
     projectiles.clear();
+    // 背景音乐按地图换情绪（火山低沉 / 冰原清冷）
+    const MOODS: Record<string, [number, number[]]> = {
+      facility: [55, [0, 3, 5, 7, 10]],
+      quarry: [49, [0, 3, 5, 7, 10]],
+      lab: [65.41, [0, 3, 5, 7, 10]],
+      volcano: [43.65, [0, 1, 5, 7, 8]],
+      ice: [82.41, [0, 2, 4, 7, 9]],
+    };
+    const mood = MOODS[flow.mission.mapId];
+    if (mood) sfx.setMood(mood[0], mood[1]);
     if (activeBoss) world.scene.add(activeBoss.root);
     syncBossModel();
 

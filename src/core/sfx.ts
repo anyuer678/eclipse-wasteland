@@ -38,6 +38,15 @@ export class Sfx {
   private musicOn = true;
   private musicTimer: number | null = null;
   private musicStep = 0;
+  /** 音阶情绪（由关卡设置）：根音频率 + 半音阶集合 */
+  private moodRoot = 55;
+  private moodScale = [0, 3, 5, 7, 10];
+
+  /** 按关卡切换音乐情绪（火山更低沉、冰原更清冷） */
+  setMood(root: number, scale: number[]): void {
+    this.moodRoot = root;
+    this.moodScale = scale;
+  }
 
   setMusic(on: boolean): void {
     this.musicOn = on;
@@ -59,17 +68,15 @@ export class Sfx {
     this.musicTimer = window.setInterval(step, 2400);
   }
 
-  /** 一小节：根音低音 + 纯五度 + 概率琶音（A 小调五声，缓慢压抑的荒原感） */
+  /** 一小节：根音低音 + 纯五度 + 概率琶音（音阶情绪由关卡决定） */
   private scheduleBar(): void {
-    const roots = [55, 43.65, 65.41, 49]; // A1 → F1 → C2 → G1
-    const root = roots[Math.floor(this.musicStep / 2) % roots.length];
+    const root = this.moodRoot * (this.musicStep % 4 === 3 ? 1.19 : 1); // 每 4 小节升一度制造走向
     this.musicStep += 1;
     this.tone('triangle', root, root * 0.995, 2.4, 0.075);
     this.tone('sine', root * 1.5, root * 1.5, 2.4, 0.038);
-    const scale = [0, 3, 5, 7, 10]; // 小调五声
     for (let i = 0; i < 3; i++) {
       if (Math.random() < 0.32) continue;
-      const f = root * 4 * Math.pow(2, scale[Math.floor(Math.random() * scale.length)] / 12);
+      const f = root * 4 * Math.pow(2, this.moodScale[Math.floor(Math.random() * this.moodScale.length)] / 12);
       this.tone('triangle', f, f * 0.995, 0.55, 0.03, i * 0.62 + Math.random() * 0.25);
     }
   }
