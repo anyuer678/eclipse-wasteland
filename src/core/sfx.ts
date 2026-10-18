@@ -21,7 +21,7 @@ export class Sfx {
       if (!AC) return;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = this.muted ? 0 : 0.5;
+      this.master.gain.value = this.muted ? 0 : this.volume;
       this.master.connect(this.ctx.destination);
       // 1s 白噪声缓冲（枪声/爆炸的原料）
       const len = this.ctx.sampleRate;
@@ -60,7 +60,14 @@ export class Sfx {
 
   setMuted(m: boolean): void {
     this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : 0.5;
+    if (this.master) this.master.gain.value = m ? 0 : this.volume;
+  }
+
+  /** 主音量 0..1（持久化在设置里） */
+  private volume = 0.5;
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.master && !this.muted) this.master.gain.value = this.volume;
   }
 
   private ok(key: string, minGapMs: number): boolean {

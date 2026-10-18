@@ -13,6 +13,7 @@ import { Fx } from './render/fx';
 import { createAssetLib } from './render/assets';
 import { Input } from './play/input';
 import { Radar } from './shell/radar';
+import { createSettingsPanel, loadSettings } from './shell/settings';
 import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
 import type { WeaponDef, FireContext } from './arsenal';
@@ -594,6 +595,19 @@ function boot(): void {
   const radar = new Radar(148, 34);
   let radarFrame = 0;
 
+  // 设置（O 键开关；音量/灵敏度/画质/雷达 即时生效并持久化）
+  const settings = loadSettings();
+  sfx.setVolume(settings.volume);
+  sfx.setMuted(settings.muted);
+  world.setQuality(settings.quality === 'auto' ? 'medium' : settings.quality, settings.quality === 'auto');
+  const settingsPanel = createSettingsPanel(settings, (s2) => {
+    sfx.setVolume(s2.volume);
+    sfx.setMuted(s2.muted);
+    world.setQuality(s2.quality === 'auto' ? 'medium' : s2.quality, s2.quality === 'auto');
+    radar.el.style.display = s2.radar ? 'block' : 'none';
+  });
+  radar.el.style.display = settings.radar ? 'block' : 'none';
+
   // 打击感：镜头微震 + FOV 冲击
   let shakeT = 0;
   let shakeDur = 0.001;
@@ -1003,6 +1017,7 @@ function boot(): void {
     slotNum: -1,
     cycleQ: false,
     melee: false,
+    settings: false,
     bag: false,
     dash: false,
     shield: false,
@@ -1258,8 +1273,9 @@ function boot(): void {
     onFixed: (dt, time) => {
       const snap = input.snapshot();
 
-      // 暂停态（死亡/通关/主动暂停）：冻结玩家与战斗逻辑
-      if (paused) {
+      // 暂停态（死亡/通关/主动暂停/设置面板）：冻结玩家与战斗逻辑
+      // （直接读面板可见性，关面板的两种方式都能正确恢复）
+      if (paused || settingsPanel.visible()) {
         if (escPaused && snap.key('Escape') && !keyState.esc) {
           escPaused = false;
           paused = false;
@@ -1274,7 +1290,7 @@ function boot(): void {
       }
 
       const d = input.consumeMouseDelta();
-      player.look(d.dx, d.dy);
+      player.look(d.dx, d.dy, 0.12 * settings.sens);
       player.update(snap, dt);
 
       const eye = player.eyeInto(eyeScratch);
@@ -1328,6 +1344,13 @@ function boot(): void {
         viewmodel?.kickNow(0.6);
       } else {
         arsenal.current.releaseFire(fireCtx);
+      }
+      // O = 设置面板
+      if (snap.key('KeyO') && !keyState.settings) {
+        settingsPanel.toggle();
+        keyState.settings = true;
+      } else if (!snap.key('KeyO')) {
+        keyState.settings = false;
       }
       // 右键 = 近战攻击
       if (snap.altFire && !keyState.melee) {
