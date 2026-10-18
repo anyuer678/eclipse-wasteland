@@ -650,8 +650,8 @@ export class World {
     root.userData.heightfield = heightfield;
 
     // ---------- 地形网格 ----------
-    const SEG = 96;
-    const SIZE = 130;
+    const SEG = 128;
+    const SIZE = 176;
     const groundGeo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
     groundGeo.rotateX(-Math.PI / 2);
     const pos = groundGeo.attributes.position as THREE.BufferAttribute;
@@ -659,25 +659,34 @@ export class World {
       pos.setY(i, heightfield(pos.getX(i), pos.getZ(i)));
     }
     groundGeo.computeVertexNormals();
-    // 顶点色：坡度 → 岩石；低洼 → 暗土；高度 → 高处偏冷
+    // 顶点色：坡度分三段（草 → 泥土 → 岩石），叠加大尺度噪声打破色块
     const colors = new Float32Array(pos.count * 3);
     const nrm = groundGeo.attributes.normal as THREE.BufferAttribute;
     const cGrass = new THREE.Color(pal.ground);
-    const cDark = new THREE.Color(pal.groundDark);
+    const cDirt = new THREE.Color(mixHex(pal.groundDark, pal.rock, 0.45));
     const cRock = new THREE.Color(pal.rock);
     const tmpC = new THREE.Color();
-    const nz = new THREE.Vector3();
+    const smooth01 = (t: number): number => {
+      const k = Math.min(1, Math.max(0, t));
+      return k * k * (3 - 2 * k);
+    };
     for (let i = 0; i < pos.count; i++) {
-      nz.set(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
-      const slope = 1 - nz.y; // 0=平地 1=陡壁
+      const slope = 1 - nrm.getY(i); // 0=平地 1=陡壁
       const hh = pos.getY(i);
-      tmpC.copy(cGrass).lerp(cDark, Math.min(1, Math.max(0, (1.2 - hh) * 0.42)));
-      tmpC.lerp(cRock, Math.min(1, Math.max(0, (slope - 0.14) * 3.1)));
-      // 大尺度噪声，避免大片纯色
-      const n = Math.sin(pos.getX(i) * 0.31) * Math.cos(pos.getZ(i) * 0.27) * 0.06;
-      colors[i * 3] = tmpC.r + n;
-      colors[i * 3 + 1] = tmpC.g + n;
-      colors[i * 3 + 2] = tmpC.b + n;
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      // 低洼处偏暗土、陡坡偏岩石；两段都用 smoothstep 过渡避免出现硬边
+      const dirtK = smooth01((slope - 0.06) / 0.20) * 0.7 + smooth01((1.1 - hh) / 1.6) * 0.22;
+      // 陡坡 + 高处都露岩（荒原的坡面不该还是一整片草绿）
+      const rockK = Math.min(1, smooth01((slope - 0.16) / 0.26) + smooth01((hh - 4) / 12) * 0.55);
+      tmpC.copy(cGrass).lerp(cDirt, Math.min(1, dirtK)).lerp(cRock, rockK);
+      // 大尺度色斑 + 细碎噪声（打散大面积同色）
+      const macro = Math.sin(x * 0.21 + z * 0.13) * Math.cos(z * 0.19 - x * 0.07) * 0.05;
+      const micro = (Math.sin(x * 1.7) * Math.cos(z * 1.5)) * 0.022;
+      const n = macro + micro;
+      colors[i * 3] = Math.max(0, tmpC.r + n);
+      colors[i * 3 + 1] = Math.max(0, tmpC.g + n);
+      colors[i * 3 + 2] = Math.max(0, tmpC.b + n);
     }
     groundGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     const detail = terrainDetailTexture();
@@ -705,19 +714,34 @@ export class World {
     const matDark = solid(mixHex(pal.groundDark, 0x000000, 0.25), { roughness: 0.95 });
     matDark.map = propTex;
     const glowMat = new THREE.MeshBasicMaterial({ color: pal.accent, fog: false });
+    const matTop = solid(mixHex(pal.rock, 0xffffff, 0.22), { roughness: 0.88 });
+    matTop.map = propTex;
 
     const bag = new Merger();
+
+    // ---------- 碰撞体（玩家/敌人共用，杜绝穿模） ----------
+    const obstacles: { x: number; z: number; hw: number; hd: number; top: number }[] = [];
+    const addObstacle = (x: number, z: number, w: number, d: number, top: number): void => {
+      obstacles.push({ x, z, hw: w / 2, hd: d / 2, top });
+    };
 
     // ---------- 布局辅助（写进合并桶，不产生独立 Mesh） ----------
     const addBox = (w: number, h: number, d: number, x: number, z: number, m: THREE.Material, rotY = 0): void => {
       const baseY = heightfield(x, z);
       bag.box(w, h, d, x, baseY + h / 2, z, m, rotY);
+      // 矮墙/集装箱都参与碰撞（旋转过的按外接矩形近似）
+      const c = Math.abs(Math.cos(rotY));
+      const s = Math.abs(Math.sin(rotY));
+      addObstacle(x, z, c * w + s * d, s * w + c * d, baseY + h);
     };
     const addPlatform = (x: number, z: number, w: number, d: number, h: number): void => {
       platforms.push({ x, z, w, d, h });
       const baseY = heightfield(x, z);
-      bag.box(w, h, d, x, baseY + h / 2, z, matStone);
-      bag.box(w * 0.98, 0.1, d * 0.98, x, baseY + h + 0.02, z, matDark);
+      // 埋入地下 0.9m，避免与起伏地形之间出现缝隙
+      bag.box(w, h + 0.9, d, x, baseY + h / 2 - 0.45, z, matStone);
+      // 顶部甲板（略内缩、略亮，读起来是"平台"而不是"洞"）
+      bag.box(w - 0.12, 0.06, d - 0.12, x, baseY + h + 0.03, z, matTop);
+      addObstacle(x, z, w, d, baseY + h + 0.06);
     };
     const addRamp = (x: number, z: number, w: number, d: number, h0: number, h1: number, along: 'x' | 'z'): void => {
       ramps.push({ x, z, w, d, h0, h1, along });
@@ -733,7 +757,7 @@ export class World {
         ),
         new THREE.Vector3(1, 1, 1)
       );
-      bag.add(new THREE.BoxGeometry(wid, 0.22, len), matStone, m);
+      bag.add(new THREE.BoxGeometry(wid, 0.3, len), matStone, m);
     };
     /** 可破坏箱单独建 Mesh（击碎时要隐藏），共享几何与材质 */
     const crateGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -786,9 +810,16 @@ export class World {
         const baseY = heightfield(hx, hz);
         bag.box(3.2, 2.3, 2.8, hx, baseY + 1.15, hz, matWood, 0.2);
         bag.shape(new THREE.ConeGeometry(2.7, 1.4, 4), matDark, hx, baseY + 3.0, hz, 0, Math.PI / 4, 0);
+        addObstacle(hx, hz, 3.4, 3.0, baseY + 2.3);
       }
-      // 中央光柱
-      bag.cyl(0.05, 0.05, 4.4, 6, 0, heightfield(0, 0) + 2.2, 0, glowMat);
+      // 中央地面标识环（替代原来那根 4cm 的"绿棍子"光柱）
+      const mark = new THREE.Mesh(
+        new THREE.RingGeometry(1.5, 1.72, 40),
+        new THREE.MeshBasicMaterial({ color: pal.accent, transparent: true, opacity: 0.34, depthWrite: false })
+      );
+      mark.rotation.x = -Math.PI / 2;
+      mark.position.set(0, heightfield(0, 0) + 0.04, 0);
+      root.add(mark);
     } else if (mapId === 'quarry') {
       // 岩壁弧墙（合并成几段低多边形岩壁）
       for (let i = 0; i < 12; i++) {
@@ -844,10 +875,16 @@ export class World {
         addBox(0.95, 0.85, 0.95, x, z, matWood);
         bag.shape(new THREE.SphereGeometry(0.07, 6, 5), glowMat, x, heightfield(x, z) + 0.98, z);
       }
+      // 中央培养舱：底座 + 金属环 + 玻璃柱 + 顶部封盖 + 内部核心
       const podBase = heightfield(0, 0);
-      bag.cyl(0.92, 1.02, 2.4, 14, 0, podBase + 1.2, 0, matMetal);
-      bag.cyl(0.52, 0.52, 1.8, 12, 0, podBase + 1.3, 0, glowMat);
-      bag.shape(new THREE.SphereGeometry(0.34, 10, 8), glowMat, 0, podBase + 1.65, 0);
+      bag.cyl(1.12, 1.2, 0.28, 16, 0, podBase + 0.14, 0, matStone);
+      bag.cyl(0.86, 0.92, 0.22, 16, 0, podBase + 0.36, 0, matMetal);
+      bag.cyl(0.7, 0.7, 2.0, 16, 0, podBase + 1.46, 0, matMetal);
+      bag.cyl(0.72, 0.72, 0.12, 16, 0, podBase + 1.3, 0, matDark);
+      bag.cyl(0.72, 0.72, 0.12, 16, 0, podBase + 2.0, 0, matDark);
+      bag.cyl(0.86, 0.78, 0.24, 16, 0, podBase + 2.56, 0, matMetal);
+      bag.shape(new THREE.SphereGeometry(0.42, 12, 10), glowMat, 0, podBase + 1.62, 0);
+      addObstacle(0, 0, 2.2, 2.2, podBase + 2.7);
 
       addPlatform(-7, -6, 2.4, 2.4, 0.9);
       addPlatform(7, -6, 2.4, 2.4, 0.9);
@@ -933,6 +970,7 @@ export class World {
     bag.build(root, true, true);
     root.add(crateGroup);
 
+    root.userData.obstacles = obstacles;
     root.userData.platforms = platforms;
     root.userData.ramps = ramps;
     root.userData.crates = crates;
@@ -951,7 +989,8 @@ export class World {
   addInstancedProps(
     parent: THREE.Object3D,
     source: THREE.Object3D,
-    placements: { x: number; y: number; z: number; scale: number; rotY: number }[]
+    placements: { x: number; y: number; z: number; scale: number; rotY: number }[],
+    tint?: number
   ): void {
     if (placements.length === 0) return;
     source.updateMatrixWorld(true);
@@ -960,15 +999,29 @@ export class World {
       const m = o as THREE.Mesh;
       if (m.isMesh) meshes.push(m);
     });
+    // 模型原点未必在底部：取包围盒最低点做落地偏移，否则装饰会悬空
+    const srcBox = new THREE.Box3().setFromObject(source);
+    const baseMinY = Number.isFinite(srcBox.min.y) ? srcBox.min.y : 0;
+    // 开源素材配色偏艳：按地图调色板往灰绿方向压一档，避免"荧光树"
+    const tintColor = tint === undefined ? null : new THREE.Color(tint);
     for (const mesh of meshes) {
-      const inst = new THREE.InstancedMesh(mesh.geometry, mesh.material as THREE.Material, placements.length);
+      let mat = mesh.material as THREE.Material;
+      if (tintColor) {
+        const src = mat as THREE.MeshStandardMaterial;
+        const cloned = src.clone();
+        if (cloned.color) cloned.color.lerp(tintColor, 0.78);
+        cloned.roughness = 1;
+        cloned.metalness = 0;
+        mat = cloned;
+      }
+      const inst = new THREE.InstancedMesh(mesh.geometry, mat, placements.length);
       const local = new THREE.Matrix4().copy(mesh.matrixWorld);
       const m = new THREE.Matrix4();
       const q = new THREE.Quaternion();
       for (let i = 0; i < placements.length; i++) {
         const p = placements[i];
         q.setFromAxisAngle(UP, p.rotY);
-        m.compose(new THREE.Vector3(p.x, p.y, p.z), q, new THREE.Vector3(p.scale, p.scale, p.scale));
+        m.compose(new THREE.Vector3(p.x, p.y - baseMinY * p.scale, p.z), q, new THREE.Vector3(p.scale, p.scale, p.scale));
         m.multiply(local);
         inst.setMatrixAt(i, m);
       }
@@ -981,38 +1034,60 @@ export class World {
   }
 }
 
-/** 自然地形高度场：丘陵 + 缓坡 + 外圈环形山（挡住天际线、收束视野） */
+/**
+ * 自然地形高度场（三层结构）：
+ *   1) 场内沙丘：±0.6m 缓慢起伏，让战斗区不再是一块白板；
+ *   2) 中景丘陵：r 14~36 的缓坡丘陵（2~6m），形成层次；
+ *   3) 外圈山脊：r 36~64 抬升 10~26m，山脊线随方位角起伏（不是一圈等高的墙）。
+ * 出生点与主斜坡（z≈-7）附近额外压平，保证走位与掩体贴合。
+ */
 function makeHeightfield(seed: number): (x: number, z: number) => number {
   const rnd = mulberry32(seed);
-  const hills = Array.from({ length: 9 }, () => ({
-    x: (rnd() - 0.5) * 56,
-    z: (rnd() - 0.5) * 56,
-    r: 8 + rnd() * 11,
-    h: 1.1 + rnd() * 1.6,
-  }));
-  const ridgePhase = rnd() * Math.PI * 2;
+  const dunes = { f1: 0.21 + rnd() * 0.08, f2: 0.13 + rnd() * 0.05, p: rnd() * Math.PI * 2 };
+  // 中景丘陵：分布在场地外圈，避免压住竞技场
+  const hills = Array.from({ length: 10 }, () => {
+    const a = rnd() * Math.PI * 2;
+    const d = 16 + rnd() * 20;
+    return { x: Math.cos(a) * d, z: Math.sin(a) * d, r: 7 + rnd() * 8, h: 1.6 + rnd() * 4.2 };
+  });
+  const p1 = rnd() * Math.PI * 2;
+  const p2 = rnd() * Math.PI * 2;
+  const smooth = (a: number, b: number, t: number): number => {
+    const k = Math.min(1, Math.max(0, (t - a) / (b - a)));
+    return k * k * (3 - 2 * k);
+  };
   return (x: number, z: number): number => {
-    let h = 0;
+    const r = Math.hypot(x, z);
+    // 1) 场内沙丘（范围内 100%，r>16 淡出）
+    const arenaMask = 1 - smooth(10, 17, r);
+    const dune =
+      (Math.sin(x * dunes.f1 + dunes.p) * Math.cos(z * dunes.f2) * 0.44 +
+        Math.sin((x + z) * 0.095 + dunes.p) * 0.2 +
+        Math.sin(x * 0.47) * Math.cos(z * 0.41) * 0.07) *
+      arenaMask;
+    let h = dune;
+    // 2) 中景丘陵
     for (const hill of hills) {
       const dx = x - hill.x;
       const dz = z - hill.z;
       const d2 = dx * dx + dz * dz;
       const r2 = hill.r * hill.r;
-      if (d2 < r2) h += hill.h * (1 - Math.sqrt(d2) / hill.r) * 0.85;
+      if (d2 < r2) h += hill.h * (1 - Math.sqrt(d2) / hill.r) * 0.9;
     }
-    // 缓坡起伏
-    h += Math.sin(x * 0.1) * Math.cos(z * 0.085) * 0.62;
-    // 竞技场地面压平：r<12 完全水平（保证掩体/平台贴合、视野与命中手感稳定），
-    // r 12→22 平滑过渡到丘陵，形成「盆地里打仗、四周丘陵环抱」的地形结构
-    const r = Math.hypot(x, z);
-    const k = Math.min(1, Math.max(0, (r - 12) / 10));
-    h *= k * k * (3 - 2 * k);
-    // 外圈环形山：r>32 起坡，r>52 收平，形成天然屏障
-    const edge = Math.min(1, Math.max(0, (r - 32) / 18));
-    const eased = edge * edge * (3 - 2 * edge);
-    const shape = 1 - Math.max(0, Math.min(1, (r - 54) / 14));
-    h += eased * shape * (7 + 5 * Math.sin(r * 0.22 + ridgePhase) + 3 * Math.sin(x * 0.14) * Math.cos(z * 0.12));
-    // 场地内保持可战斗的平缓（r<26 时压制过高的丘陵）
+    // 2.5) 侵蚀细节：只在场地外叠加（场内保持可走，不破坏掩体贴合）
+    const rough = smooth(13, 26, r);
+    h += (Math.sin(x * 0.87 + z * 0.61) * Math.cos(x * 0.53 - z * 0.79) * 0.42 +
+      Math.sin(x * 1.9 - z * 1.5) * 0.12) * rough;
+    // 3) 外圈山脊：山脊线随方位角起伏 + 内外侧都平滑收口
+    const ang = Math.atan2(z, x);
+    const ridge = 9 + 6 * Math.sin(ang * 2.7 + p1) + 4.5 * Math.sin(ang * 5.3 + p2) + 2.5 * Math.sin(ang * 11 + p1 * 2);
+    const rise = smooth(34, 50, r);
+    const fall = 1 - smooth(62, 82, r);
+    h += Math.max(0, ridge) * rise * fall;
+    // 出生点 + 主斜坡走廊压平（避免掩体/斜坡与地面出现缝隙）
+    const spawnFlat = Math.exp(-(x * x + (z - 6) * (z - 6)) / 34);
+    const rampFlat = Math.exp(-(x * x * 1.2 + (z + 7) * (z + 7)) / 26);
+    h *= 1 - 0.85 * Math.max(spawnFlat, rampFlat);
     return Math.max(0, h);
   };
 }

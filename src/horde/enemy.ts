@@ -186,6 +186,7 @@ export class Enemy {
       this.spitCooldown -= dt;
       if (dist <= d.range && this.spitCooldown <= 0) {
         this.spitCooldown = 2.2;
+        this.lunge();
         const from = this.root.position.clone().add(new THREE.Vector3(0, 1.4, 0));
         const to = playerPos.clone().add(new THREE.Vector3(0, 1.2, 0));
         return dist <= d.range ? { spit: { from, to, damage: d.damage } } : null;
@@ -201,6 +202,7 @@ export class Enemy {
       }
       if (dist <= d.range && this.spitCooldown <= 0) {
         this.spitCooldown = 2.4;
+        this.lunge();
         const from = this.root.position.clone().add(new THREE.Vector3(0, 1.6, 0));
         const casts: { from: THREE.Vector3; to: THREE.Vector3; damage: number }[] = [];
         for (let i = 0; i < 3; i++) {
@@ -211,7 +213,10 @@ export class Enemy {
       }
     } else if (d.kind === 'boomer') {
       if (dist < 1.1) {
-        if (this.fuseTimer < 0) this.fuseTimer = 0.7;
+        if (this.fuseTimer < 0) {
+          this.fuseTimer = 0.7;
+          this.lunge();
+        }
       }
       if (this.fuseTimer >= 0) {
         this.fuseTimer -= dt;
@@ -227,6 +232,7 @@ export class Enemy {
       if (dist < 1.0) {
         if (this.attackCooldown <= 0) {
           this.attackCooldown = 0.9;
+          this.lunge();
           return { melee: d.damage };
         }
       } else {
@@ -240,11 +246,25 @@ export class Enemy {
   /** 走路律动：上下起伏 + 前后摆动（单网格也能读出“在跑”） */
   private animate(dt: number, dist: number): void {
     const moving = dist > 1.15;
-    this.phase += dt * (moving ? 9.5 : 2.2);
-    const amp = moving ? 0.045 : 0.012;
-    this.body.position.y = Math.abs(Math.sin(this.phase)) * amp;
-    this.body.rotation.z = Math.sin(this.phase * 0.5) * (moving ? 0.07 : 0.02);
-    this.body.rotation.x = moving ? 0.06 + Math.sin(this.phase) * 0.03 : 0;
+    this.phase += dt * (moving ? 11 : 2.4);
+    // 四肢摆动由着色器完成（enemyModel 的 ANIM_BODY），这里只喂相位/移动强度/出手前倾
+    const anim = this.bodyMat.userData.anim as Record<string, { value: number }> | undefined;
+    if (anim) {
+      anim.uPhase.value = this.phase;
+      const target = moving ? 1 : 0.1;
+      anim.uMove.value += (target - anim.uMove.value) * Math.min(1, dt * 9);
+      this.attackAnim = Math.max(0, this.attackAnim - dt * 3.0);
+      anim.uAttack.value = this.attackAnim;
+    }
+    // 整体落脚起伏
+    this.body.position.y = moving ? Math.abs(Math.sin(this.phase)) * 0.035 : Math.sin(this.phase * 0.5) * 0.008;
+    this.body.rotation.z = Math.sin(this.phase * 0.5) * (moving ? 0.05 : 0.015);
+  }
+
+  /** 攻击前倾强度（近战/喷吐时置 1，随后衰减） */
+  private attackAnim = 0;
+  private lunge(): void {
+    this.attackAnim = 1;
   }
 
   /** 按元素类型受伤，返回是否死亡 */

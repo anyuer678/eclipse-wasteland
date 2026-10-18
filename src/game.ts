@@ -146,20 +146,19 @@ function boot(): void {
       }
       return h;
     },
-    // 障碍碰撞：平台侧壁推回（玩家/敌人不能穿入平台内部）
+    // 障碍碰撞：按地图碰撞体把角色沿最小穿透方向推回（玩家与敌人共用，杜绝穿模）
     collide: (p) => {
-      const plats = (mapRoot?.userData.platforms ?? []) as { x: number; z: number; w: number; d: number; h: number }[];
-      for (const plat of plats) {
-        if (Math.abs(p.x - plat.x) <= plat.w / 2 && Math.abs(p.z - plat.z) <= plat.d / 2) {
-          if (p.y < plat.h) {
-            const dx = p.x - plat.x;
-            const dz = p.z - plat.z;
-            const ox = plat.w / 2 - Math.abs(dx);
-            const oz = plat.d / 2 - Math.abs(dz);
-            if (ox < oz) p.x = plat.x + (dx >= 0 ? 1 : -1) * plat.w / 2;
-            else p.z = plat.z + (dz >= 0 ? 1 : -1) * plat.d / 2;
-          }
-        }
+      const obs = (mapRoot?.userData.obstacles ?? []) as { x: number; z: number; hw: number; hd: number; top: number }[];
+      const R = 0.34;
+      for (const o of obs) {
+        if (p.y >= o.top - 0.06) continue; // 已站上顶部（平台/集装箱）
+        const dx = p.x - o.x;
+        const dz = p.z - o.z;
+        const ox = o.hw + R - Math.abs(dx);
+        const oz = o.hd + R - Math.abs(dz);
+        if (ox <= 0 || oz <= 0) continue;
+        if (ox < oz) p.x = o.x + (dx >= 0 ? 1 : -1) * (o.hw + R);
+        else p.z = o.z + (dz >= 0 ? 1 : -1) * (o.hd + R);
       }
     },
   });
@@ -173,7 +172,7 @@ function boot(): void {
   const mountViewmodel = (): void => {
     if (viewmodel) world.camera.remove(viewmodel.group);
     const w = arsenal.current;
-    viewmodel = new Viewmodel(w.def.archetype, w.def.color, (name, cb) => assets.load(name, cb));
+    viewmodel = new Viewmodel(w.def.archetype, w.def.color);
     world.camera.add(viewmodel.group);
   };
 
@@ -499,24 +498,31 @@ function boot(): void {
   /** 按地图类型放置的环境模型清单 */
   const ENV_MODELS: Record<string, { name: string; count: number; scale: [number, number]; y: number }[]> = {
     facility: [
-      { name: 'env/env_bush', count: 8, scale: [1.8, 3.2], y: 0 },
-      { name: 'env/env_log', count: 4, scale: [1.8, 3.2], y: 0.25 },
-      { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
-      { name: 'env/env_bush', count: 14, scale: [0.5, 0.9], y: 0.05 }, // 地表草丛
+      { name: 'env/env_rockSmall', count: 7, scale: [1.6, 3], y: 0 },
+      { name: 'env/env_log', count: 5, scale: [1.8, 3], y: 0.25 },
+      { name: 'env/env_bush', count: 9, scale: [0.35, 0.62], y: 0.02 }, // 地表草丛（小、不抢眼）
     ],
     quarry: [
       { name: 'env/env_rockA', count: 7, scale: [2.2, 4.2], y: 0 },
       { name: 'env/env_rockB', count: 6, scale: [2.2, 4.2], y: 0 },
       { name: 'env/env_rockTall', count: 4, scale: [2.2, 3.6], y: 0 },
       { name: 'env/env_log', count: 3, scale: [1.8, 3.2], y: 0.25 },
-      { name: 'env/env_bush', count: 12, scale: [0.5, 0.9], y: 0.05 },
+      { name: 'env/env_bush', count: 9, scale: [0.35, 0.6], y: 0.02 },
     ],
     lab: [
-      { name: 'env/env_treePine', count: 7, scale: [2.5, 4.2], y: 0 },
-      { name: 'env/env_treeDefault', count: 5, scale: [2.5, 4.2], y: 0 },
+      { name: 'env/env_treePine', count: 6, scale: [2.0, 3.2], y: 0 },
+      { name: 'env/env_treeDefault', count: 5, scale: [1.9, 2.9], y: 0 },
       { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
-      { name: 'env/env_bush', count: 14, scale: [0.5, 0.9], y: 0.05 },
+      { name: 'env/env_bush', count: 10, scale: [0.35, 0.6], y: 0.02 },
     ],
+  };
+  /** 开源环境素材的地图化配色（压掉 Kenney 原色的荧光感） */
+  const ENV_TINT: Record<string, number> = {
+    facility: 0x5f7a45,
+    quarry: 0x7a6a48,
+    lab: 0x4d7a5c,
+    volcano: 0x5a3a2a,
+    ice: 0x6d8296,
   };
   let envRoot: THREE.Group | null = null;
   const mountEnv = (): void => {
@@ -535,24 +541,26 @@ function boot(): void {
         // 关卡可能已切换：只在当前 envRoot 仍是本次挂载目标时落地
         if (envRoot !== group) return;
         const placements: { x: number; y: number; z: number; scale: number; rotY: number }[] = [];
+        // 大件（树木/巨石）只放场地外圈，避免插进掩体与平台；小草丛可以留在场内
+        const big = spec.scale[1] > 1.6;
         for (let i = 0; i < spec.count; i++) {
           const a = Math.random() * Math.PI * 2;
-          // 部分靠近中心（出生点可见），部分外围
-          const d = i % 2 === 0 ? 4 + Math.random() * 6 : 9 + Math.random() * 13;
+          const d = big ? 15 + Math.random() * 14 : 3.5 + Math.random() * 12;
           const x = Math.cos(a) * d;
           const z = Math.sin(a) * d;
           if (nearSpawn(x, z)) continue; // 出生点附近留白，避免开局被灌木/石头糊脸
+          if (big && Math.hypot(x, z) < 14) continue;
           placements.push({
             x,
             // 贴合地形高度（旧实现固定 y=0，坡地上的装饰会浮空）
             y: hf(x, z) + spec.y,
             z,
-            scale: spec.scale[0] + Math.random() * (spec.scale[1] - spec.scale[0]),
+            scale: (spec.scale[0] + Math.random() * (spec.scale[1] - spec.scale[0])) * (big ? 0.8 : 1),
             rotY: Math.random() * Math.PI * 2,
           });
         }
         // 实例化：每个模型只占 1 个 draw call（旧实现每株草都是一个 Group）
-        world.addInstancedProps(group, src, placements);
+        world.addInstancedProps(group, src, placements, ENV_TINT[flow.mission.mapId] ?? 0x5a6a4a);
       });
     }
   };
@@ -1270,7 +1278,8 @@ function boot(): void {
         if (flow.phase === 'clear' || flow.phase === 'failed') {
           beginMission();
         } else {
-          arsenal.current.reload(); // 战斗�?R = 换弹
+          arsenal.current.reload(); // 战斗中 R = 换弹
+          viewmodel?.reload();
         }
       }
       keyState.restart = snap.key('KeyR');
@@ -1477,6 +1486,30 @@ function boot(): void {
         }
       }
 
+      // 敌人互斥：避免几十只叠成一坨互相穿模（单遍 O(n^2)，n<=80 可接受）
+      const crowd = spawner.all();
+      for (let i = 0; i < crowd.length; i++) {
+        const a = crowd[i];
+        if (!a.alive) continue;
+        for (let j = i + 1; j < crowd.length; j++) {
+          const b = crowd[j];
+          if (!b.alive) continue;
+          const dx = b.root.position.x - a.root.position.x;
+          const dz = b.root.position.z - a.root.position.z;
+          const min = (a.def.radius + b.def.radius) * 0.92;
+          const d2 = dx * dx + dz * dz;
+          if (d2 >= min * min || d2 < 1e-6) continue;
+          const d = Math.sqrt(d2);
+          const push = (min - d) * 0.5;
+          const nx = dx / d;
+          const nz = dz / d;
+          a.root.position.x -= nx * push;
+          a.root.position.z -= nz * push;
+          b.root.position.x += nx * push;
+          b.root.position.z += nz * push;
+        }
+      }
+
       // BOSS AI
       if (activeBoss && activeBoss.alive) {
         const bevt = activeBoss.update(dt, player.position);
@@ -1528,7 +1561,8 @@ function boot(): void {
       }
 
       tracer.update(dt);
-      viewmodel?.update(dt);
+      const moving = snap.forward || snap.back || snap.left || snap.right;
+      viewmodel?.update(dt, moving);
 
       // BUFF 球：拾取检测 + 旋转动画
       for (let i = buffOrbs.length - 1; i >= 0; i--) {
@@ -1682,6 +1716,15 @@ function boot(): void {
         list[i].root.position.set(Math.cos(a) * r, 0, Math.sin(a) * r + 2);
       }
     },
+    /** 调整视角（截图/调试用） */
+    setView(yaw: number, pitch: number): void {
+      player.yaw = yaw;
+      player.pitch = Math.max(-1.5, Math.min(1.5, pitch));
+    },
+    /** 传送到指定水平位置（贴地） */
+    moveTo(x: number, z: number): void {
+      player.position.set(x, player.terrainHeight(x, z), z);
+    },
     /** 按兵种刷怪（调试/截图用） */
     spawnKinds(counts: Partial<Record<string, number>>, hpMult = 1e6): number {
       spawner.spawnWave(
@@ -1783,7 +1826,23 @@ function boot(): void {
           if ((o as THREE.Mesh).isMesh) meshes += 1;
         });
       }
-      return { meshes, hasGunModel: meshes > 8, box, children: children.slice(0, 5) };
+      let gunBox: Record<string, number[]> | null = null;
+      let gun: THREE.Object3D | null = null;
+      vg?.traverse((o) => {
+        if (o.userData.gun) gun = o;
+      });
+      if (gun) {
+        const gb = new THREE.Box3().setFromObject(gun);
+        const gs = gb.getSize(new THREE.Vector3());
+        const gc = gb.getCenter(new THREE.Vector3());
+        gunBox = { size: [+gs.x.toFixed(3), +gs.y.toFixed(3), +gs.z.toFixed(3)], center: [+gc.x.toFixed(3), +gc.y.toFixed(3), +gc.z.toFixed(3)] };
+      }
+      return { meshes, hasGunModel: meshes > 8, box, gunBox, children: children.slice(0, 5) } as unknown as {
+        meshes: number;
+        hasGunModel: boolean;
+        box: { size: number[]; center: number[] };
+        children: string[];
+      };
     },
     buffState(): { atk: number; shield: number; speed: number } {
       return { ...buffs };

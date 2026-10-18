@@ -265,14 +265,50 @@ function buildCaster(color: number): EnemyTemplate {
   return { geometry: b.build(), material: enemyMaterial(0.7, 0.05), height: 1.5 };
 }
 
+/**
+ * 敌人材质：在标准材质上注入顶点级行走动画。
+ * 敌人是"合并后的单网格"，没有骨骼，所以用着色器按局部坐标分区摆动：
+ * y<0.52 视为腿、|x|>0.12 且 y>0.42 视为手臂，左右用 sign(x) 反相 → 走路时四肢交替。
+ * 好处是零 draw call 增量、零 CPU 骨骼开销，同时摆脱"滑动木头人"的僵硬感。
+ */
+const ANIM_UNIFORMS = /* glsl */ `
+uniform float uPhase;
+uniform float uMove;
+uniform float uAttack;
+`;
+
+const ANIM_BODY = /* glsl */ `
+  #include <begin_vertex>
+  float eSide = sign(transformed.x + 0.00001);
+  float legMask = smoothstep(0.52, 0.16, transformed.y);
+  float armMask = smoothstep(0.40, 0.70, transformed.y) * smoothstep(0.10, 0.22, abs(transformed.x));
+  float eSwing = sin(uPhase) * uMove;
+  transformed.z += eSwing * 0.19 * legMask * eSide;
+  transformed.y += abs(eSwing) * 0.025 * legMask;
+  transformed.z -= eSwing * 0.14 * armMask * eSide;
+  transformed.x += sin(uPhase * 2.0) * 0.014 * (legMask + armMask);
+  // 呼吸起伏（上半身）+ 攻击前倾
+  transformed.y += sin(uPhase * 0.55) * 0.014 * smoothstep(0.55, 1.0, transformed.y);
+  transformed.z += uAttack * 0.16 * smoothstep(0.0, 1.1, transformed.y);
+`;
+
 function enemyMaterial(roughness = 0.62, metalness = 0.12): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
+  const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
     roughness,
     metalness,
     emissive: new THREE.Color(0x000000),
     emissiveIntensity: 1,
   });
+  mat.customProgramCacheKey = () => 'enemy-anim';
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uPhase = { value: 0 };
+    shader.uniforms.uMove = { value: 0 };
+    shader.uniforms.uAttack = { value: 0 };
+    shader.vertexShader = ANIM_UNIFORMS + shader.vertexShader.replace('#include <begin_vertex>', ANIM_BODY);
+    mat.userData.anim = shader.uniforms;
+  };
+  return mat;
 }
 
 const builders: Record<EnemyKind, (color: number) => EnemyTemplate> = {
