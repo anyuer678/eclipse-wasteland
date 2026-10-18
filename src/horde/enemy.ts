@@ -83,6 +83,12 @@ export class Enemy {
   private phase = Math.random() * Math.PI * 2;
   private flashTimer = 0;
   private flashing = false;
+  /** 倒地动画剩余时间（>0 时尸体还在场上，播完才回收） */
+  private corpseT = 0;
+  /** 可被回收（倒地动画播完） */
+  get removable(): boolean {
+    return !this.alive && this.corpseT <= 0;
+  }
 
   /** 施加灼烧（持续伤害） */
   applyBurn(seconds: number, dps: number): void {
@@ -221,7 +227,7 @@ export class Enemy {
       if (this.fuseTimer >= 0) {
         this.fuseTimer -= dt;
         if (this.fuseTimer <= 0) {
-          this.alive = false;
+          this.die();
           return { blast: d.damage };
         }
       } else {
@@ -290,7 +296,7 @@ export class Enemy {
     this.bar.setHp(pct);
     if (this.barSprite.visible !== pct < 1) this.barSprite.visible = pct < 1;
     if (this.hp <= 0) {
-      this.alive = false;
+      this.die();
       return true;
     }
     return false;
@@ -312,6 +318,32 @@ export class Enemy {
       this.bodyMat.emissive.setHex(0x000000);
     }
     return false;
+  }
+
+  /** 死亡：进入倒地动画（由 game 每帧 tickCorpse 推进，播完才回收） */
+  die(): void {
+    if (!this.alive) return;
+    this.alive = false;
+    this.hp = Math.min(this.hp, 0);
+    this.corpseT = 0.9;
+    this.barSprite.visible = false;
+    this.flashing = false;
+    this.bodyMat.emissive.setHex(0x000000);
+    const anim = this.bodyMat.userData.anim as Record<string, { value: number }> | undefined;
+    if (anim) anim.uMove.value = 0;
+  }
+
+  /** 倒地动画：绕脚踝前扑 + 末段下沉收缩 */
+  tickCorpse(dt: number): void {
+    if (this.alive || this.corpseT <= 0) return;
+    this.corpseT -= dt;
+    const t = 1 - Math.max(0, this.corpseT) / 0.9;
+    // 负角度 = 朝面向方向（-z）前扑
+    this.root.rotation.x = -1.45 * Math.min(1, t * 2.6);
+    if (t > 0.6) {
+      this.root.position.y -= dt * 0.5;
+      this.body.scale.setScalar(Math.max(0.25, 1 - (t - 0.6) * 1.5));
+    }
   }
 
   applySlow(factor: number, seconds: number): void {

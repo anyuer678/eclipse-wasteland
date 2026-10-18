@@ -13,6 +13,8 @@ export interface AssetLib {
   get: (name: string) => THREE.Group | null;
   /** 加载指定模型，完成回调 */
   load: (name: string, onDone?: (group: THREE.Group) => void) => void;
+  /** 取模型自带的动画剪辑（未加载完成返回空数组） */
+  clips: (name: string) => THREE.AnimationClip[];
 }
 
 /**
@@ -25,6 +27,9 @@ export const DEFAULT_MODEL_BASE = `${import.meta.env.BASE_URL}models/`;
 export function createAssetLib(base = DEFAULT_MODEL_BASE): AssetLib {
   const loader = new GLTFLoader();
   const cache: Record<string, THREE.Group> = {};
+  // 动画剪辑不能挂在 scene.userData 上：Object3D.copy 会 JSON 序列化 userData，
+  // AnimationClip 会被打扁成 plain object，必须单独存一份
+  const clipCache: Record<string, THREE.AnimationClip[]> = {};
   const pending = new Map<string, ((g: THREE.Group) => void)[]>();
 
   const get = (name: string): THREE.Group | null => {
@@ -62,6 +67,7 @@ export function createAssetLib(base = DEFAULT_MODEL_BASE): AssetLib {
       base + name + '.glb',
       (gltf) => {
         cache[name] = gltf.scene;
+        clipCache[name] = gltf.animations ?? [];
         const list = pending.get(name);
         pending.delete(name);
         if (list) for (const cb of list) cb(gltf.scene);
@@ -73,5 +79,5 @@ export function createAssetLib(base = DEFAULT_MODEL_BASE): AssetLib {
     );
   };
 
-  return { get, load };
+  return { get, load, clips: (name) => clipCache[name] ?? [] };
 }

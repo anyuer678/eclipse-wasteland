@@ -78,11 +78,17 @@ export class Boss {
     return g;
   }
 
+  /** 动画混合器（开源模型自带 Idle/Walk/Run，接上后 BOSS 不再像雕像） */
+  private mixer: THREE.AnimationMixer | null = null;
+  private actionIdle: THREE.AnimationAction | null = null;
+  private actionMove: THREE.AnimationAction | null = null;
+  private moveWeight = 0;
+
   /** 挂载开源模型（替换程序化躯干，放大为 BOSS 尺寸） */
-  applyModel(group: THREE.Group): void {
+  applyModel(group: THREE.Group, clips: THREE.AnimationClip[] = []): void {
     for (const child of [...this.root.children]) this.root.remove(child);
-    // BOSS 缩放：Soldier 原始约 1.9m，目标 2.5m（固定比例，避免 Box3 偏小导致过大）
-    group.scale.setScalar(2.5 / 1.9);
+    // BOSS 缩放：Soldier 原始约 1.9m，目标 3.3m（固定比例，避免 Box3 偏小导致过大）
+    group.scale.setScalar(3.3 / 1.9);
     group.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
         const mat = (o as THREE.Mesh).material as THREE.MeshStandardMaterial;
@@ -95,6 +101,26 @@ export class Boss {
     });
     group.position.y = 0;
     this.root.add(group);
+    this.bindClips(group, clips);
+  }
+
+  /** 绑定 Idle / Walk 剪辑并按移动状态交叉淡化 */
+  private bindClips(group: THREE.Group, clips: THREE.AnimationClip[]): void {
+    if (clips.length === 0) return;
+    const find = (re: RegExp): THREE.AnimationClip | undefined => clips.find((c) => re.test(c.name));
+    const idle = find(/idle|breath|stand/i) ?? clips[0];
+    const move = find(/walk|run/i) ?? clips[0];
+    const mixer = new THREE.AnimationMixer(group);
+    this.actionIdle = mixer.clipAction(idle);
+    this.actionIdle.play();
+    this.actionIdle.setEffectiveWeight(1);
+    if (move !== idle) {
+      this.actionMove = mixer.clipAction(move);
+      this.actionMove.play();
+      this.actionMove.setEffectiveWeight(0);
+      this.actionMove.timeScale = 1.1;
+    }
+    this.mixer = mixer;
   }
 
   /**
@@ -111,6 +137,23 @@ export class Boss {
   /** 召唤冷却 */
   private summonCooldown = 0;
 
+  /** 调试：动画绑定状态（供压测脚本确认混合器真的在跑） */
+  animState(): { bound: boolean; idleRunning: boolean; moveWeight: number; clipTime: number } {
+    return {
+      bound: !!this.mixer,
+      idleRunning: !!this.actionIdle?.isRunning(),
+      moveWeight: +this.moveWeight.toFixed(2),
+      clipTime: +(this.actionIdle?.time ?? 0).toFixed(2),
+    };
+  }
+
+  private applyMoveWeight(w: number): void {
+    if (!this.actionMove || !this.actionIdle) return;
+    const k = Math.max(0, Math.min(1, w));
+    this.actionMove.setEffectiveWeight(k);
+    this.actionIdle.setEffectiveWeight(1 - k * 0.65);
+  }
+
   update(dt: number, playerPos: THREE.Vector3): {
     skill?: BossSkill;
     melee?: number;
@@ -121,6 +164,8 @@ export class Boss {
     if (!this.alive) return null;
 
     this.root.lookAt(playerPos.x, this.root.position.y, playerPos.z);
+    // 动画推进放最前面：蓄力/践踏这些早退分支也要继续播
+    this.mixer?.update(dt);
     const toPlayer = new THREE.Vector3().subVectors(playerPos, this.root.position);
     toPlayer.y = 0;
     const dist = toPlayer.length();
@@ -135,6 +180,12 @@ export class Boss {
         if (dist < 4) return { skill: 'charge', melee: 18 + this.phase * 5, chargeDir: this.chargeDir };
       }
       return null;
+    }
+
+    // 原地（冲锋/践踏/近战）时淡出走路动画
+    if (this.charging || this.stomping) {
+      this.moveWeight += (0 - this.moveWeight) * Math.min(1, dt * 6);
+      this.applyMoveWeight(this.moveWeight);
     }
 
     // 践踏中（跳跃砸地）
@@ -159,6 +210,9 @@ export class Boss {
     this.summonCooldown -= dt;
     const moveSpeed = 1.3 + this.phase * 0.4;
     this.root.position.addScaledVector(dir, moveSpeed * dt);
+    // 追击时播走路、贴近后回到待机（交叉淡化，避免抽帧式硬切）
+    this.moveWeight += (1 - this.moveWeight) * Math.min(1, dt * 4);
+    this.applyMoveWeight(this.moveWeight);
 
     // 技能轮换
     this.skillTimer -= dt;

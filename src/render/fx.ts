@@ -26,7 +26,8 @@ const PARTICLE_VS = /* glsl */ `
     vColor = aColor;
     vAlpha = aAlpha;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = max(0.0, aSize * uScale / max(0.001, -mv.z));
+    // 上限 48px：近距离时也不会出现糊满屏的光斑
+    gl_PointSize = clamp(aSize * uScale / max(0.001, -mv.z), 0.0, 48.0);
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -119,7 +120,9 @@ export class Fx {
     scene.add(points);
 
     // ===== 冲击环：单 InstancedMesh =====
-    const ringGeo = new THREE.PlaneGeometry(2, 2, 1, 1);
+    // 注意：这里必须是圆环（RingGeometry）。0.75~1.0 的环带在半径 2m 时只有 25cm 厚，
+    // 若用实心 PlaneGeometry，多次击杀的加法混合会把整个画面刷成金色。
+    const ringGeo = new THREE.RingGeometry(0.74, 1, 32);
     ringGeo.rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({
       transparent: true,
@@ -187,7 +190,9 @@ export class Fx {
       const ttl = 0.24 + Math.random() * 0.28;
       this.pLife[idx] = ttl;
       this.pTtl[idx] = ttl;
-      this.pSize[idx] = (1.4 + Math.random() * 1.6) * sizeScale;
+      // 单位是「世界米」：火花实际直径 5~9cm（写成 1.4~3 会让每颗火花有 2 米大，
+      // 密集命中时加法混合直接把画面刷白）
+      this.pSize[idx] = (0.05 + Math.random() * 0.045) * sizeScale;
       this.pAlpha[idx] = 1;
       this.pDrag[idx] = 5 + Math.random() * 6;
     }
@@ -280,7 +285,7 @@ export class Fx {
       this.ringMat.scale(this.ringScale.set(r, 1, r));
       this.ringMesh.setMatrixAt(i, this.ringMat);
       const fade = 1 - t;
-      this.ringMesh.setColorAt(i, this.ringColor.copy(ring.color).multiplyScalar(fade * fade));
+      this.ringMesh.setColorAt(i, this.ringColor.copy(ring.color).multiplyScalar(fade * fade * 0.55));
     }
     this.ringMesh.instanceMatrix.needsUpdate = true;
     if (this.ringMesh.instanceColor) this.ringMesh.instanceColor.needsUpdate = true;

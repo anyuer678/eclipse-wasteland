@@ -574,7 +574,7 @@ function boot(): void {
     if (activeBoss && !activeBoss.root.userData.hasModel) {
       const bg = assets.get('Soldier');
       if (bg) {
-        activeBoss.applyModel(bg);
+        activeBoss.applyModel(bg, assets.clips('Soldier'));
         activeBoss.root.userData.hasModel = true;
       }
     }
@@ -1455,6 +1455,10 @@ function boot(): void {
         if (e.root.position.y <= eGround) e.root.position.y = eGround;
         // 障碍碰撞：敌人不穿平台侧壁
         player.collide(e.root.position as unknown as { x: number; y: number; z: number });
+        if (!e.alive) {
+          e.tickCorpse(dt); // 倒地动画（播完由 spawner.sweep 回收）
+          continue;
+        }
         if (stealthTimer > 0) continue;
         const died = e.tickBurn(dt);
         if (died) {
@@ -1465,7 +1469,7 @@ function boot(): void {
         if (evt) {
           if (evt.melee !== undefined || evt.blast !== undefined) {
             const dmg = evt.melee ?? evt.blast ?? 0;
-            if (evt.blast !== undefined) e.alive = false;
+            if (evt.blast !== undefined) e.die();
             applyDamageToPlayer(dmg);
 
             shell.hud.hit();
@@ -1724,6 +1728,16 @@ function boot(): void {
     /** 传送到指定水平位置（贴地） */
     moveTo(x: number, z: number): void {
       player.position.set(x, player.terrainHeight(x, z), z);
+    },
+    /** BOSS 状态与动画（调试用） */
+    bossInfo(): Record<string, unknown> | null {
+      if (!activeBoss) return null;
+      return {
+        hp: Math.round(activeBoss.hp),
+        phase: activeBoss.phase,
+        children: activeBoss.root.children.length,
+        anim: activeBoss.animState(),
+      };
     },
     /** 按兵种刷怪（调试/截图用） */
     spawnKinds(counts: Partial<Record<string, number>>, hpMult = 1e6): number {

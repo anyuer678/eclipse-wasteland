@@ -62,11 +62,11 @@ export class Spawner {
     return this.enemies;
   }
 
-  /** 清除死亡敌人并从场景移除 */
+  /** 回收倒地动画播完的尸体（死亡瞬间不再立刻消失，先扑倒再清理） */
   sweep(): void {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      if (!e.alive) {
+      if (e.removable) {
         this.world.remove(e.root);
         this.enemies.splice(i, 1);
       }
@@ -78,7 +78,10 @@ export class Spawner {
     this.enemies = [];
   }
 
+  /** 剩余活着的敌人（尸体不算，保证波次按击杀推进） */
   remaining(): number {
-    return this.enemies.length;
+    let n = 0;
+    for (const e of this.enemies) if (e.alive) n += 1;
+    return n;
   }
 }

@@ -620,18 +620,18 @@ export class World {
         depthWrite: false,
         depthTest: false,
         fog: false,
-        opacity: mapId === 'volcano' ? 0.55 : 0.8,
+        opacity: 0.34,
       })
     );
     sunGlow.position.copy(sunDir).multiplyScalar(120);
-    sunGlow.scale.setScalar(mapId === 'volcano' ? 26 : 34);
+    sunGlow.scale.setScalar(mapId === 'volcano' ? 15 : 21);
     sunGlow.renderOrder = -1;
     sunGlow.visible = this.quality !== 'low';
     root.add(sunGlow);
     this.sunGlow = sunGlow;
     if (this.sun) {
       this.sun.color.setHex(pal.sun);
-      this.sun.intensity = mapId === 'volcano' ? 2.9 : 2.5;
+      this.sun.intensity = mapId === 'volcano' ? 1.85 : 2.5;
       this.sun.position.copy(sunDir).multiplyScalar(46);
       this.sun.shadow.intensity = mapId === 'volcano' ? 0.75 : 1;
     }
