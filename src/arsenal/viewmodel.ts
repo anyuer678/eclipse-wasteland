@@ -81,6 +81,9 @@ export class Viewmodel {
   private motion = 0;
   private time = 0;
   private flashT = 0;
+  /** 视角摆动：武器滞后于鼠标，随时间回弹 */
+  private swayX = 0;
+  private swayY = 0;
 
   constructor(archetype: Archetype, color: number) {
     this.group = new THREE.Group();
@@ -249,6 +252,12 @@ export class Viewmodel {
     this.holder.add(mkHand(-0.028, -spec.bodyW * 0.42, gripZ, -0.28, 0.16, true));
   }
 
+  /** 鼠标视角变化时喂入（游戏侧在 player.look 后调用），武器会反向滞后 */
+  applyLook(dxPx: number, dyPx: number): void {
+    this.swayX = THREE.MathUtils.clamp(this.swayX + dxPx * 0.0011, -0.05, 0.05);
+    this.swayY = THREE.MathUtils.clamp(this.swayY + dyPx * 0.0011, -0.04, 0.04);
+  }
+
   /** 记录一次后坐（同时点亮枪口火光） */
   kickNow(amount = 1): void {
     this.kick = Math.min(this.kick + amount, 2);
@@ -277,14 +286,17 @@ export class Viewmodel {
     const bobX = Math.sin(this.bobPhase * 0.5) * 0.009 * this.motion;
     const reloadDip = Math.sin(this.reloadT * Math.PI) * 0.15;
 
+    this.swayX *= Math.exp(-dt * 8);
+    this.swayY *= Math.exp(-dt * 8);
+
     this.group.position.set(
-      BASE_POS.x + bobX - this.kick * 0.004,
-      BASE_POS.y + breathe + bobY - reloadDip * 0.4,
+      BASE_POS.x + bobX - this.kick * 0.004 - this.swayX * 0.45,
+      BASE_POS.y + breathe + bobY - reloadDip * 0.4 + this.swayY * 0.3,
       BASE_POS.z + this.kick * 0.032
     );
     this.group.rotation.set(
-      this.kick * 0.1 + reloadDip * 0.85,
-      Math.sin(this.time * 0.7) * 0.005 + this.kick * 0.01,
+      this.kick * 0.1 + reloadDip * 0.85 + this.swayY * 0.5,
+      Math.sin(this.time * 0.7) * 0.005 + this.kick * 0.01 - this.swayX * 0.9,
       -bobX * 0.6 + reloadDip * 0.3
     );
 

@@ -621,6 +621,8 @@ function boot(): void {
   let shakeT = 0;
   let shakeDur = 0.001;
   let shakeAmp = 0;
+  /** 镜头后坐力（当前帧上抬量） */
+  let recoil = 0;
   let fovKick = 0;
   const baseFov = 60;
   const addShake = (amp: number, dur: number): void => {
@@ -810,6 +812,9 @@ function boot(): void {
     onShot: (): void => {
       sfx.shot(arsenal.current.def.archetype);
       fovKick = Math.min(fovKick + 0.9, 3.5);
+      // 镜头后坐力：按枪型给不同的上抬，指数回落
+      const kick: Record<string, number> = { rifle: 0.011, pistol: 0.008, smg: 0.006, shotgun: 0.028, sniper: 0.04 };
+      recoil = Math.min(recoil + (kick[arsenal.current.def.archetype] ?? 0.012), 0.07);
     },
     resolveHit(origin, dir) {
       // 逻辑命中：射线对敌人/BOSS 球体检测（不依赖模型 mesh raycast，稳定可靠）
@@ -1341,6 +1346,7 @@ function boot(): void {
 
       const d = input.consumeMouseDelta();
       player.look(d.dx, d.dy, 0.12 * settings.sens);
+      viewmodel?.applyLook(d.dx, d.dy);
       player.update(snap, dt);
 
       const eye = player.eyeInto(eyeScratch);
@@ -1366,6 +1372,9 @@ function boot(): void {
         world.camera.fov = fovNow;
         world.camera.updateProjectionMatrix();
       }
+      // 镜头后坐力：上抬后回落（不写入 player.pitch，松开即回准）
+      recoil *= Math.exp(-dt * 9);
+      world.camera.rotation.x = player.pitch + recoil;
       // 雷达小地图（每 2 帧画一次）
       radarFrame += 1;
       if (radarFrame % 2 === 0) {
@@ -1653,8 +1662,44 @@ function boot(): void {
         }
       }
 
-      // 敌人互斥：避免几十只叠成一坨互相穿模（单遍 O(n^2)，n<=80 可接受）
+      // 寻路避障：前方 1.1m 被掩体挡住 → 探左右空侧沿切线绕行（0.45s 防抖）
       const crowd = spawner.all();
+      const obstacles = (mapRoot?.userData.obstacles ?? []) as { x: number; z: number; hw: number; hd: number; top: number }[];
+      const pointBlocked = (px: number, pz: number): boolean => {
+        for (const o of obstacles) {
+          if (o.top < 0.55) continue; // 矮障碍可跨过/翻越
+          if (Math.abs(px - o.x) < o.hw + 0.3 && Math.abs(pz - o.z) < o.hd + 0.3) return true;
+        }
+        return false;
+      };
+      for (const e of crowd) {
+        if (!e.alive || e.avoidT > 0) continue;
+        const dxp = player.position.x - e.root.position.x;
+        const dzp = player.position.z - e.root.position.z;
+        const dl = Math.hypot(dxp, dzp);
+        if (dl < 1.6) continue; // 近身不需要绕
+        const dirX = dxp / dl;
+        const dirZ = dzp / dl;
+        const ax = e.root.position.x + dirX * 1.15;
+        const az = e.root.position.z + dirZ * 1.15;
+        if (!pointBlocked(ax, az)) continue;
+        // 前方被挡：探左右切线
+        const perpLX = -dirZ;
+        const perpLZ = dirX;
+        const trySide = (px: number, pz: number, sx: number, sz: number): boolean => {
+          if (!pointBlocked(px + sx * 0.95, pz + sz * 0.95)) {
+            e.avoidX = sx;
+            e.avoidZ = sz;
+            e.avoidT = 0.45;
+            return true;
+          }
+          return false;
+        };
+        if (trySide(ax, az, perpLX, perpLZ)) continue;
+        trySide(ax, az, -perpLX, -perpLZ);
+      }
+
+      // 敌人互斥：避免几十只叠成一坨互相穿模（单遍 O(n^2)，n<=80 可接受）
       for (let i = 0; i < crowd.length; i++) {
         const a = crowd[i];
         if (!a.alive) continue;

@@ -278,6 +278,16 @@ export class Enemy {
         }
       } else {
         this.root.position.addScaledVector(dir, speed * dt);
+        // 迂回摆动：不再笔直冲锋（有机感，也更容易被侧翼火力拦截）
+        const wobble = Math.sin(this.phase * 0.33) * 0.3;
+        this.root.position.x += -dir.z * wobble * speed * dt;
+        this.root.position.z += dir.x * wobble * speed * dt;
+        // 避障绕行：前方被掩体挡住时沿切线绕行（方向由 game 侧探测）
+        if (this.avoidT > 0) {
+          this.avoidT -= dt;
+          this.root.position.x += this.avoidX * speed * dt;
+          this.root.position.z += this.avoidZ * speed * dt;
+        }
       }
     }
 
@@ -313,6 +323,10 @@ export class Enemy {
   /** 喷毒 / 施法前摇剩余时间 */
   private spitWindup = 0;
   private castWindup = 0;
+  /** 避障绕行方向（由 game 侧探测写入，持续 avoidT 秒） */
+  avoidX = 0;
+  avoidZ = 0;
+  avoidT = 0;
   private lunge(): void {
     this.attackAnim = 1;
   }
