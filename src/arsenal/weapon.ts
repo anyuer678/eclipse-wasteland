@@ -35,6 +35,8 @@ export interface FireContext {
   onChain?: (pos: THREE.Vector3, damage: number, jumps: number, falloff: number) => void;
   /** 治疗玩家（guard 机制） */
   onHeal?: (amount: number) => void;
+  /** 扣动扳机且真的开火了（供音效；一次 discharge 只触发一次） */
+  onShot?: () => void;
 }
 
 export interface WeaponState {
@@ -223,6 +225,7 @@ export class Weapon {
       }
     }
 
+    ctx.onShot?.();
     // 弹道从准星前方出发（视觉严格沿准星），终点为命中点
     const origin = _origin.copy(ctx.origin).addScaledVector(ctx.direction, 0.5);
 

@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three';
 import { EventBus, FixedLoop, ServiceRegistry, clamp } from './core';
+import { sfx } from './core/sfx';
 import { World, SPAWN_POINT, nearSpawn } from './render';
 import { Fx } from './render/fx';
 import { createAssetLib } from './render/assets';
@@ -630,6 +631,7 @@ function boot(): void {
       spawnChest(false);
       const totalWaves = _mission.waves.length;
       showAnnouncement(`WAVE ${flow.waveIndex + 1} / ${totalWaves}`, '#ffffff', 1800);
+      sfx.wave();
       if ((flow.waveIndex + 1) % 3 === 0) {
         setTimeout(() => showAnnouncement('\u26a0 精英波来袭', '#ff4444', 2000), 800);
       }
@@ -644,6 +646,7 @@ function boot(): void {
       showAnnouncement('', '#000000', 600);
       setTimeout(() => {
         showAnnouncement(activeBoss!.spec.name, '#' + activeBoss!.spec.color.toString(16).padStart(6, '0'), 3000);
+        sfx.roar();
         shell.hud.boss(activeBoss!.spec.name, activeBoss!.hp / activeBoss!.spec.hp);
       }, 600);
     }
@@ -722,10 +725,16 @@ function boot(): void {
   const hitScratch = new THREE.Vector3();
   const centerScratch = new THREE.Vector3();
 
+  // 音频上下文要在用户手势后创建/恢复（浏览器自动播放策略）
+  const unlockAudio = (): void => sfx.resume();
+  window.addEventListener('pointerdown', unlockAudio);
+  window.addEventListener('keydown', unlockAudio);
+
   const fireCtx: FireContext = {
     origin: new THREE.Vector3(),
     direction: new THREE.Vector3(),
     tracer,
+    onShot: (): void => sfx.shot(arsenal.current.def.archetype),
     resolveHit(origin, dir) {
       // 逻辑命中：射线对敌人/BOSS 球体检测（不依赖模型 mesh raycast，稳定可靠）
       let bestT = 60;
@@ -849,6 +858,7 @@ function boot(): void {
           const dead = e.takeDamage(finalDmg);
           if (dead) {
             flow.kills += 1;
+            sfx.kill();
             syncBossModel();
             maybeDropOrb(e.root.position);
             addKillBurst(e.root.position);
@@ -864,6 +874,7 @@ function boot(): void {
               const msg = streakNames[killStreak] || `🔥 ${killStreak}连杀!`;
               const color = killStreak >= 10 ? '#ffd700' : killStreak >= 5 ? '#ff6644' : '#ff9944';
               showAnnouncement(msg, color, 1200);
+              sfx.streak(killStreak);
               // 连杀回血
               if (killStreak >= 5) setHp(hp + 5);
               if (killStreak >= 10) setHp(hp + 10);
@@ -877,6 +888,7 @@ function boot(): void {
       }
       if (hitSomething) {
         shell.hud.hitConfirm();
+        sfx.hit();
         const st = computeStats();
         const isCrit = Math.random() < st.critRate + affixCritMult(inventory.getWeapon(arsenal.current.def.id));
         addDamagePopup(pos, `-${Math.round(dmg)}`, isCrit ? '#ffd24a' : '#ffb0a0', isCrit ? 27 : 20);
@@ -1036,6 +1048,7 @@ function boot(): void {
 
   /** 玩家受伤统一结算（护甲 + 护盾减伤 + 局内铁壁 + 荆棘反弹 + 受击无敌帧） */  let hurtInvuln = 0;
   const applyDamageToPlayer = (v: number): void => {
+    sfx.hurt();
     if (hurtInvuln > 0) return; // 无敌帧：防多敌人同帧秒杀
     if (!Number.isFinite(v) || v <= 0) return; // NaN 防护
     hurtInvuln = 0.4;
@@ -1295,6 +1308,7 @@ function boot(): void {
         } else {
           arsenal.current.reload(); // 战斗中 R = 换弹
           viewmodel?.reload();
+          sfx.reload();
         }
       }
       keyState.restart = snap.key('KeyR');
@@ -1484,7 +1498,10 @@ function boot(): void {
         if (evt) {
           if (evt.melee !== undefined || evt.blast !== undefined) {
             const dmg = evt.melee ?? evt.blast ?? 0;
-            if (evt.blast !== undefined) e.die();
+            if (evt.blast !== undefined) {
+            e.die();
+            sfx.boom();
+          }
             applyDamageToPlayer(dmg);
 
             shell.hud.hit();

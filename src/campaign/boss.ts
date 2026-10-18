@@ -24,10 +24,12 @@ export class Boss {
   readonly resistance: Record<Element, number>;
 
   private skillTimer: number;
+  private skillIndex = 0;
   private summonCount = 0;
   private meleeCooldown = 0;
 
-  constructor(spec: BossSpec, private rng: { pick: <T>(a: readonly T[]) => T }) {
+  // 随机器保留为可选参数（旧调用点会传入），当前招式表已改为固定循环
+  constructor(spec: BossSpec, _rng?: { pick: <T>(a: readonly T[]) => T }) {
     this.spec = spec;
     this.hp = spec.hp;
     this.root = this.buildMesh(spec);
@@ -238,10 +240,13 @@ export class Boss {
     this.skillTimer -= dt;
     if (this.skillTimer <= 0) {
       this.skillTimer = this.spec.skillInterval * (this.phase > 0 ? 0.7 : 1);
-      const pool: BossSkill[] = this.phase > 0
+      // 阶段化招式表：按固定顺序循环（而不是纯随机），玩家可以背板预判
+      const seq: BossSkill[] = this.phase > 0
         ? ['charge', 'stomp', 'summon', 'aoe_blast', 'summon_elite']
         : ['charge', 'stomp', 'summon'];
-      const pick = this.rng.pick<BossSkill>(pool);
+      let pick = seq[this.skillIndex % seq.length];
+      this.skillIndex += 1;
+      if (pick === 'charge' && dist <= 3) pick = 'stomp'; // 贴脸不冲锋
 
       if (pick === 'charge' && dist > 3) {
         this.charging = true;
