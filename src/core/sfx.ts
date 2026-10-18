@@ -212,6 +212,19 @@ export class Sfx {
     this.noiseBurst(0.03, 2000, 600, 0.18, 0.13);
   }
 
+  /** 敌人远程出手：短促嗖声 */
+  spit(): void {
+    if (!this.ok('spit', 90)) return;
+    this.noiseBurst(0.13, 1800, 350, 0.12);
+  }
+
+  /** 拾取增益：上扬双音 */
+  pickup(): void {
+    if (!this.ok('pickup', 100)) return;
+    this.tone('triangle', 620, 930, 0.07, 0.12);
+    this.tone('triangle', 930, 1240, 0.09, 0.1, 0.06);
+  }
+
   /** 爆炸（自爆兵 / 践踏 / BOSS 死亡） */
   boom(): void {
     if (!this.ok('boom', 120)) return;

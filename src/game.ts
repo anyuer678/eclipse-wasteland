@@ -1611,10 +1611,12 @@ function boot(): void {
           }
           if (evt.spit) {
             // 真弹丸：飞行时间可躲，命中后统一结算
+            sfx.spit();
             projectiles.spawn(evt.spit.from, evt.spit.to, 0x3fb96a, 13, evt.spit.damage);
           }
           if (evt.cast) {
             // 弹幕法师三连弹：紫色弹丸
+            sfx.spit();
             for (const c of evt.cast) {
               projectiles.spawn(c.from, c.to, 0xcc88ff, 11, c.damage);
             }
@@ -1727,6 +1729,7 @@ function boot(): void {
         if (player.position.distanceToSquared(orb.mesh.position) < 2.6) {
           pickOrb(orb.kind);
           world.scene.remove(orb.mesh);
+          sfx.pickup();
           buffOrbs.splice(i, 1);
         }
       }
