@@ -12,6 +12,7 @@ import { World, SPAWN_POINT, nearSpawn } from './render';
 import { Fx } from './render/fx';
 import { createAssetLib } from './render/assets';
 import { Input } from './play/input';
+import { Radar } from './shell/radar';
 import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
 import type { WeaponDef, FireContext } from './arsenal';
@@ -589,6 +590,22 @@ function boot(): void {
   let killStreak = 0;
   let killStreakTimer = 0;
 
+  /** 雷达小地图（上 1/3 之外的右上角，每 2 帧画一次） */
+  const radar = new Radar(148, 34);
+  let radarFrame = 0;
+
+  // 打击感：镜头微震 + FOV 冲击
+  let shakeT = 0;
+  let shakeDur = 0.001;
+  let shakeAmp = 0;
+  let fovKick = 0;
+  const baseFov = 60;
+  const addShake = (amp: number, dur: number): void => {
+    shakeAmp = Math.max(shakeAmp, amp);
+    shakeT = Math.max(shakeT, dur);
+    shakeDur = Math.max(shakeDur, dur);
+  };
+
   /** 全屏大字公告（单例元素，替换式显示，位置在上 1/3 避开准星与 BOSS 血条） */
   let announceEl: HTMLDivElement | null = null;
   let announceText: HTMLDivElement | null = null;
@@ -737,7 +754,10 @@ function boot(): void {
     origin: new THREE.Vector3(),
     direction: new THREE.Vector3(),
     tracer,
-    onShot: (): void => sfx.shot(arsenal.current.def.archetype),
+    onShot: (): void => {
+      sfx.shot(arsenal.current.def.archetype);
+      fovKick = Math.min(fovKick + 0.9, 3.5);
+    },
     resolveHit(origin, dir) {
       // 逻辑命中：射线对敌人/BOSS 球体检测（不依赖模型 mesh raycast，稳定可靠）
       let bestT = 60;
@@ -829,6 +849,7 @@ function boot(): void {
             fx.burst(bp, 0xffd24a, 2.6);
             fx.emit(new THREE.Vector3(bp.x, bp.y + 1.6, bp.z), 0xff7a33, 26, 7.5, 2.2);
             addKillBurst(bp);
+            addShake(0.3, 0.6);
           }
           hitSomething = true;
         }
@@ -862,6 +883,7 @@ function boot(): void {
           if (dead) {
             flow.kills += 1;
             sfx.kill();
+            fovKick = Math.max(fovKick, 2.2);
             syncBossModel();
             maybeDropOrb(e.root.position);
             addKillBurst(e.root.position);
@@ -1052,6 +1074,7 @@ function boot(): void {
   /** 玩家受伤统一结算（护甲 + 护盾减伤 + 局内铁壁 + 荆棘反弹 + 受击无敌帧） */  let hurtInvuln = 0;
   const applyDamageToPlayer = (v: number): void => {
     sfx.hurt();
+    addShake(0.14, 0.32);
     if (hurtInvuln > 0) return; // 无敌帧：防多敌人同帧秒杀
     if (!Number.isFinite(v) || v <= 0) return; // NaN 防护
     hurtInvuln = 0.4;
@@ -1261,6 +1284,38 @@ function boot(): void {
       world.camera.rotation.x = player.pitch;
       // 阴影框跟随玩家（26m 内保持高精度阴影，远处自然淡出）
       world.focusShadow(player.position.x, player.position.y, player.position.z);
+      // 打击感：镜头微震（受击/爆炸触发，线性衰减）
+      if (shakeT > 0) {
+        shakeT -= dt;
+        const a = shakeAmp * Math.max(0, shakeT / shakeDur);
+        world.camera.position.x += (Math.random() - 0.5) * a;
+        world.camera.position.y += (Math.random() - 0.5) * a * 0.6;
+        world.camera.rotation.z += (Math.random() - 0.5) * a * 0.03;
+        if (shakeT <= 0) shakeAmp = 0;
+      }
+      // FOV 冲击：开火/击杀时轻微推近再回落
+      fovKick *= Math.exp(-dt * 7);
+      const fovNow = baseFov + fovKick;
+      if (Math.abs(world.camera.fov - fovNow) > 0.01) {
+        world.camera.fov = fovNow;
+        world.camera.updateProjectionMatrix();
+      }
+      // 雷达小地图（每 2 帧画一次）
+      radarFrame += 1;
+      if (radarFrame % 2 === 0) {
+        radar.begin(player.position.x, player.position.z, player.yaw);
+        for (const e of spawner.all()) {
+          if (!e.alive) continue;
+          radar.dot(e.root.position.x, e.root.position.z, '#' + e.def.color.toString(16).padStart(6, '0'), 3);
+        }
+        if (activeBoss && activeBoss.alive) {
+          radar.dot(activeBoss.root.position.x, activeBoss.root.position.z, '#ff4400', 5);
+        }
+        for (const c of crates) if (c.alive) radar.dot(c.x, c.z, '#d9a44a', 2);
+        const pools = (mapRoot?.userData.poisonPools ?? []) as { x: number; z: number }[];
+        for (const pool of pools) radar.dot(pool.x, pool.z, 'rgba(62,160,85,0.85)', 4);
+        radar.end();
+      }
 
       fireCtx.origin.copy(eye);
       fireCtx.direction.set(0, 0, -1).applyQuaternion(world.camera.quaternion).normalize();
@@ -1504,6 +1559,7 @@ function boot(): void {
             if (evt.blast !== undefined) {
             e.die();
             sfx.boom();
+            addShake(0.22, 0.45);
           }
             applyDamageToPlayer(dmg);
 
@@ -1573,6 +1629,7 @@ function boot(): void {
               shell.hud.hit();
             }
           } else if (bevt.stompRadius) {
+            addShake(0.2, 0.4);
             if (player.position.distanceTo(activeBoss.root.position) < bevt.stompRadius) {
               applyDamageToPlayer(8);
               shell.hud.hit();
