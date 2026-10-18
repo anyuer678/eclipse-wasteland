@@ -300,6 +300,8 @@ function boot(): void {
   let activeBoss: import('./campaign').Boss | null = null;
   /** 已记录的 BOSS 阶段（转阶段演出用；-1 = 尚未记录） */
   let bossPhaseSeen = -1;
+  /** 状态特效节拍器 */
+  let statusFxAcc = 0;
 
   const shell = new Shell(inventory, {
     onStartMission: (missionId) => {
@@ -934,6 +936,17 @@ function boot(): void {
         if (bestE) {
           const e = bestE;
           popupKey = `en${e.id}`;
+          // 击退：沿弹道方向推（重武器更强 / 暴击加成；盾兵与厚甲精英抗性高）
+          const kdx = e.root.position.x - player.position.x;
+          const kdz = e.root.position.z - player.position.z;
+          const kl = Math.hypot(kdx, kdz) || 1;
+          const heavy = arsenal.current.def.archetype === 'shotgun' || arsenal.current.def.archetype === 'sniper';
+          let imp = (heavy ? 2.8 : 1.5) * (isCrit ? 1.6 : 1);
+          if (e.def.kind === 'guard') imp *= 0.35;
+          if (e.elite?.kind === 'armored') imp *= 0.5;
+          e.applyKnockback(kdx / kl, kdz / kl, imp);
+          // 晕眩：狙击枪 35% 概率短晕
+          if (arsenal.current.def.archetype === 'sniper' && Math.random() < 0.35) e.applyStun(0.6);
           if (extra.slow !== undefined) e.applySlow(extra.slow, 1.6);
           // 烈焰风暴：命中施加灼�?DOT
           if (arsenal.current.def.mech.kind === 'beam') e.applyBurn(2.2, 5);
@@ -1697,6 +1710,30 @@ function boot(): void {
         };
         if (trySide(ax, az, perpLX, perpLZ)) continue;
         trySide(ax, az, -perpLX, -perpLZ);
+      }
+
+      // 状态特效：燃烧火花 / 减速蓝霜 / 晕眩星火（10Hz，避免粒子风暴）
+      statusFxAcc -= dt;
+      if (statusFxAcc <= 0) {
+        statusFxAcc = 0.1;
+        for (const e of crowd) {
+          if (!e.alive) continue;
+          if (e.isBurning()) {
+            e.centerInto(centerScratch);
+            centerScratch.y += 0.6 + Math.random() * 0.5;
+            fx.emit(centerScratch, 0xff7a33, 1, 0.9, 0.8);
+          }
+          if (e.isSlowed()) {
+            e.centerInto(centerScratch);
+            centerScratch.y += 0.5 + Math.random() * 0.7;
+            fx.emit(centerScratch, 0x66c8ff, 1, 0.6, 0.7);
+          }
+          if (e.isStunned()) {
+            e.centerInto(centerScratch);
+            centerScratch.y += 1.35 + Math.random() * 0.25;
+            fx.emit(centerScratch, 0xffd24a, 2, 1.1, 0.6);
+          }
+        }
       }
 
       // 敌人互斥：避免几十只叠成一坨互相穿模（单遍 O(n^2)，n<=80 可接受）

@@ -177,6 +177,25 @@ export class Enemy {
     if (!this.alive) return null;
     const d = this.def;
 
+    // 击退滑行：独立于 AI 移动，指数衰减
+    if (this.kvx !== 0 || this.kvz !== 0) {
+      this.root.position.x += this.kvx * dt;
+      this.root.position.z += this.kvz * dt;
+      const decay = Math.exp(-dt * 6);
+      this.kvx *= decay;
+      this.kvz *= decay;
+      if (Math.abs(this.kvx) < 0.05 && Math.abs(this.kvz) < 0.05) {
+        this.kvx = 0;
+        this.kvz = 0;
+      }
+    }
+
+    // 晕眩：完全停止行动（仍会被灼烧/击退）
+    if (this.stunT > 0) {
+      this.stunT -= dt;
+      return null;
+    }
+
     // 减速
     if (this.slowTimer > 0) this.slowTimer -= dt;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
@@ -320,6 +339,34 @@ export class Enemy {
   private hitAnim = 0;
   /** 近战前摇剩余时间（>0 时定在原地蓄力） */
   private windup = 0;
+  /** 状态效果：晕眩剩余时间 / 击退滑行速度 */
+  private stunT = 0;
+  private kvx = 0;
+  private kvz = 0;
+
+  /** 被击退：沿方向施加冲量（速度会指数衰减） */
+  applyKnockback(dirX: number, dirZ: number, impulse: number): void {
+    const cap = 6;
+    this.kvx = THREE.MathUtils.clamp(this.kvx + dirX * impulse, -cap, cap);
+    this.kvz = THREE.MathUtils.clamp(this.kvz + dirZ * impulse, -cap, cap);
+  }
+
+  /** 晕眩：期间完全停止行动 */
+  applyStun(seconds: number): void {
+    this.stunT = Math.max(this.stunT, seconds);
+  }
+
+  isStunned(): boolean {
+    return this.stunT > 0;
+  }
+
+  isBurning(): boolean {
+    return this.burnTimer > 0;
+  }
+
+  isSlowed(): boolean {
+    return this.slowTimer > 0;
+  }
   /** 喷毒 / 施法前摇剩余时间 */
   private spitWindup = 0;
   private castWindup = 0;
