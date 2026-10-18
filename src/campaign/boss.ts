@@ -11,6 +11,9 @@ import type { BossSpec, Element } from './types';
 
 export type BossSkill = 'charge' | 'stomp' | 'summon' | 'swipe' | 'aoe_blast' | 'summon_elite';
 
+/** 挥臂用的临时轴向量（模块级复用） */
+const _swingAxis = new THREE.Vector3(1, 0, 0);
+
 export class Boss {
   readonly spec: BossSpec;
   readonly root: THREE.Group;
@@ -82,6 +85,10 @@ export class Boss {
 
   /** 动画混合器（开源模型自带 Idle/Walk/Run，接上后 BOSS 不再像雕像） */
   private model: THREE.Group | null = null;
+  /** 骨骼引用（挥臂动作用；Soldier 是 Mixamo 绑定） */
+  private armR: THREE.Object3D | null = null;
+  private armL: THREE.Object3D | null = null;
+  private spine: THREE.Object3D | null = null;
   private mats: THREE.MeshStandardMaterial[] = [];
   private flash = 0;
   private pose = 0;
@@ -109,6 +116,10 @@ export class Boss {
     group.position.y = 0;
     this.root.add(group);
     this.model = group;
+    // 抓骨骼引用（名字来自 glTF 节点，SkeletonUtils.clone 会保留）
+    this.armR = group.getObjectByName('mixamorig:RightArm') ?? null;
+    this.armL = group.getObjectByName('mixamorig:LeftArm') ?? null;
+    this.spine = group.getObjectByName('mixamorig:Spine1') ?? null;
     // 收集克隆后的材质做受击闪红
     this.mats = [];
     group.traverse((o) => {
@@ -186,6 +197,17 @@ export class Boss {
     for (const m of this.mats) m.emissive.setRGB(e, e * 0.22, e * 0.16);
     this.pose = Math.max(0, this.pose - dt * 3.2);
     if (this.model) this.model.rotation.x = this.pose * 0.32 * this.poseDir;
+    // 挥臂：在混合器写完本帧姿态之后做加性旋转（下一帧混合器会重写，不会累积）
+    if (this.pose > 0 && this.mixer) {
+      const axis = _swingAxis.set(1, 0, 0);
+      const q = new THREE.Quaternion().setFromAxisAngle(axis, this.pose * 1.5 * this.poseDir);
+      this.armR?.quaternion.multiply(q);
+      this.armL?.quaternion.multiply(q);
+      if (this.spine) {
+        const q2 = new THREE.Quaternion().setFromAxisAngle(axis, this.pose * 0.25 * this.poseDir);
+        this.spine.quaternion.multiply(q2);
+      }
+    }
     const toPlayer = new THREE.Vector3().subVectors(playerPos, this.root.position);
     toPlayer.y = 0;
     const dist = toPlayer.length();
