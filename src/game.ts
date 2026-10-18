@@ -611,6 +611,10 @@ function boot(): void {
   });
   radar.el.style.display = settings.radar ? 'block' : 'none';
 
+  // 打击停顿（hit-stop）：连杀/BOSS 死亡瞬间冻结逻辑几十毫秒，渲染继续，
+  // 是动作游戏"顿挫感"的标准做法（比慢动作更干脆）
+  let hitStopT = 0;
+
   // 打击感：镜头微震 + FOV 冲击
   let shakeT = 0;
   let shakeDur = 0.001;
@@ -871,6 +875,7 @@ function boot(): void {
             fx.emit(new THREE.Vector3(bp.x, bp.y + 1.6, bp.z), 0xff7a33, 26, 7.5, 2.2);
             addKillBurst(bp);
             addShake(0.3, 0.6);
+            hitStopT = 0.14; // BOSS 死亡长顿
           }
           hitSomething = true;
         }
@@ -906,6 +911,7 @@ function boot(): void {
             flow.kills += 1;
             sfx.kill();
             fovKick = Math.max(fovKick, 2.2);
+            if (killStreak >= 3) hitStopT = 0.07; // 连杀瞬间顿一拍
             syncBossModel();
             maybeDropOrb(e.root.position);
             addKillBurst(e.root.position);
@@ -1279,6 +1285,11 @@ function boot(): void {
   const loop = new FixedLoop({
     fixedDt: 1 / 60,
     onFixed: (dt, time) => {
+      // hit-stop：冻结逻辑（渲染继续，画面整体停住），比慢动作更有顿挫
+      if (hitStopT > 0) {
+        hitStopT -= dt;
+        return;
+      }
       const snap = input.snapshot();
 
       // 暂停态（死亡/通关/主动暂停/设置面板）：冻结玩家与战斗逻辑
