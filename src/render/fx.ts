@@ -65,6 +65,8 @@ interface Popup {
   text: string;
   color: string;
   size: number;
+  /** 聚合键（同键的年轻跳字会合并数值，避免连射时叠成一团） */
+  key: string;
 }
 
 export class Fx {
@@ -215,8 +217,31 @@ export class Fx {
     ring.color.setHex(color);
   }
 
-  /** 世界坐标伤害跳字 */
-  popup(worldPos: THREE.Vector3, text: string, color: string, size = 18): void {
+  /**
+   * 世界坐标伤害跳字。
+   * 带 key 时做聚合：120ms 内同键的跳字合并数值并刷新位置（连射时同一敌人
+   * 只有一行不断累加的数字，而不是几十层叠在一起）。
+   */
+  popup(worldPos: THREE.Vector3, text: string, color: string, size = 18, key = ''): void {
+    if (key) {
+      for (let i = this.popups.length - 1; i >= 0; i--) {
+        const p = this.popups[i];
+        if (p.key !== key) continue;
+        if (p.ttl - p.life > 0.12) break; // 只合并"还很年轻"的
+        const a = parseFloat(p.text.replace(/[^\d.-]/g, ''));
+        const b = parseFloat(text.replace(/[^\d.-]/g, ''));
+        if (Number.isFinite(a) && Number.isFinite(b)) {
+          p.text = String(Math.round(a + b));
+          p.x = worldPos.x;
+          p.y = worldPos.y;
+          p.z = worldPos.z;
+          p.life = Math.max(p.life, 0.45);
+          p.ttl = Math.max(p.ttl, 0.85);
+          return;
+        }
+        break;
+      }
+    }
     if (this.popups.length > 40) this.popups.shift();
     this.popups.push({
       x: worldPos.x,
@@ -228,6 +253,7 @@ export class Fx {
       text,
       color,
       size,
+      key,
     });
   }
 

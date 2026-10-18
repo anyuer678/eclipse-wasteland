@@ -832,6 +832,8 @@ function boot(): void {
           return true;
         }
       }
+      /** 本次命中的跳字聚合键（BOSS / 兵种敌人各自一行不断累加） */
+      let popupKey = '';
       // 连杀增伤 + 隐身增伤 + 攻击倍率 + 局内成长 + 暴击（含词缀/暴击球）
       const st = computeStats();
       const curG = inventory.getWeapon(arsenal.current.def.id);
@@ -850,6 +852,7 @@ function boot(): void {
         const bdz = centerScratch.z - pos.z;
         // 命中球体半径 3.2，判定半径需匹配（distance² < 12）
         if (bdx * bdx + bdy * bdy + bdz * bdz < 12) {
+          popupKey = 'boss';
           const dead = activeBoss.takeDamage(dmg);
           if (dead) {
             flow.kills += 1;
@@ -885,6 +888,7 @@ function boot(): void {
         }
         if (bestE) {
           const e = bestE;
+          popupKey = `en${e.id}`;
           if (extra.slow !== undefined) e.applySlow(extra.slow, 1.6);
           // 烈焰风暴：命中施加灼�?DOT
           if (arsenal.current.def.mech.kind === 'beam') e.applyBurn(2.2, 5);
@@ -930,7 +934,7 @@ function boot(): void {
         sfx.hit();
         const st = computeStats();
         const isCrit = Math.random() < st.critRate + affixCritMult(inventory.getWeapon(arsenal.current.def.id));
-        addDamagePopup(pos, `-${Math.round(dmg)}`, isCrit ? '#ffd24a' : '#ffb0a0', isCrit ? 27 : 20);
+        addDamagePopup(pos, `-${Math.round(dmg)}`, isCrit ? '#ffd24a' : '#ffb0a0', isCrit ? 27 : 20, popupKey);
         // 命中火花（小而淡，避免遮挡视野）
         spawnParticles(pos, isCrit ? 0xffd24a : 0xffaa66, isCrit ? 3 : 2, 2);
         // 吸血：词缀吸血 + 局内嗜血
@@ -1125,8 +1129,8 @@ function boot(): void {
   const addKillBurst = (pos: THREE.Vector3): void => {
     fx.burst(pos, 0xffd24a, 2.0);
   };
-  const addDamagePopup = (worldPos: THREE.Vector3, text: string, color: string, size = 17): void => {
-    fx.popup(worldPos, text, color, size);
+  const addDamagePopup = (worldPos: THREE.Vector3, text: string, color: string, size = 17, key = ''): void => {
+    fx.popup(worldPos, text, color, size, key);
   };
   let dashCooldown = 0;
   let shieldTimer = 0;

@@ -55,8 +55,12 @@ const tmpToPlayer = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
 const CENTER_Y = 1.0;
 
+let enemyUid = 0;
+
 export class Enemy {
   readonly def: EnemyDef;
+  /** 唯一 id（伤害跳字聚合用） */
+  readonly id = ++enemyUid;
   readonly root: THREE.Group;
   hp: number;
   alive = true;
