@@ -964,6 +964,7 @@ function boot(): void {
             flow.kills += 1;
             sfx.kill();
             if (addKillExp(runState, !!e.elite, e.level)) {
+              sfx.levelUp();
               paused = true;
               unlockMouse();
               shell.hidePause();
@@ -2163,6 +2164,7 @@ function boot(): void {
         killStreakTimer = 5;
         for (let i = 0; i < killed; i++) {
           if (addKillExp(runState, false)) {
+            sfx.levelUp();
             paused = true;
             unlockMouse();
             shell.hidePause();

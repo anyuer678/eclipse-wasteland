@@ -225,6 +225,12 @@ export class Sfx {
     this.noiseBurst(0.13, 1800, 350, 0.12);
   }
 
+  /** 升级：上行琶音（四音） */
+  levelUp(): void {
+    const notes = [440, 554, 659, 880];
+    notes.forEach((f, i) => this.tone('triangle', f, f, 0.14, 0.14, i * 0.09));
+  }
+
   /** 拾取增益：上扬双音 */
   pickup(): void {
     if (!this.ok('pickup', 100)) return;
