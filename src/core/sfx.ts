@@ -31,6 +31,47 @@ export class Sfx {
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
     this.startAmbient();
+    if (this.musicOn) this.startMusic();
+  }
+
+  // ---- 程序化背景音乐：低音铺底 + 五度 + 小调五声琶音，2.4s 一小节循环 ----
+  private musicOn = true;
+  private musicTimer: number | null = null;
+  private musicStep = 0;
+
+  setMusic(on: boolean): void {
+    this.musicOn = on;
+    if (!on && this.musicTimer !== null) {
+      clearInterval(this.musicTimer);
+      this.musicTimer = null;
+    }
+    if (on && this.ctx) this.startMusic();
+  }
+
+  private startMusic(): void {
+    if (this.musicTimer !== null) return;
+    const step = (): void => {
+      // 页面在后台时 AudioContext 会被挂起：currentTime 不前进，跳过以免音符堆积
+      if (!this.ctx || !this.musicOn || this.muted || this.ctx.state !== 'running') return;
+      this.scheduleBar();
+    };
+    step();
+    this.musicTimer = window.setInterval(step, 2400);
+  }
+
+  /** 一小节：根音低音 + 纯五度 + 概率琶音（A 小调五声，缓慢压抑的荒原感） */
+  private scheduleBar(): void {
+    const roots = [55, 43.65, 65.41, 49]; // A1 → F1 → C2 → G1
+    const root = roots[Math.floor(this.musicStep / 2) % roots.length];
+    this.musicStep += 1;
+    this.tone('triangle', root, root * 0.995, 2.4, 0.075);
+    this.tone('sine', root * 1.5, root * 1.5, 2.4, 0.038);
+    const scale = [0, 3, 5, 7, 10]; // 小调五声
+    for (let i = 0; i < 3; i++) {
+      if (Math.random() < 0.32) continue;
+      const f = root * 4 * Math.pow(2, scale[Math.floor(Math.random() * scale.length)] / 12);
+      this.tone('triangle', f, f * 0.995, 0.55, 0.03, i * 0.62 + Math.random() * 0.25);
+    }
   }
 
   /** 环境底噪：循环棕噪声过低通，音量极低（风声/荒原氛围） */

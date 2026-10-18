@@ -602,10 +602,12 @@ function boot(): void {
   const settings = loadSettings();
   sfx.setVolume(settings.volume);
   sfx.setMuted(settings.muted);
+  sfx.setMusic(settings.music);
   world.setQuality(settings.quality === 'auto' ? 'medium' : settings.quality, settings.quality === 'auto');
   const settingsPanel = createSettingsPanel(settings, (s2) => {
     sfx.setVolume(s2.volume);
     sfx.setMuted(s2.muted);
+    sfx.setMusic(s2.music);
     world.setQuality(s2.quality === 'auto' ? 'medium' : s2.quality, s2.quality === 'auto');
     radar.el.style.display = s2.radar ? 'block' : 'none';
   });

@@ -16,12 +16,14 @@ export interface SettingsState {
   quality: 'auto' | 'low' | 'medium' | 'high';
   /** 雷达开关 */
   radar: boolean;
+  /** 背景音乐开关 */
+  music: boolean;
 }
 
 const KEY = 'ss-settings-v1';
 
 export function loadSettings(): SettingsState {
-  const base: SettingsState = { volume: 0.5, muted: false, sens: 1, quality: 'auto', radar: true };
+  const base: SettingsState = { volume: 0.5, muted: false, sens: 1, quality: 'auto', radar: true, music: true };
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) return { ...base, ...(JSON.parse(raw) as Partial<SettingsState>) };
@@ -125,6 +127,19 @@ export function createSettingsPanel(
     qBtns[id] = b;
   }
 
+  // 音乐
+  const mu = row('背景音乐');
+  const musicBox = document.createElement('input');
+  musicBox.type = 'checkbox';
+  musicBox.style.cssText = 'accent-color:#5b8ec4;';
+  mu.body.appendChild(musicBox);
+  musicBox.addEventListener('change', () => {
+    state.music = musicBox.checked;
+    apply(state);
+    saveSettings(state);
+    refresh();
+  });
+
   // 雷达
   const rd = row('雷达');
   const radarBox = document.createElement('input');
@@ -153,6 +168,7 @@ export function createSettingsPanel(
       qBtns[id].style.borderColor = state.quality === id ? '#5b8ec4' : '#262e3a';
     }
     radarBox.checked = state.radar;
+    musicBox.checked = state.music;
   }
 
   volSlider.addEventListener('input', () => {
