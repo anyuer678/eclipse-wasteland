@@ -62,7 +62,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'm4-volcano',
     name: '熔岩深渊',
-    mapId: 'facility',
+    mapId: 'volcano',
     introSeconds: 4,
     waves: [
       { chasers: 12, boomers: 3, spitters: 3, berserkers: 1 },
@@ -79,7 +79,7 @@ export const MISSIONS: MissionDef[] = [
   {
     id: 'm5-ice',
     name: '冰霜要塞',
-    mapId: 'quarry',
+    mapId: 'ice',
     introSeconds: 4,
     waves: [
       { chasers: 14, boomers: 2, spitters: 4, guards: 2 },

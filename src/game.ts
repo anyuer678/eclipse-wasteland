@@ -801,7 +801,12 @@ function boot(): void {
             // BOSS 必掉 2 个 BUFF 球
             spawnBuffOrb(activeBoss.root.position.clone());
             spawnBuffOrb(activeBoss.root.position.clone().add(new THREE.Vector3(1.5, 0, 0)));
-            addKillBurst(activeBoss.root.position);
+            // 死亡爆点：双环 + 大量火花（一次性事件，允许临时分配）
+            const bp = activeBoss.root.position;
+            fx.burst(bp, 0xff8844, 5);
+            fx.burst(bp, 0xffd24a, 2.6);
+            fx.emit(new THREE.Vector3(bp.x, bp.y + 1.6, bp.z), 0xff7a33, 26, 7.5, 2.2);
+            addKillBurst(bp);
           }
           hitSomething = true;
         }

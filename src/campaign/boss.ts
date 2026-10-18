@@ -79,6 +79,11 @@ export class Boss {
   }
 
   /** 动画混合器（开源模型自带 Idle/Walk/Run，接上后 BOSS 不再像雕像） */
+  private model: THREE.Group | null = null;
+  private mats: THREE.MeshStandardMaterial[] = [];
+  private flash = 0;
+  private pose = 0;
+  private poseDir = 1;
   private mixer: THREE.AnimationMixer | null = null;
   private actionIdle: THREE.AnimationAction | null = null;
   private actionMove: THREE.AnimationAction | null = null;
@@ -101,6 +106,13 @@ export class Boss {
     });
     group.position.y = 0;
     this.root.add(group);
+    this.model = group;
+    // 收集克隆后的材质做受击闪红
+    this.mats = [];
+    group.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (m && !Array.isArray(m) && m.emissive) this.mats.push(m);
+    });
     this.bindClips(group, clips);
   }
 
@@ -166,6 +178,12 @@ export class Boss {
     this.root.lookAt(playerPos.x, this.root.position.y, playerPos.z);
     // 动画推进放最前面：蓄力/践踏这些早退分支也要继续播
     this.mixer?.update(dt);
+    // 受击闪红 + 技能前摇姿态（叠加在骨骼动画之上）
+    this.flash = Math.max(0, this.flash - dt * 6);
+    const e = this.flash * 0.55;
+    for (const m of this.mats) m.emissive.setRGB(e, e * 0.22, e * 0.16);
+    this.pose = Math.max(0, this.pose - dt * 3.2);
+    if (this.model) this.model.rotation.x = this.pose * 0.32 * this.poseDir;
     const toPlayer = new THREE.Vector3().subVectors(playerPos, this.root.position);
     toPlayer.y = 0;
     const dist = toPlayer.length();
@@ -204,6 +222,8 @@ export class Boss {
     this.meleeCooldown -= dt;
     if (dist < this.meleeRange && this.meleeCooldown <= 0) {
       this.meleeCooldown = 1.1;
+      this.pose = 1;
+      this.poseDir = 1;
       return { skill: 'swipe', melee: 12 + this.phase * 3 };
     }
 
@@ -225,6 +245,8 @@ export class Boss {
 
       if (pick === 'charge' && dist > 3) {
         this.charging = true;
+        this.pose = 0.7;
+        this.poseDir = 1;
         this.chargeTimer = 0.55;
         this.chargeDir.copy(dir);
         this.flashBoss(0xff6600);
@@ -263,6 +285,7 @@ export class Boss {
     const reduction = res === 0 ? 0 : res === 1 ? 0.15 : res === 2 ? 0.35 : 0.55;
     const finalDmg = amount * (1 - reduction);
     this.hp -= finalDmg;
+    this.flash = 1;
     // 阶段转换检查
     this.checkPhaseTransition();
     if (this.hp <= 0) {

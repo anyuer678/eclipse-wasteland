@@ -631,7 +631,7 @@ export class World {
     this.sunGlow = sunGlow;
     if (this.sun) {
       this.sun.color.setHex(pal.sun);
-      this.sun.intensity = mapId === 'volcano' ? 1.85 : 2.5;
+      this.sun.intensity = mapId === 'volcano' ? 2.1 : 2.5;
       this.sun.position.copy(sunDir).multiplyScalar(46);
       this.sun.shadow.intensity = mapId === 'volcano' ? 0.75 : 1;
     }
@@ -642,7 +642,7 @@ export class World {
     if (this.hemi) {
       this.hemi.color.setHex(mixHex(pal.skyHorizon, 0xffffff, 0.35));
       this.hemi.groundColor.setHex(mixHex(pal.ground, 0x000000, 0.35));
-      this.hemi.intensity = this.quality === 'low' ? 1.45 : mapId === 'volcano' ? 0.75 : 1.15;
+      this.hemi.intensity = this.quality === 'low' ? 1.45 : mapId === 'volcano' ? 0.95 : 1.15;
     }
 
     // ---------- 高度场 ----------
