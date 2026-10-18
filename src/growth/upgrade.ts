@@ -1,9 +1,12 @@
 ﻿/**
  * growth/upgrade — 强化与进阶规则。
  *
- * 数值为占位（用户要求数值体系后续单独设计），当前规则：
- *   强化：每级 +5% 武器伤害，消耗 合金碎片（等级越高越贵）
- *   进阶：0-3 阶，每阶武器机制效果 +50%，消耗 核心晶体
+ * 数值与关卡奖励经济对齐（missions.ts 奖励 ≈ 合金 10-48 / 核心 12-48 每次通关）：
+ *   同步强化：每级 +5% 武器伤害，成本 2 + 等级/4 合金（等级越高越贵，拉满按材料自动停）
+ *   进阶：0-3 阶，每阶武器机制效果 +50%，消耗核心晶体 8/16/24
+ *   符文：0-10 级，每级 +2% 伤害，每 2 级解锁 1 个词缀槽
+ *   附魔：0-20 级，每级暴击 +1% / 攻速 +2%
+ *   巅峰：0-15 级，每级伤害 +3% / 生命 +5，每 5 级额外暴击 +1%
  * 属性计算函数供武器系统查询：伤害倍率 / 机制倍率。
  */
 import type { WeaponDef } from '../arsenal';
@@ -115,7 +118,8 @@ export function mechMultiplier(def: WeaponDef, inventory: Inventory): number {
 /** 尝试强化一次，成功返回新等级，失败（材料不足）返回 null */
 export function tryUpgrade(def: WeaponDef, inventory: Inventory): { level: number; cost: number } | null {
   const g = inventory.getWeapon(def.id);
-  const cost = (g.level + 1) * 2; // 强化成本随等级增长
+  // 同步强化成本：2 + 每 4 级 +1 合金（与关卡奖励对齐：中期关卡数小时可拉满数十级）
+  const cost = 2 + Math.floor(g.level / 4);
   if (!inventory.spendMaterial('合金碎片', cost)) return null;
   g.level += 1;
   inventory.persist();
@@ -193,7 +197,7 @@ export function critFromGrowth(g: { enchant: number; pinnacle: number }): number
 export function tryAscend(def: WeaponDef, inventory: Inventory): { ascension: number; cost: number } | null {
   const g = inventory.getWeapon(def.id);
   if (g.ascension >= MAX_ASCENSION) return null;
-  const cost = 5 + g.ascension * 5;
+  const cost = 8 + g.ascension * 8; // 进阶 8/16/24 核心晶体（机制 +50%/阶，成本高于附魔）
   if (!inventory.spendMaterial('核心晶体', cost)) return null;
   g.ascension += 1;
   inventory.persist();

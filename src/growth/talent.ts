@@ -16,10 +16,14 @@ export interface TalentNode {
 }
 
 export const TALENT_NODES: TalentNode[] = [
-  { id: 'dmg', name: '火力强化', desc: (l) => `武器伤害 +${l * 4}%`, maxLevel: 5, perLevel: 0.04 },
-  { id: 'hp', name: '体魄', desc: (l) => `生命上限 +${l * 25}`, maxLevel: 5, perLevel: 25 },
-  { id: 'energy', name: '能量亲和', desc: (l) => `能量获取 +${l * 15}%`, maxLevel: 5, perLevel: 0.15 },
-  { id: 'loot', name: '搜刮', desc: (l) => `金币掉落 +${l * 20}%`, maxLevel: 5, perLevel: 0.2 },
+  { id: 'dmg', name: '火力强化', desc: (l) => `武器伤害 +${l * 6}%`, maxLevel: 7, perLevel: 0.06 },
+  { id: 'hp', name: '体魄', desc: (l) => `生命上限 +${l * 30}`, maxLevel: 7, perLevel: 30 },
+  { id: 'energy', name: '能量亲和', desc: (l) => `能量获取 +${l * 20}%`, maxLevel: 7, perLevel: 0.2 },
+  { id: 'loot', name: '搜刮', desc: (l) => `金币掉落 +${l * 25}%`, maxLevel: 7, perLevel: 0.25 },
+  { id: 'spd', name: '迅捷', desc: (l) => `射速 +${l * 5}%`, maxLevel: 7, perLevel: 0.05 },
+  { id: 'crit', name: '致命', desc: (l) => `暴击率 +${l * 3}%`, maxLevel: 7, perLevel: 0.03 },
+  { id: 'armor', name: '韧性', desc: (l) => `受伤 -${l * 4}%`, maxLevel: 7, perLevel: 0.04 },
+  { id: 'exp', name: '战意', desc: (l) => `击杀经验 +${l * 15}%`, maxLevel: 7, perLevel: 0.15 },
 ];
 
 /** 存档中的天赋等级（持久化在 inventory） */
@@ -70,10 +74,18 @@ export function upgradeTalent(state: TalentState, id: string, inventory: Invento
 }
 
 /** 汇总加成 */
-export function talentBonuses(state: TalentState): { dmg: number; hp: number; energyGain: number; gold: number } {
-  const dmg = talentLevel(state, 'dmg') * 0.04;
-  const hp = talentLevel(state, 'hp') * 25;
-  const energyGain = talentLevel(state, 'energy') * 0.15;
-  const gold = talentLevel(state, 'loot') * 0.2;
-  return { dmg, hp, energyGain, gold };
+export function talentBonuses(state: TalentState): {
+  dmg: number; hp: number; energyGain: number; gold: number;
+  spd: number; crit: number; armor: number; expBonus: number;
+} {
+  return {
+    dmg: talentLevel(state, 'dmg') * 0.06,
+    hp: talentLevel(state, 'hp') * 30,
+    energyGain: talentLevel(state, 'energy') * 0.2,
+    gold: talentLevel(state, 'loot') * 0.25,
+    spd: talentLevel(state, 'spd') * 0.05,
+    crit: talentLevel(state, 'crit') * 0.03,
+    armor: talentLevel(state, 'armor') * 0.04,
+    expBonus: talentLevel(state, 'exp') * 0.15,
+  };
 }

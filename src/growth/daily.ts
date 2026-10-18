@@ -26,16 +26,28 @@ export function genDailyTasks(dateStr: string): DailyTask[] {
   let h = 0;
   for (let i = 0; i < dateStr.length; i++) h = (h * 31 + dateStr.charCodeAt(i)) >>> 0;
   const mats = ['合金碎片', '核心晶体', '合金碎片'];
-  const kinds: DailyKind[] = ['kills', 'clears', 'chests'];
+  // 三类组合轮换：保证每天既有击杀/通关，也有强化或开箱
+  const kindSets: DailyKind[][] = [
+    ['kills', 'clears', 'chests'],
+    ['kills', 'upgrades', 'clears'],
+    ['upgrades', 'kills', 'chests'],
+  ];
+  const kinds = kindSets[h % kindSets.length];
   const targets = [25 + (h % 15), 1 + (h % 2), 4 + (h % 3)];
+  const names: Record<DailyKind, (t: number) => string> = {
+    kills: (t) => `猎杀敌人 ${t} 个`,
+    clears: (t) => `通关副本 ${t} 次`,
+    upgrades: (t) => `强化武器 ${t} 次`,
+    chests: (t) => `击碎补给箱 ${t} 个`,
+  };
   return kinds.map((k, i) => ({
     id: `d-${dateStr}-${i}`,
     kind: k,
-    name: k === 'kills' ? `猎杀敌人 ${targets[i]} 个` : k === 'clears' ? `通关副本 ${targets[i]} 次` : `击碎补给箱 ${targets[i]} 个`,
+    name: names[k](targets[i]),
     target: targets[i],
     rewardMaterial: mats[i],
-    rewardAmount: 8 + (h % 8) + i * 4,
-    rewardGold: 50 + (h % 60) + i * 30,
+    rewardAmount: 10 + (h % 8) + i * 5,
+    rewardGold: 60 + (h % 60) + i * 40,
   }));
 }
 

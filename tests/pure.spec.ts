@@ -122,9 +122,9 @@ describe('growth/upgrade tables', () => {
 describe('growth/stats', () => {
   it('baseStats layers growth bonuses', async () => {
     const { baseStats, fourStats, BUFF_DURATION } = await import('../src/growth/stats')
-    const s = baseStats(0.5, 20, 0.25, { enchant: 10, pinnacle: 5 })
+    const s = baseStats({ dmg: 0.5, hp: 20, energyGain: 0.25, spd: 0, crit: 0, armor: 0 }, { enchant: 10, pinnacle: 5 })
     expect(s.attackMult).toBeCloseTo(1 + 0.5 + 5 * 0.03)
-    expect(s.critRate).toBeLessThanOrEqual(0.45)
+    expect(s.critRate).toBeLessThanOrEqual(0.6)
     expect(s.critRate).toBeGreaterThan(0.06)
     expect(s.energyRegen).toBeCloseTo(1.25)
     expect(s.maxHpBonus).toBe(25 + 20)
@@ -136,23 +136,76 @@ describe('growth/stats', () => {
     expect(BUFF_DURATION.speed).toBe(12)
   })
 
-  it('critRate hard-capped at 0.45', async () => {
+  it('talent bonuses feed crit / armor / fire rate', async () => {
     const { baseStats } = await import('../src/growth/stats')
-    const s = baseStats(0, 0, 0, { enchant: 1000, pinnacle: 100 })
-    expect(s.critRate).toBe(0.45)
+    const s = baseStats({ dmg: 0, hp: 0, energyGain: 0, spd: 0.35, crit: 0.21, armor: 0.28 }, { enchant: 0, pinnacle: 0 })
+    expect(s.critRate).toBeCloseTo(0.06 + 0.21)
+    expect(s.armor).toBeCloseTo(0.28)
+    expect(s.fireRateMult).toBeCloseTo(1.35)
+  })
+
+  it('critRate hard-capped at 0.6', async () => {
+    const { baseStats } = await import('../src/growth/stats')
+    const s = baseStats({ dmg: 0, hp: 0, energyGain: 0, spd: 0, crit: 5, armor: 5 }, { enchant: 1000, pinnacle: 100 })
+    expect(s.critRate).toBe(0.6)
+    expect(s.armor).toBe(0.6)
+  })
+})
+
+describe('growth/run', () => {
+  it('addKillExp applies exp multiplier', async () => {
+    const { newRun, addKillExp } = await import('../src/growth/run')
+    // 怪物 Lv10 普通击杀：基础经验 1 + 8 = 9；×2.15 → 19（四舍五入）
+    const a = newRun()
+    addKillExp(a, false, 10, 1)
+    const b = newRun()
+    addKillExp(b, false, 10, 2.15)
+    expect(a.level).toBe(1) // 9 exp：升 1 级（需 5）剩 4
+    expect(b.level).toBe(2) // 19 exp：升 2 级（5+7）剩 7
+    expect(b.exp).toBe(7)
   })
 })
 
 describe('growth/talent tables', () => {
-  it('four nodes x 5 levels with positive perLevel', async () => {
+  it('eight nodes x 7 levels with positive perLevel', async () => {
     const { TALENT_NODES } = await import('../src/growth/talent')
-    expect(TALENT_NODES).toHaveLength(4)
+    expect(TALENT_NODES).toHaveLength(8)
     for (const n of TALENT_NODES) {
-      expect(n.maxLevel).toBe(5)
+      expect(n.maxLevel).toBe(7)
       expect(n.perLevel).toBeGreaterThan(0)
       expect(n.desc(1).length).toBeGreaterThan(0)
     }
     const ids = TALENT_NODES.map((n) => n.id)
-    expect(new Set(ids).size).toBe(4)
+    expect(new Set(ids).size).toBe(8)
+    // 加成必须落进战斗主循环：talentBonuses 覆盖 8 项
+    const { talentBonuses } = await import('../src/growth/talent')
+    const b = talentBonuses({ talents: {} })
+    for (const k of ['dmg', 'hp', 'energyGain', 'gold', 'spd', 'crit', 'armor', 'expBonus'] as const) {
+      expect(typeof b[k]).toBe('number')
+    }
+  })
+})
+
+describe('campaign/missions', () => {
+  it('normal missions tier by 2 up to Lv21, tower endless', async () => {
+    const { MISSIONS } = await import('../src/campaign/missions')
+    const normal = MISSIONS.filter((m) => !m.tower)
+    expect(normal).toHaveLength(11)
+    for (let i = 1; i < normal.length; i++) {
+      expect((normal[i].monsterLevel ?? 1) - (normal[i - 1].monsterLevel ?? 1)).toBe(2)
+    }
+    expect(normal[0].monsterLevel).toBe(1)
+    expect(normal[normal.length - 1].monsterLevel).toBe(21)
+    const tower = MISSIONS.find((m) => m.tower)
+    expect(tower).toBeTruthy()
+    expect(tower!.monsterLevel).toBe(20)
+    // 奖励随等级单调放大（对齐强化成本表）
+    for (let i = 1; i < normal.length; i++) {
+      expect(normal[i].rewards.amount).toBeGreaterThan(normal[i - 1].rewards.amount)
+    }
+    // BOSS 血量随等级增长
+    for (let i = 1; i < normal.length; i++) {
+      expect(normal[i].boss!.hp).toBeGreaterThan(normal[i - 1].boss!.hp)
+    }
   })
 })

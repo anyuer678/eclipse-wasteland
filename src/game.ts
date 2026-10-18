@@ -746,8 +746,9 @@ function boot(): void {
       refreshGrowth();
     } else if (result.phase === 'clear') {
       inventory.addMaterial(result.rewardMaterial, Math.round(result.rewardAmount * diffReward));
-      // 金币掉落（天�?搜刮"加成�? 击杀积累天赋点（�?15 击杀 +1�?
-      const goldReward = Math.round(30 * (1 + bonuses.gold) * diffReward);
+      // 金币掉落（天赋"搜刮"加成；基数随关卡怪物等级成长，与材料奖励同步）
+      const missionLv = result.mission.monsterLevel ?? 1;
+      const goldReward = Math.round((30 + missionLv * 5) * (1 + bonuses.gold) * diffReward);
       inventory.addGold(goldReward);
       const talentGain = Math.floor(result.kills / 15);
       if (talentGain > 0) inventory.addTalentPoints(talentGain);
@@ -908,8 +909,8 @@ function boot(): void {
             // BOSS 必掉 2 个 BUFF 球
             spawnBuffOrb(activeBoss.root.position.clone());
             spawnBuffOrb(activeBoss.root.position.clone().add(new THREE.Vector3(1.5, 0, 0)));
-            // BOSS 经验按怪物等级结算
-            addKillExp(runState, true, activeBoss.monsterLevel);
+            // BOSS 经验按怪物等级结算（天赋战意加成）
+            addKillExp(runState, true, activeBoss.monsterLevel, 1 + bonuses.expBonus);
             // 死亡爆点：双环 + 大量火花（一次性事件，允许临时分配）
             const bp = activeBoss.root.position;
             fx.burst(bp, 0xff8844, 5);
@@ -963,7 +964,7 @@ function boot(): void {
           if (dead) {
             flow.kills += 1;
             sfx.kill();
-            if (addKillExp(runState, !!e.elite, e.level)) {
+            if (addKillExp(runState, !!e.elite, e.level, 1 + bonuses.expBonus)) {
               sfx.levelUp();
               paused = true;
               unlockMouse();
@@ -1141,7 +1142,7 @@ function boot(): void {
   };
   const computeStats = (): ReturnType<typeof applyBuffs> => {
     if (statsCache) return statsCache;
-    const base = baseStats(bonuses.dmg, bonuses.hp, bonuses.energyGain, growthSummary());
+    const base = baseStats(bonuses, growthSummary());
     statsCache = applyBuffs(base, buffs);
     return statsCache;
   };
@@ -1173,7 +1174,9 @@ function boot(): void {
     spawnParticles(player.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xff4444, 2, 2.2);
     const st = computeStats();
     const furyResist = furyTimer > 0 ? 0.3 : 0;
-    const afterArmor = v * (1 - st.armor - runB.armorBonus - furyResist) * (shieldTimer > 0 ? 0.3 : 1);
+    // 总减伤（天赋韧性 + 局内铁壁 + 狂暴抗性）夹取到 85%，避免叠穿
+    const mitig = Math.min(0.85, st.armor + runB.armorBonus + furyResist);
+    const afterArmor = v * (1 - mitig) * (shieldTimer > 0 ? 0.3 : 1);
     setHp(hp - Math.max(0, afterArmor));
     if (runB.thorns > 0) {
       // 荆棘：反弹伤害给最近敌人
@@ -1831,7 +1834,7 @@ function boot(): void {
         killStreakTimer = 5;
         // 局内成长：击杀攒经验，升级时暂停弹出 3 选 1
         for (let i = 0; i < gained; i++) {
-          if (addKillExp(runState, false)) {
+          if (addKillExp(runState, false, 1, 1 + bonuses.expBonus)) {
             paused = true;
             unlockMouse(); // 选牌界面需要鼠标
             shell.hidePause();
@@ -2163,7 +2166,7 @@ function boot(): void {
         killStreak += killed;
         killStreakTimer = 5;
         for (let i = 0; i < killed; i++) {
-          if (addKillExp(runState, false)) {
+          if (addKillExp(runState, false, 1, 1 + bonuses.expBonus)) {
             sfx.levelUp();
             paused = true;
             unlockMouse();

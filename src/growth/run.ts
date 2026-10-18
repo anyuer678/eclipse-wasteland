@@ -82,8 +82,8 @@ export function suppressionTaken(diff: number): number {
 }
 
 /** 击杀获得经验（精英 ×2，经验随怪物等级增长——保证升级节奏跟得上怪物等级），返回是否升级 */
-export function addKillExp(run: RunState, elite: boolean, monsterLevel = 1): boolean {
-  run.exp += (elite ? 2 : 1) + Math.floor(monsterLevel * 0.8);
+export function addKillExp(run: RunState, elite: boolean, monsterLevel = 1, expMult = 1): boolean {
+  run.exp += Math.round(((elite ? 2 : 1) + Math.floor(monsterLevel * 0.8)) * expMult);
   let leveled = false;
   while (run.exp >= expNeeded(run.level)) {
     run.exp -= expNeeded(run.level);

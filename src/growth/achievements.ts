@@ -16,13 +16,17 @@ export interface AchievementDef {
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
-  { id: 'k1', name: '初露锋芒', desc: '累计击杀 50 个敌人', cond: 'kills', target: 50, reward: { gold: 50 } },
-  { id: 'k2', name: '战场老兵', desc: '累计击杀 200 个敌人', cond: 'kills', target: 200, reward: { alloy: 30 } },
-  { id: 'k3', name: '屠戮者', desc: '累计击杀 500 个敌人', cond: 'kills', target: 500, reward: { core: 15, gold: 200 } },
-  { id: 'c1', name: '初次告捷', desc: '通关任务 5 次', cond: 'clears', target: 5, reward: { gold: 80 } },
-  { id: 'c2', name: '常胜之师', desc: '通关任务 20 次', cond: 'clears', target: 20, reward: { alloy: 40, core: 10 } },
-  { id: 'u1', name: '锻造师', desc: '累计强化 10 次', cond: 'upgrades', target: 10, reward: { gold: 60 } },
-  { id: 'a1', name: '机师', desc: '累计进阶 3 次', cond: 'ascensions', target: 3, reward: { core: 8 } },
+  { id: 'k1', name: '初露锋芒', desc: '累计击杀 50 个敌人', cond: 'kills', target: 50, reward: { gold: 80 } },
+  { id: 'k2', name: '战场老兵', desc: '累计击杀 200 个敌人', cond: 'kills', target: 200, reward: { alloy: 50 } },
+  { id: 'k3', name: '屠戮者', desc: '累计击杀 500 个敌人', cond: 'kills', target: 500, reward: { core: 30, gold: 300 } },
+  { id: 'k4', name: '荒原行者', desc: '累计击杀 1500 个敌人', cond: 'kills', target: 1500, reward: { core: 60, alloy: 120 } },
+  { id: 'c1', name: '初次告捷', desc: '通关任务 5 次', cond: 'clears', target: 5, reward: { gold: 120 } },
+  { id: 'c2', name: '常胜之师', desc: '通关任务 20 次', cond: 'clears', target: 20, reward: { alloy: 60, core: 18 } },
+  { id: 'c3', name: '深空征服', desc: '通关任务 50 次', cond: 'clears', target: 50, reward: { core: 50, alloy: 150, gold: 500 } },
+  { id: 'u1', name: '锻造师', desc: '累计强化 10 次', cond: 'upgrades', target: 10, reward: { gold: 100 } },
+  { id: 'u2', name: '军械大师', desc: '累计强化 50 次', cond: 'upgrades', target: 50, reward: { alloy: 80, core: 20 } },
+  { id: 'a1', name: '机师', desc: '累计进阶 3 次', cond: 'ascensions', target: 3, reward: { core: 15 } },
+  { id: 'a2', name: '战争之王', desc: '累计进阶 10 次', cond: 'ascensions', target: 10, reward: { core: 40, alloy: 100 } },
 ];
 
 export interface AchievementState {

@@ -144,7 +144,7 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
   screen.appendChild(diffRow);
   const brief = el('div', '', '');
   brief.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;width:min(900px,94vw);';
-  MISSIONS.forEach((m, i) => {
+  MISSIONS.forEach((m) => {
     const baseLv = m.monsterLevel ?? 1;
     const card = el('div', 'ss-grid-card', '');
     card.style.cssText = 'padding:16px 18px;';
@@ -152,7 +152,7 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
     const head = el('div', '', '');
     head.style.cssText = 'display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;';
     head.appendChild(el('div', 'ss-grid-name', m.name + (m.tower ? '（无尽）' : '')));
-    const chip = el('span', 'lv-chip' + (i > 1 ? ' hot' : ''), `怪物 Lv.${baseLv}+`);
+    const chip = el('span', 'lv-chip' + (baseLv >= 9 ? ' hot' : ''), `怪物 Lv.${baseLv}+`);
     head.appendChild(chip);
     card.appendChild(head);
     // 信息行

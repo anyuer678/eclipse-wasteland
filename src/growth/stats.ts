@@ -13,19 +13,19 @@
 export interface PlayerStats {
   /** 攻击倍率（1 + 天赋dmg + 攻击药水 + 巅峰） */
   attackMult: number;
-  /** 暴击率 0-1（基础 + 附魔 + 巅峰） */
+  /** 暴击率 0-0.6（基础 + 附魔 + 巅峰 + 天赋致命） */
   critRate: number;
   /** 暴击伤害倍率 */
   critMult: number;
-  /** 护甲减伤 0-0.6（护盾药剂临时提升） */
+  /** 护甲减伤 0-0.6（天赋韧性；护盾药剂临时提升） */
   armor: number;
   /** 移速倍率（加速药水临时提升） */
   speedMult: number;
   /** 能量回复/秒（天赋能量亲和提升） */
   energyRegen: number;
-  /** 最大生命加成（体质/巅峰） */
+  /** 最大生命加成（体质/巅峰/天赋体魄） */
   maxHpBonus: number;
-  /** 攻速倍率（敏捷/附魔） */
+  /** 攻速倍率（敏捷/附魔/天赋迅捷） */
   fireRateMult: number;
 }
 
@@ -49,12 +49,11 @@ export interface FourStats {
 
 /**
  * 基础属性 + 天赋 + 武器成长（附魔/巅峰汇总）。
+ * @param talents 天赋加成 { dmg, hp, energyGain, spd, crit, armor }
  * @param growth 全武器成长汇总 { enchant: 总附魔, pinnacle: 总巅峰 }
  */
 export function baseStats(
-  dmgBonus: number,
-  hpBonus: number,
-  energyBonus: number,
+  talents: { dmg: number; hp: number; energyGain: number; spd: number; crit: number; armor: number },
   growth: { enchant: number; pinnacle: number }
 ): PlayerStats {
   // 力量：巅峰伤害加成；知识：附魔+巅峰暴击；敏捷：附魔攻速；体质：巅峰生命
@@ -62,14 +61,16 @@ export function baseStats(
   const critBonus = growth.enchant * 0.01 + Math.floor(growth.pinnacle / 5) * 0.01;
   const speedBonus = growth.enchant * 0.02;
   return {
-    attackMult: 1 + dmgBonus + powerBonus,
-    critRate: Math.min(0.45, 0.06 + critBonus),
+    attackMult: 1 + talents.dmg + powerBonus,
+    // 暴击上限 0.6：天赋致命（+21%）+ 附魔巅峰仍有空间，但不至于必暴
+    critRate: Math.min(0.6, 0.06 + critBonus + talents.crit),
     critMult: 1.6,
-    armor: 0,
+    // 天赋韧性减伤（上限 0.6，与护盾药剂叠加时由 applyBuffs 再夹取）
+    armor: Math.min(0.6, talents.armor),
     speedMult: 1,
-    energyRegen: 1 + energyBonus,
-    maxHpBonus: growth.pinnacle * 5 + hpBonus,
-    fireRateMult: 1 + speedBonus,
+    energyRegen: 1 + talents.energyGain,
+    maxHpBonus: growth.pinnacle * 5 + talents.hp,
+    fireRateMult: 1 + speedBonus + talents.spd,
   };
 }
 
