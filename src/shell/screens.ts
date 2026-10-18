@@ -75,7 +75,7 @@ export function createMenuScreen(cb: ScreenCallbacks): { screen: HTMLElement; ad
   mainTxt.appendChild(md);
   main.appendChild(mainTxt);
   const go = button('primary', '出击', () => cb.onStartMission(''));
-  go.style.cssText = 'background:var(--cinnabar);color:#0d1016;border:1px solid var(--cinnabar);padding:10px 30px;font-weight:600;letter-spacing:0.2em;';
+  go.style.cssText = 'background:var(--cinnabar);color:#ffffff;border:1px solid var(--cinnabar);padding:10px 30px;font-weight:600;letter-spacing:0.2em;';
   main.appendChild(go);
   main.addEventListener('click', (e) => { if ((e.target as HTMLElement).tagName !== 'BUTTON') cb.onStartMission(''); });
   grid.appendChild(main);
@@ -728,7 +728,7 @@ export function createStatsScreen(
 /** 局内商店（Tab 键，战斗中金币购买临时强化） */
 export function createCombatShop(cb: { onBuy: (id: string) => void; onClose: () => void }): { screen: HTMLElement; show: (gold: number) => void } {
   const screen = el('div', 'ss-screen hidden');
-  screen.style.cssText = 'z-index:45;background:rgba(8,10,8,0.9);';
+  screen.style.cssText = 'z-index:45;background:rgba(242,241,236,0.92);';
   const title = el('div', 'ss-title', '局内商店');
   title.style.cssText = 'margin-top:14vh;';
   screen.appendChild(title);
@@ -812,7 +812,7 @@ export function createDailyScreen(
 /** 升级选牌界面：3 选 1 局内强化（Roguelite） */
 export function createLevelUpScreen(cb: { onPick: (id: string) => void }): { screen: HTMLElement; show: (level: number, choices: { id: string; name: string; desc: string }[]) => void } {
   const screen = el('div', 'ss-screen hidden');
-  screen.style.cssText = 'z-index:40;background:rgba(8,8,12,0.92);';
+  screen.style.cssText = 'z-index:40;background:rgba(242,241,236,0.9);';
   const title = el('div', 'ss-title', '');
   title.style.cssText = 'margin-top:18vh;';
   screen.appendChild(title);

@@ -40,22 +40,22 @@ export class Radar {
     // 底盘
     ctx.beginPath();
     ctx.arc(s / 2, s / 2, s / 2 - 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(10,12,17,0.6)';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fill();
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(125,134,152,0.5)';
+    ctx.strokeStyle = 'rgba(34,37,44,0.45)';
     ctx.stroke();
     // 距离圈
     ctx.beginPath();
     ctx.arc(s / 2, s / 2, (s / 2 - 2) * 0.5, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(125,134,152,0.22)';
+    ctx.strokeStyle = 'rgba(34,37,44,0.18)';
     ctx.stroke();
     // 视线扇形（面前 60°）
     ctx.beginPath();
     ctx.moveTo(s / 2, s / 2);
     ctx.arc(s / 2, s / 2, s / 2 - 2, -Math.PI / 2 - 0.5, -Math.PI / 2 + 0.5);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(143,180,216,0.14)';
+    ctx.fillStyle = 'rgba(61,107,143,0.12)';
     ctx.fill();
   }
 
@@ -90,7 +90,7 @@ export class Radar {
     ctx.lineTo(4, 4);
     ctx.lineTo(-4, 4);
     ctx.closePath();
-    ctx.fillStyle = '#e8e4da';
+    ctx.fillStyle = '#22252c';
     ctx.fill();
     ctx.restore();
   }

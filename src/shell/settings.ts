@@ -56,7 +56,7 @@ export function createSettingsPanel(
   const el = document.createElement('div');
   el.style.cssText =
     'position:fixed;left:16px;top:70px;width:236px;z-index:60;display:none;pointer-events:auto;' +
-    "background:rgba(21,26,34,0.94);border:1px solid #262e3a;border-left:2px solid #5b8ec4;padding:12px 14px;font-family:var(--mono,monospace);color:#e8e4da;";
+    "background:rgba(255,255,255,0.94);border:1px solid #d9d7cf;border-left:2px solid #3d6b8f;padding:12px 14px;font-family:var(--mono,monospace);color:#22252c;box-shadow:0 2px 10px rgba(34,37,44,0.15);";
   document.body.appendChild(el);
 
   const title = document.createElement('div');
