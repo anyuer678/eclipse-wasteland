@@ -282,15 +282,17 @@ function boot(): void {
     const glow = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
     glow.position.y = 0.75;
     g.add(glow);
-    // 随机位置（远离玩家 4-10m）：优先走导航落点，保证不埋墙/平台，且贴真实地形
-    const spot = nav.findSpawnPoint(() => Math.random(), player.position.x, player.position.z, 4, 10, [], 0.8);
+    // 随机位置（远离玩家 4-10m）：优先走导航落点，保证不埋墙/平台，且贴真实地形；
+    // 同时避开场上已有宝箱，避免补给层多箱重叠成一堆
+    const occupied = chests.map((c) => ({ x: c.mesh.position.x, z: c.mesh.position.z, r: 0.5 }));
+    const spot = nav.findSpawnPoint(() => Math.random(), player.position.x, player.position.z, 4, 10, occupied, 1.0);
     if (spot) {
       g.position.set(spot.x, spot.y, spot.z);
     } else {
       const a = Math.random() * Math.PI * 2;
       const d = 4 + Math.random() * 6;
-      const x = clamp(player.position.x + Math.cos(a) * d, -12, 12);
-      const z = clamp(player.position.z + Math.sin(a) * d, -12, 12);
+      const x = clamp(player.position.x + Math.cos(a) * d, -38, 38);
+      const z = clamp(player.position.z + Math.sin(a) * d, -38, 38);
       g.position.set(x, player.terrainHeight(x, z), z);
     }
     world.scene.add(g);
