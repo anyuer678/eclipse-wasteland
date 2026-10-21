@@ -921,7 +921,7 @@ export function createResultScreen(cb: ScreenCallbacks): {
         title.style.color = 'var(--cinnabar-soft)';
         detail.innerHTML = `
           <div class="row"><span>关卡</span><b>${result.mission.name}</b></div>
-          <div class="row"><span>到达波次</span><b>${result.waveIndex + 1}</b></div>
+          <div class="row"><span>${result.mission.tower ? '到达层数' : '到达波次'}</span><b>${result.waveIndex + 1}</b></div>
           <div class="row"><span>击杀</span><b>${result.kills}</b></div>
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>
         `;

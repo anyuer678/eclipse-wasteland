@@ -761,7 +761,11 @@ function boot(): void {
       prevWave = flow.waveIndex;
       spawnChest(false);
       const totalWaves = _mission.waves.length;
-      showAnnouncement(`WAVE ${flow.waveIndex + 1} / ${totalWaves}`, '#ffffff', 1800);
+      showAnnouncement(
+        _mission.tower ? `第 ${flow.waveIndex + 1} 层` : `WAVE ${flow.waveIndex + 1} / ${totalWaves}`,
+        '#ffffff',
+        1800
+      );
       sfx.wave();
       if ((flow.waveIndex + 1) % 3 === 0) {
         setTimeout(() => showAnnouncement('\u26a0 精英波来袭', '#ff4444', 2000), 800);
