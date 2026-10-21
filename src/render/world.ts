@@ -753,7 +753,7 @@ export class World {
       const m = new THREE.Matrix4().compose(
         new THREE.Vector3(x, mid, z),
         new THREE.Quaternion().setFromEuler(
-          along === 'z' ? new THREE.Euler(h1 > h0 ? ang : -ang, 0, 0) : new THREE.Euler(0, 0, h1 > h0 ? -ang : ang)
+          along === 'z' ? new THREE.Euler(h1 > h0 ? -ang : ang, 0, 0) : new THREE.Euler(0, 0, h1 > h0 ? ang : -ang)
         ),
         new THREE.Vector3(1, 1, 1)
       );
@@ -803,7 +803,7 @@ export class World {
       addPlatform(-6, 6, 2.8, 2.4, 0.9);
       addPlatform(6, -6, 2.8, 2.4, 0.9);
       addPlatform(0, -9, 3.6, 2.8, 1.2);
-      addRamp(0, -6, 3.2, 6, 0, 1.2, 'z');
+      addRamp(-4.8, -9, 6, 2.8, 0, 1.2, 'x');
       addCrate(-8, 2); addCrate(8, 3); addCrate(-3, 9); addCrate(5, -8);
       // 废弃小屋
       for (const [hx, hz] of [[-12, -8], [12, 8], [-13, 7]] as const) {
@@ -859,7 +859,7 @@ export class World {
       addPlatform(-8, 6, 2.6, 2.6, 1.0);
       addPlatform(8, -7, 2.6, 2.6, 1.0);
       addPlatform(0, -9, 3.2, 2.8, 1.3);
-      addRamp(0, -6.5, 3, 5, 0, 1.3, 'z');
+      addRamp(-4.8, -9, 6, 2.8, 0, 1.3, 'x');
       addPlatform(4, 8, 2.4, 2.4, 1.2);
       addCrate(-10, -4); addCrate(10, 4); addCrate(0, -10);
     } else {
@@ -872,6 +872,9 @@ export class World {
         const x = (rng() - 0.5) * 18;
         const z = (rng() - 0.5) * 18;
         if (nearSpawn(x, z, 4)) continue;
+        // 西侧高台斜坡走廊与平台顶面禁放随机设备柜：否则会堵死小怪上坡的唯一入口
+        if (x > -8.6 && x < -1.0 && z > -11 && z < -7.2) continue;
+        if (Math.abs(x) < 2.1 && Math.abs(z + 9) < 1.8) continue;
         addBox(0.95, 0.85, 0.95, x, z, matWood);
         bag.shape(new THREE.SphereGeometry(0.07, 6, 5), glowMat, x, heightfield(x, z) + 0.98, z);
       }
@@ -889,7 +892,7 @@ export class World {
       addPlatform(-7, -6, 2.4, 2.4, 0.9);
       addPlatform(7, -6, 2.4, 2.4, 0.9);
       addPlatform(0, -9, 3.4, 2.6, 1.2);
-      addRamp(0, -6.5, 3, 5, 0, 1.2, 'z');
+      addRamp(-4.8, -9, 6, 2.8, 0, 1.2, 'x');
       addCrate(-8, 4); addCrate(8, -4); addCrate(0, -9); addCrate(9, 6);
     }
 
@@ -1084,9 +1087,10 @@ function makeHeightfield(seed: number): (x: number, z: number) => number {
     const rise = smooth(34, 50, r);
     const fall = 1 - smooth(62, 82, r);
     h += Math.max(0, ridge) * rise * fall;
-    // 出生点 + 主斜坡走廊压平（避免掩体/斜坡与地面出现缝隙）
+    // 出生点 + 高台斜坡走廊压平（避免掩体/斜坡与地面出现缝隙）。
+    // 斜坡在高台西侧（x≈-4.8, z≈-9），不能放在十字掩体墙上。
     const spawnFlat = Math.exp(-(x * x + (z - 6) * (z - 6)) / 34);
-    const rampFlat = Math.exp(-(x * x * 1.2 + (z + 7) * (z + 7)) / 26);
+    const rampFlat = Math.exp(-(((x + 4.8) / 4.0) ** 2 + ((z + 9) / 1.8) ** 2));
     h *= 1 - 0.85 * Math.max(spawnFlat, rampFlat);
     return Math.max(0, h);
   };

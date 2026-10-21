@@ -6,7 +6,7 @@
  *   - Esc 暂停菜单；死�?通关冻结战斗并显示结算界�? *   - 快捷键：R 重开（结算态）· N 换关（结算态）· T 强化 · Y 进阶
  */
 import * as THREE from 'three';
-import { EventBus, FixedLoop, ServiceRegistry, clamp } from './core';
+import { EventBus, FixedLoop, Rng, ServiceRegistry, clamp } from './core';
 import { sfx } from './core/sfx';
 import { World, SPAWN_POINT, nearSpawn } from './render';
 import { Fx } from './render/fx';
@@ -17,7 +17,8 @@ import { createSettingsPanel, loadSettings } from './shell/settings';
 import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
 import type { WeaponDef, FireContext } from './arsenal';
-import { Enemy, Spawner } from './horde';
+import { Enemy, NavField, Spawner, separationDelta } from './horde';
+import type { NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken } from './growth';
@@ -127,35 +128,42 @@ function boot(): void {
   let bonuses = talentBonuses(talentState);
   let maxHp = 100 + bonuses.hp;
 
+  // 地形高度：丘陵高度场（基础） + 斜坡（线性插值）+ 平台（矩形返回高度）
+  const terrainHeightAt = (x: number, z: number): number => {
+    const hf = (mapRoot?.userData.heightfield as ((x: number, z: number) => number) | undefined) ?? (() => 0);
+    const plats = (mapRoot?.userData.platforms ?? []) as { x: number; z: number; w: number; d: number; h: number }[];
+    const ramps = (mapRoot?.userData.ramps ?? []) as { x: number; z: number; w: number; d: number; h0: number; h1: number; along: 'x' | 'z' }[];
+    let h = hf(x, z);
+    for (const r of ramps) {
+      if (Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2) {
+        const t = r.along === 'z' ? (z - (r.z - r.d / 2)) / r.d : (x - (r.x - r.w / 2)) / r.w;
+        const rh = hf(x, z) + r.h0 + (r.h1 - r.h0) * Math.min(1, Math.max(0, t));
+        if (rh > h) h = rh;
+      }
+    }
+    for (const p of plats) {
+      if (Math.abs(x - p.x) <= p.w / 2 && Math.abs(z - p.z) <= p.d / 2) {
+        const ph = hf(x, z) + p.h;
+        if (ph > h) h = ph;
+      }
+    }
+    return h;
+  };
+
   const player = new PlayerController({
     speed: 5.2, jumpSpeed: 6.6, gravity: 16, eyeHeight: 1.6, boundRadius: 38,
-    terrainHeight: (x, z) => {
-      // 地形高度：丘陵高度场（基础） + 斜坡（线性插值）+ 平台（矩形返回高度）
-      const hf = (mapRoot?.userData.heightfield as ((x: number, z: number) => number) | undefined) ?? (() => 0);
-      const plats = (mapRoot?.userData.platforms ?? []) as { x: number; z: number; w: number; d: number; h: number }[];
-      const ramps = (mapRoot?.userData.ramps ?? []) as { x: number; z: number; w: number; d: number; h0: number; h1: number; along: 'x' | 'z' }[];
-      let h = hf(x, z);
-      for (const r of ramps) {
-        if (Math.abs(x - r.x) <= r.w / 2 && Math.abs(z - r.z) <= r.d / 2) {
-          const t = r.along === 'z' ? (z - (r.z - r.d / 2)) / r.d : (x - (r.x - r.w / 2)) / r.w;
-          const rh = hf(x, z) + r.h0 + (r.h1 - r.h0) * Math.min(1, Math.max(0, t));
-          if (rh > h) h = rh;
-        }
-      }
-      for (const p of plats) {
-        if (Math.abs(x - p.x) <= p.w / 2 && Math.abs(z - p.z) <= p.d / 2) {
-          const ph = hf(x, z) + p.h;
-          if (ph > h) h = ph;
-        }
-      }
-      return h;
-    },
-    // 障碍碰撞：按地图碰撞体把角色沿最小穿透方向推回（玩家与敌人共用，杜绝穿模）
+    terrainHeight: terrainHeightAt,
+    // 障碍碰撞：按地图碰撞体把角色沿最小穿透方向推回。
+    // 侧壁判定要兼顾平台顶面与斜坡收口：只看 p.y 会被重力每帧几毫米的下坠误判成"撞墙"，
+    // 把站在平台上的玩家挤下去。
     collide: (p) => {
       const obs = (mapRoot?.userData.obstacles ?? []) as { x: number; z: number; hw: number; hd: number; top: number }[];
       const R = 0.34;
+      const groundHere = terrainHeightAt(p.x, p.z);
       for (const o of obs) {
-        if (p.y >= o.top - 0.06) continue; // 已站上顶部（平台/集装箱）
+        if (p.y >= o.top - 0.2) continue; // 已站上/高于顶面
+        // 斜坡收口：脚下地形已接近顶面且人贴着坡面走，允许迈上去
+        if (groundHere >= o.top - 0.55 && p.y >= o.top - 0.55) continue;
         const dx = p.x - o.x;
         const dz = p.z - o.z;
         const ox = o.hw + R - Math.abs(dx);
@@ -182,6 +190,10 @@ function boot(): void {
 
   const tracer = new TracerPool(world.scene);
   const spawner = new Spawner(world.scene, 20260813);
+  /** 小怪导航流场：换图时烘焙，玩家跨格时更新 */
+  const nav = new NavField();
+  /** 刷怪落点专用随机（与战斗随机分离，保证波次可复现） */
+  const placementRng = new Rng(20260814);
 
   // 开源模型加载：BOSS=Soldier（放大），枪械 gun_*，环境装饰 env/*（小怪改为程序化合并网格）
   const assets = createAssetLib();
@@ -490,6 +502,23 @@ function boot(): void {
     }
     mountEnv(); // 挂载开源环境素材（Kenney CC0：岩石/树木/灌木）
     player.position.set(SPAWN_POINT.x, 0, SPAWN_POINT.z);
+    // 换图后重新烘焙导航网格；刷怪落点由导航网格给出（不再随机刷在玩家脸上/墙里）
+    nav.build((mapRoot.userData.obstacles ?? []) as NavObstacle[], player.terrainHeight, {
+      agentRadius: 0.62,
+      stepHeight: 0.4,
+      walkRadius: 38.5,
+    });
+    spawner.setPlacement((kind, _index, _total, placed, opts) =>
+      nav.findSpawnPoint(
+        () => placementRng.next(),
+        opts?.center?.x ?? player.position.x,
+        opts?.center?.z ?? player.position.z,
+        opts?.placeMin ?? 13,
+        opts?.placeMax ?? 22,
+        placed,
+        kind === 'boomer' ? 2.2 : 1.5
+      )
+    );
     setHp(maxHp);
     flow.difficulty = difficulty;
     flow.start();
@@ -801,6 +830,55 @@ function boot(): void {
       }
     }
     return to;
+  };
+
+  /**
+   * 小怪水平碰撞：圆 vs 障碍 AABB。两次迭代，避免被相邻两个箱体夹住。
+   * 站在障碍顶面（平台）时跳过，否则会被从平台上推下去。
+   */
+  const resolveEnemyObstacles = (pos: THREE.Vector3, radius: number): void => {
+    const groundHere = player.terrainHeight(pos.x, pos.z);
+    for (let pass = 0; pass < 2; pass++) {
+      let moved = false;
+      for (const o of nav.obstacles) {
+        // 站在顶面，或贴着斜坡走到顶面收口：不算撞墙。
+        // 注意必须同时看脚下高度：被挤进平台底部（y=0、地面=1.2）时不能放行。
+        if (pos.y >= o.top - 0.2) continue;
+        if (groundHere >= o.top - 0.55 && pos.y >= o.top - 0.55) continue;
+        const dx = pos.x - o.x;
+        const dz = pos.z - o.z;
+        const closestX = clamp(dx, -o.hw, o.hw);
+        const closestZ = clamp(dz, -o.hd, o.hd);
+        const nx = dx - closestX;
+        const nz = dz - closestZ;
+        const d = Math.hypot(nx, nz);
+        if (d >= radius) continue;
+        if (d > 1e-5) {
+          const push = radius - d;
+          pos.x += (nx / d) * push;
+          pos.z += (nz / d) * push;
+        } else {
+          // 圆心在 AABB 内部：沿最小穿透轴推出
+          const ox = o.hw + radius - Math.abs(dx);
+          const oz = o.hd + radius - Math.abs(dz);
+          if (ox < oz) pos.x = o.x + (dx >= 0 ? 1 : -1) * (o.hw + radius);
+          else pos.z = o.z + (dz >= 0 ? 1 : -1) * (o.hd + radius);
+        }
+        moved = true;
+      }
+      if (!moved) break;
+    }
+  };
+
+  /** 限制在竞技场圆内（玩家 38；敌人略大一点给远程留空间） */
+  const clampArena = (pos: THREE.Vector3): void => {
+    const r = Math.hypot(pos.x, pos.z);
+    const maxR = 38.5;
+    if (r > maxR) {
+      const k = maxR / r;
+      pos.x *= k;
+      pos.z *= k;
+    }
   };
 
   // 音频上下文要在用户手势后创建/恢复（浏览器自动播放策略）
@@ -1644,15 +1722,13 @@ function boot(): void {
       if (killStreakTimer <= 0) killStreak = 0;
     }
 
-    // 敌人 AI（隐身时敌人不攻击）
-      for (const e of spawner.all()) {
+      // 敌人 AI：导航流场给出绕障方向，视线决定能否出手（隐身时敌人不攻击）
+      const crowd = spawner.all();
+      nav.updateTarget(player.position.x, player.position.z);
+      const navDir = { x: 0, z: 0 };
+      for (const e of crowd) {
         e.updateFlash(dt);
         e.tickElite(dt);
-        // 地形高度：敌人走上/走下平台
-        const eGround = player.terrainHeight(e.root.position.x, e.root.position.z);
-        if (e.root.position.y <= eGround) e.root.position.y = eGround;
-        // 障碍碰撞：敌人不穿平台侧壁
-        player.collide(e.root.position as unknown as { x: number; y: number; z: number });
         if (!e.alive) {
           e.tickCorpse(dt); // 倒地动画（播完由 spawner.sweep 回收）
           continue;
@@ -1662,19 +1738,42 @@ function boot(): void {
         if (died) {
           flow.kills += 1;
           syncBossModel();
+          continue;
         }
-        const evt = e.update(dt, player.position);
+        const ep = e.root.position;
+        const sees = nav.hasLineOfSight3D(ep.x, ep.y + 1.15, ep.z, player.position.x, player.position.y + 1.1, player.position.z);
+        navDir.x = 0;
+        navDir.z = 0;
+        nav.steer(ep.x, ep.z, ep.y, navDir);
+        const evt = e.update(dt, player.position, { navX: navDir.x, navZ: navDir.z, seesPlayer: sees });
         if (evt) {
           if (evt.melee !== undefined || evt.blast !== undefined) {
-            const dmg = evt.melee ?? evt.blast ?? 0;
             if (evt.blast !== undefined) {
-            e.die();
-            sfx.boom();
-            addShake(0.22, 0.45);
-          }
-            applyDamageToPlayer(dmg);
-
-            shell.hud.hit();
+              e.die();
+              sfx.boom();
+              addShake(0.22, 0.45);
+              // 爆炸按真实半径 + 遮挡结算：跑出范围和隔墙都不掉血
+              const dx = player.position.x - e.root.position.x;
+              const dz = player.position.z - e.root.position.z;
+              const dy = player.position.y - e.root.position.y;
+              const radius = e.def.blastRadius > 0 ? e.def.blastRadius : 2.6;
+              const exposed = nav.hasLineOfSight3D(
+                e.root.position.x,
+                e.root.position.y + 0.8,
+                e.root.position.z,
+                player.position.x,
+                player.position.y + 1.0,
+                player.position.z,
+                10
+              );
+              if (dx * dx + dz * dz <= radius * radius && Math.abs(dy) < 2.2 && exposed) {
+                applyDamageToPlayer(evt.blast);
+                shell.hud.hit();
+              }
+            } else {
+              applyDamageToPlayer(evt.melee ?? 0);
+              shell.hud.hit();
+            }
           }
           if (evt.spit) {
             // 真弹丸：飞行时间可躲，命中后统一结算；弹道被掩体截断
@@ -1691,41 +1790,62 @@ function boot(): void {
         }
       }
 
-      // 寻路避障：前方 1.1m 被掩体挡住 → 探左右空侧沿切线绕行（0.45s 防抖）
-      const crowd = spawner.all();
-      const obstacles = (mapRoot?.userData.obstacles ?? []) as { x: number; z: number; hw: number; hd: number; top: number }[];
-      const pointBlocked = (px: number, pz: number): boolean => {
-        for (const o of obstacles) {
-          if (o.top < 0.55) continue; // 矮障碍可跨过/翻越
-          if (Math.abs(px - o.x) < o.hw + 0.3 && Math.abs(pz - o.z) < o.hd + 0.3) return true;
-        }
-        return false;
-      };
+      // 移动物理：障碍推回 → 体积分离 → 玩家体积 → 再次障碍 → 贴地/下落
       for (const e of crowd) {
-        if (!e.alive || e.avoidT > 0) continue;
-        const dxp = player.position.x - e.root.position.x;
-        const dzp = player.position.z - e.root.position.z;
-        const dl = Math.hypot(dxp, dzp);
-        if (dl < 1.6) continue; // 近身不需要绕
-        const dirX = dxp / dl;
-        const dirZ = dzp / dl;
-        const ax = e.root.position.x + dirX * 1.15;
-        const az = e.root.position.z + dirZ * 1.15;
-        if (!pointBlocked(ax, az)) continue;
-        // 前方被挡：探左右切线
-        const perpLX = -dirZ;
-        const perpLZ = dirX;
-        const trySide = (px: number, pz: number, sx: number, sz: number): boolean => {
-          if (!pointBlocked(px + sx * 0.95, pz + sz * 0.95)) {
-            e.avoidX = sx;
-            e.avoidZ = sz;
-            e.avoidT = 0.45;
-            return true;
+        if (!e.alive) continue;
+        clampArena(e.root.position);
+        e.refuseClimb(player.terrainHeight(e.root.position.x, e.root.position.z));
+        resolveEnemyObstacles(e.root.position, e.def.radius + 0.06);
+      }
+      const sep = { x: 0, z: 0 };
+      // 两次松弛：密集怪群里单次分离会因相互抵消而残留重叠
+      for (let iter = 0; iter < 2; iter++) {
+        for (let i = 0; i < crowd.length; i++) {
+          const a = crowd[i];
+          if (!a.alive) continue;
+          for (let j = i + 1; j < crowd.length; j++) {
+            const b = crowd[j];
+            if (!b.alive) continue;
+            if (Math.abs(a.root.position.y - b.root.position.y) > 1.4) continue;
+            if (separationDelta(
+              a.root.position.x,
+              a.root.position.z,
+              a.def.radius + 0.06,
+              b.root.position.x,
+              b.root.position.z,
+              b.def.radius + 0.06,
+              sep,
+              ((i * 7 + j) * 2.399) % (Math.PI * 2),
+              0.6
+            )) {
+              a.root.position.x += sep.x;
+              a.root.position.z += sep.z;
+              b.root.position.x -= sep.x;
+              b.root.position.z -= sep.z;
+            }
           }
-          return false;
-        };
-        if (trySide(ax, az, perpLX, perpLZ)) continue;
-        trySide(ax, az, -perpLX, -perpLZ);
+        }
+      }
+      for (const e of crowd) {
+        if (!e.alive) continue;
+        const ep = e.root.position;
+        // 不许钻进玩家身体（近战仍能贴到 0.7~0.9m 出手）
+        const dx = ep.x - player.position.x;
+        const dz = ep.z - player.position.z;
+        const d = Math.hypot(dx, dz);
+        const minD = 0.3 + e.def.radius;
+        if (d < minD && Math.abs(ep.y - player.position.y) < 1.4) {
+          if (d > 1e-4) {
+            ep.x = player.position.x + (dx / d) * minD;
+            ep.z = player.position.z + (dz / d) * minD;
+          } else {
+            ep.x = player.position.x + minD;
+          }
+        }
+        clampArena(ep);
+        resolveEnemyObstacles(ep, e.def.radius + 0.06);
+        e.refuseClimb(player.terrainHeight(ep.x, ep.z));
+        e.applyGroundMotion(player.terrainHeight(ep.x, ep.z), dt);
       }
 
       // 状态特效：燃烧火花 / 减速蓝霜 / 晕眩星火（10Hz，避免粒子风暴）
@@ -1812,7 +1932,11 @@ function boot(): void {
               shell.hud.hit();
             }
           } else if (bevt.summon) {
-            spawner.spawnWave({ chasers: bevt.summon, boomers: 0, spitters: 0 });
+            // 召唤物围绕 BOSS 出现，而不是全图随机位置 / 玩家脚下
+            spawner.spawnWave(
+              { chasers: bevt.summon, boomers: 0, spitters: 0 },
+              { center: { x: activeBoss.root.position.x, z: activeBoss.root.position.z }, placeMin: 3.5, placeMax: 9 }
+            );
             syncBossModel();
           }
         }
@@ -1996,11 +2120,21 @@ function boot(): void {
     spawnStress(n = 20, spread = 14, hpMult = 1e6): void {
       spawner.spawnWave({ chasers: n, boomers: 0, spitters: 0 }, { hpMult });
       syncBossModel();
-      const list = spawner.all();
-      for (let i = 0; i < list.length; i++) {
-        const a = (i / Math.max(1, list.length)) * Math.PI * 2;
-        const r = 4 + (i % 5) * (spread / 5);
-        list[i].root.position.set(Math.cos(a) * r, 0, Math.sin(a) * r + 2);
+      const placed: { x: number; z: number; r: number }[] = [];
+      for (const e of spawner.all()) {
+        const spot = nav.findSpawnPoint(
+          () => placementRng.next(),
+          player.position.x,
+          player.position.z,
+          4,
+          Math.max(8, spread),
+          placed,
+          1.2
+        );
+        if (spot) {
+          e.place(spot.x, spot.z, spot.y);
+          placed.push({ x: spot.x, z: spot.z, r: e.def.radius });
+        }
       }
     },
     /** 调整视角（截图/调试用） */
@@ -2036,11 +2170,13 @@ function boot(): void {
         { hpMult }
       );
       syncBossModel();
-      // 排成一排摆在玩家正前方（截图/对比用）
+      // 排成一排摆在玩家正前方（截图/对比用），落点贴地
       const list = spawner.all();
       for (let i = 0; i < list.length; i++) {
         const off = (i - (list.length - 1) / 2) * 1.55;
-        list[i].root.position.set(player.position.x + off, 0, player.position.z - 5);
+        const x = player.position.x + off;
+        const z = player.position.z - 5;
+        list[i].place(x, z, player.terrainHeight(x, z));
       }
       return list.length;
     },
@@ -2052,7 +2188,9 @@ function boot(): void {
     },
     teleportEnemies(offsetX: number, offsetZ: number): void {
       for (const e of spawner.all()) {
-        e.root.position.set(player.position.x + offsetX, 0, player.position.z + offsetZ);
+        const x = player.position.x + offsetX;
+        const z = player.position.z + offsetZ;
+        e.place(x, z, player.terrainHeight(x, z));
       }
       syncBossModel();
     },
@@ -2070,6 +2208,58 @@ function boot(): void {
     },
     enemyHealths(): { hp: number; max: number; alive: boolean }[] {
       return spawner.all().map((e) => ({ hp: Math.max(0, Math.ceil(e.hp)), max: e.def.hp, alive: e.alive }));
+    },
+    /** 敌人运动采样：位置/地面高度/与玩家距离/卡位状态（AI 调试与回归用） */
+    enemyMotion(): {
+      kind: string;
+      x: number;
+      y: number;
+      z: number;
+      ground: number;
+      dist: number;
+      radius: number;
+      alive: boolean;
+      stunned: boolean;
+    }[] {
+      return spawner.all().map((e) => ({
+        kind: e.def.kind,
+        radius: e.def.radius,
+        x: +e.root.position.x.toFixed(2),
+        y: +e.root.position.y.toFixed(2),
+        z: +e.root.position.z.toFixed(2),
+        ground: +player.terrainHeight(e.root.position.x, e.root.position.z).toFixed(2),
+        dist: +Math.hypot(e.root.position.x - player.position.x, e.root.position.z - player.position.z).toFixed(2),
+        alive: e.alive,
+        stunned: e.isStunned(),
+      }));
+    },
+    playerHp(): number {
+      return Math.round(hp);
+    },
+    /** 导航网格状态（校验换图后是否成功烘焙） */
+    navInfo(): { ready: boolean; obstacles: number; cell: number } {
+      return { ready: nav.ready, obstacles: nav.obstacles.length, cell: nav.cell };
+    },
+    /** 碰撞体列表（地图调试：确认随机道具是否堵路） */
+    obstaclesDump(): { x: number; z: number; hw: number; hd: number; top: number }[] {
+      return nav.obstacles.map((o) => ({ x: o.x, z: o.z, hw: o.hw, hd: o.hd, top: +o.top.toFixed(2) }));
+    },
+    /** 单点导航探针：可走/可达/流场方向（AI 调试用） */
+    navProbe(x: number, z: number): { walkable: boolean; reachable: boolean; dx: number; dz: number; dist: number; rawDx: number; rawDz: number } {
+      nav.updateTarget(player.position.x, player.position.z);
+      const out = { x: 0, z: 0 };
+      nav.steer(x, z, player.terrainHeight(x, z), out);
+      const raw = { x: 0, z: 0 };
+      const rawOk = nav.rawFlow(x, z, raw);
+      return {
+        walkable: nav.isWalkable(x, z),
+        reachable: nav.reachable(x, z),
+        dx: +out.x.toFixed(2),
+        dz: +out.z.toFixed(2),
+        dist: nav.distanceAt(x, z),
+        rawDx: rawOk ? +raw.x.toFixed(2) : 0,
+        rawDz: rawOk ? +raw.z.toFixed(2) : 0,
+      };
     },
     enemyDump(): { childTypes: string[]; modelApplied: boolean; barOk: boolean; modelVisible: boolean }[] {
       return spawner.all().map((e) => ({

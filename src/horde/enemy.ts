@@ -9,6 +9,8 @@
  */
 import * as THREE from 'three';
 import { createHealthBar, getEnemyTemplate } from './enemyModel';
+import { stepVertical } from './motion';
+import type { VerticalBody } from './motion';
 
 export type EnemyKind = 'chaser' | 'boomer' | 'spitter' | 'guard' | 'berserker' | 'caster';
 
@@ -54,6 +56,15 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
 const tmpToPlayer = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
 const CENTER_Y = 1.0;
+
+/** 每帧由 game 侧注入的导航/视线信息 */
+export interface EnemyStepContext {
+  /** 指向玩家的单位方向（有遮挡时为绕行方向） */
+  navX: number;
+  navZ: number;
+  /** 3D 视线是否通畅（低掩体可越过，墙不可） */
+  seesPlayer: boolean;
+}
 
 let enemyUid = 0;
 
@@ -163,6 +174,8 @@ export class Enemy {
     }
 
     this.root.position.set(rng.range(-9, 9), 0, rng.range(-9, 9));
+    this.safeX = this.root.position.x;
+    this.safeZ = this.root.position.z;
     this.root.userData.enemy = this;
   }
 
@@ -177,9 +190,10 @@ export class Enemy {
   }
 
   /** 更新 AI，返回本帧是否对玩家造成伤害事件 */
-  update(dt: number, playerPos: THREE.Vector3): { melee?: number; blast?: number; spit?: { from: THREE.Vector3; to: THREE.Vector3; damage: number }; cast?: { from: THREE.Vector3; to: THREE.Vector3; damage: number }[] } | null {
+  update(dt: number, playerPos: THREE.Vector3, ctx: EnemyStepContext): { melee?: number; blast?: number; spit?: { from: THREE.Vector3; to: THREE.Vector3; damage: number }; cast?: { from: THREE.Vector3; to: THREE.Vector3; damage: number }[] } | null {
     if (!this.alive) return null;
     const d = this.def;
+    const sees = ctx.seesPlayer;
 
     // 击退滑行：独立于 AI 移动，指数衰减
     if (this.kvx !== 0 || this.kvz !== 0) {
@@ -208,12 +222,28 @@ export class Enemy {
     tmpToPlayer.y = 0;
     const dist = tmpToPlayer.length();
     const dir = dist > 0.001 ? tmpToPlayer.normalize() : tmpDir.set(0, 0, 0);
-
+    // 水平指向玩家（绕障）向量；无遮挡时才用直线
+    const navX = ctx.navX;
+    const navZ = ctx.navZ;
+    const navLen = Math.hypot(navX, navZ);
     const speed = d.speed * (this.slowTimer > 0 ? this.slowFactor : 1);
+    // 近战/自爆需要处在同一层（平台上下不能隔空打到）
+    const sameLevel = Math.abs(playerPos.y - this.root.position.y) < 1.15;
 
-    // 朝向玩家
-    this.root.lookAt(playerPos.x, this.root.position.y, playerPos.z);
+    // 朝向：看得见玩家盯玩家，绕障时看行进方向，避免倒着滑步
+    if (sees || dist < 2 || navLen < 0.01) this.root.lookAt(playerPos.x, this.root.position.y, playerPos.z);
+    else this.root.lookAt(this.root.position.x + navX, this.root.position.y, this.root.position.z + navZ);
     this.animate(dt, dist);
+
+    const moveAlongPath = (multiplier: number): void => {
+      if (navLen < 0.01) return;
+      this.root.position.x += (navX / navLen) * speed * multiplier * dt;
+      this.root.position.z += (navZ / navLen) * speed * multiplier * dt;
+    };
+    const moveAway = (multiplier: number): void => {
+      this.root.position.x -= dir.x * speed * multiplier * dt;
+      this.root.position.z -= dir.z * speed * multiplier * dt;
+    };
 
     if (d.kind === 'spitter') {
       this.spitCooldown -= dt;
@@ -221,7 +251,7 @@ export class Enemy {
       if (this.spitWindup > 0) {
         this.spitWindup -= dt;
         if (this.spitWindup <= 0) {
-          if (dist <= d.range + 2) {
+          if (dist <= d.range + 2 && sees) {
             this.spitCooldown = 2.2;
             const from = this.root.position.clone().add(new THREE.Vector3(0, 1.4, 0));
             const to = playerPos.clone().add(new THREE.Vector3(0, 1.2, 0));
@@ -231,19 +261,21 @@ export class Enemy {
         }
         return null;
       }
-      if (dist <= d.range && this.spitCooldown <= 0) {
+      // 有视线才出手；没有视线就沿寻路绕到能打的位置
+      if (dist <= d.range && sees && this.spitCooldown <= 0) {
         this.spitWindup = 0.42;
         this.lunge();
         return null;
       }
-      if (dist > 3) this.root.position.addScaledVector(dir, speed * 0.55 * dt);
+      if (dist < 4.5) moveAway(0.8);
+      else if (!sees || dist > d.range * 0.8) moveAlongPath(0.65);
     } else if (d.kind === 'caster') {
       // 弹幕法师：保持中距离，蓄力三连弹
       this.spitCooldown -= dt;
       if (this.castWindup > 0) {
         this.castWindup -= dt;
         if (this.castWindup <= 0) {
-          if (dist <= d.range + 2) {
+          if (dist <= d.range + 2 && sees) {
             this.spitCooldown = 2.4;
             this.lunge();
             const from = this.root.position.clone().add(new THREE.Vector3(0, 1.6, 0));
@@ -258,59 +290,47 @@ export class Enemy {
         }
         return null;
       }
-      if (dist < 5) {
-        this.root.position.addScaledVector(dir, -speed * dt);
-      } else if (dist > d.range - 2) {
-        this.root.position.addScaledVector(dir, speed * dt);
-      }
-      if (dist <= d.range && this.spitCooldown <= 0) {
+      if (dist <= d.range && sees && this.spitCooldown <= 0) {
         this.castWindup = 0.5;
         this.lunge();
+        return null;
       }
+      if (dist < 5) moveAway(1);
+      else if (!sees || dist > d.range - 2) moveAlongPath(1);
     } else if (d.kind === 'boomer') {
-      if (dist < 1.1) {
-        if (this.fuseTimer < 0) {
-          this.fuseTimer = 0.7;
-          this.lunge();
-        }
-      }
       if (this.fuseTimer >= 0) {
         this.fuseTimer -= dt;
         if (this.fuseTimer <= 0) {
           this.die();
           return { blast: d.damage };
         }
-      } else {
-        this.root.position.addScaledVector(dir, speed * dt);
+        return null;
       }
+      if (dist < 1.25 && sameLevel && sees) {
+        this.fuseTimer = 0.7;
+        this.lunge();
+        return null;
+      }
+      moveAlongPath(1);
     } else {
       // chaser / guard / berserker：近战（前摇 0.26s 蓄力 → 结算；给玩家反应窗口）
       if (this.windup > 0) {
         this.windup -= dt;
         if (this.windup <= 0) {
-          if (dist < 1.5) return { melee: d.damage }; // 蓄力结束仍在近身范围才命中
+          // 蓄力结束仍在近身范围、同层且没被掩体挡住才命中
+          if (dist < 1.5 && sameLevel && sees) return { melee: d.damage };
           return null;
         }
         return null; // 蓄力中定在原地（前倾姿态就是"要打人了"的提示）
       }
-      if (dist < 1.0) {
+      if (dist < 1.0 && sameLevel && sees) {
         if (this.attackCooldown <= 0) {
           this.attackCooldown = 0.9;
           this.windup = 0.26;
           this.lunge();
         }
       } else {
-        this.root.position.addScaledVector(dir, speed * dt);
-        // 迂回摆动：不再笔直冲锋（有机感，也更容易被侧翼火力拦截）
-        const wobble = Math.sin(this.phase * 0.33) * 0.3;
-        this.root.position.x += -dir.z * wobble * speed * dt;
-        this.root.position.z += dir.x * wobble * speed * dt;
-        // 避障绕行：前方被掩体挡住时沿切线绕行（方向由 game 侧探测）
-        if (this.avoidT > 0) {
-          this.avoidT -= dt;
-          this.root.position.x += this.avoidX * speed * dt;
-          this.root.position.z += this.avoidZ * speed * dt;
-        }
+        moveAlongPath(1);
       }
     }
 
@@ -347,6 +367,11 @@ export class Enemy {
   private stunT = 0;
   private kvx = 0;
   private kvz = 0;
+  /** 垂直物理：离地后受重力，落地贴地（不再永久悬空） */
+  private readonly vertical: VerticalBody = { y: 0, vy: 0, grounded: true };
+  /** 上一次站稳的位置：跨越过高地形失败时回退到这里 */
+  private safeX = 0;
+  private safeZ = 0;
 
   /** 被击退：沿方向施加冲量（速度会指数衰减） */
   applyKnockback(dirX: number, dirZ: number, impulse: number): void {
@@ -374,12 +399,43 @@ export class Enemy {
   /** 喷毒 / 施法前摇剩余时间 */
   private spitWindup = 0;
   private castWindup = 0;
-  /** 避障绕行方向（由 game 侧探测写入，持续 avoidT 秒） */
-  avoidX = 0;
-  avoidZ = 0;
-  avoidT = 0;
   private lunge(): void {
     this.attackAnim = 1;
+  }
+
+  /** 放置到世界坐标（刷怪/调试用；同步垂直物理状态） */
+  place(x: number, z: number, y: number): void {
+    this.root.position.set(x, y, z);
+    this.vertical.y = y;
+    this.vertical.vy = 0;
+    this.vertical.grounded = true;
+    this.safeX = x;
+    this.safeZ = z;
+  }
+
+  /** 每帧贴地/下落（由 game 在水平碰撞处理之后调用） */
+  applyGroundMotion(ground: number, dt: number): void {
+    this.vertical.y = this.root.position.y;
+    stepVertical(this.vertical, ground, dt);
+    this.root.position.y = this.vertical.y;
+    // 只有真正贴地才记录安全点；卡进坡体时不能把非法位置也记成安全点
+    if (this.vertical.grounded && Math.abs(this.root.position.y - ground) < 0.05) {
+      this.safeX = this.root.position.x;
+      this.safeZ = this.root.position.z;
+    }
+  }
+
+  isGrounded(): boolean {
+    return this.vertical.grounded;
+  }
+
+  /** 脚下的地面比当前高度高出一个台阶以上：回退到上次站稳点，防止钻进斜坡/台阶内部 */
+  refuseClimb(ground: number, stepUp = 0.5): boolean {
+    if (!this.vertical.grounded) return false;
+    if (ground - this.root.position.y <= stepUp) return false;
+    this.root.position.x = this.safeX;
+    this.root.position.z = this.safeZ;
+    return true;
   }
 
   /** 按元素类型受伤，返回是否死亡 */

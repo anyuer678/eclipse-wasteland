@@ -28,16 +28,36 @@ export interface WaveOptions {
   eliteChance?: number;
   /** 怪物等级（等级压制 / 经验结算） */
   level?: number;
+  /** 刷怪放置中心（默认由 game 侧决定，通常是玩家位置；BOSS 召唤传 BOSS 位置） */
+  center?: { x: number; z: number };
+  /** 相对放置中心的最小/最大距离 */
+  placeMin?: number;
+  placeMax?: number;
 }
+
+/** 刷怪落点选择器：由 game 用导航网格实现 */
+export type SpawnPlacement = (
+  kind: EnemyKind,
+  index: number,
+  total: number,
+  placed: readonly { x: number; z: number; r: number }[],
+  opts?: WaveOptions
+) => { x: number; z: number; y: number } | null;
 
 export class Spawner {
   private rng: Rng;
   private world: THREE.Scene;
   private enemies: Enemy[] = [];
+  /** 落点选择器（导航网格可用后由 game 注入） */
+  private placement: SpawnPlacement | null = null;
 
   constructor(world: THREE.Scene, seed: number) {
     this.world = world;
     this.rng = new Rng(seed);
+  }
+
+  setPlacement(placement: SpawnPlacement | null): void {
+    this.placement = placement;
   }
 
   spawnWave(spec: WaveSpec, opts?: WaveOptions): void {
@@ -49,12 +69,19 @@ export class Spawner {
       ...Array<EnemyKind>(spec.berserkers ?? 0).fill('berserker'),
       ...Array<EnemyKind>(spec.casters ?? 0).fill('caster'),
     ];
-    for (const kind of kinds) {
+    const placed: { x: number; z: number; r: number }[] = [];
+    for (let i = 0; i < kinds.length; i++) {
+      const kind = kinds[i];
       let elite: EliteAffix | undefined;
       if (opts?.eliteChance && this.rng.range(0, 1) < opts.eliteChance) {
         elite = ELITE_AFFIXES[Math.floor(this.rng.range(0, ELITE_AFFIXES.length))].kind;
       }
       const e = new Enemy(ENEMY_DEFS[kind], this.rng, { hpMult: opts?.hpMult, dmgMult: opts?.dmgMult, elite, level: opts?.level });
+      const spot = this.placement?.(kind, i, kinds.length, placed, opts);
+      if (spot) {
+        e.place(spot.x, spot.z, spot.y);
+        placed.push({ x: spot.x, z: spot.z, r: e.def.radius });
+      }
       this.world.add(e.root);
       this.enemies.push(e);
     }
