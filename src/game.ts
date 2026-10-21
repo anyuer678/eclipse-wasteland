@@ -1766,13 +1766,33 @@ function boot(): void {
         }
       }
 
-      // F 冲刺：向面朝方向突进
+      // F 冲刺：向面朝方向突进。
+      // 旧实现直接 position += 6m，会穿墙/穿平台；改为 0.25m 步进的碰撞与台阶检查。
       if (snap.key('KeyF') && !keyState.dash && dashCooldown <= 0) {
         dashCooldown = 4;
-        const dir = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)).multiplyScalar(-6);
-        player.position.add(dir);
-        player.position.x = clamp(player.position.x, -13, 13);
-        player.position.z = clamp(player.position.z, -13, 13);
+        const dx = -Math.sin(player.yaw);
+        const dz = -Math.cos(player.yaw);
+        const steps = 24;
+        const step = 6 / steps;
+        const probe = { x: 0, y: 0, z: 0 };
+        for (let i = 0; i < steps; i++) {
+          const nx = player.position.x + dx * step;
+          const nz = player.position.z + dz * step;
+          if (nx < -13 || nx > 13 || nz < -13 || nz > 13) break;
+          const ng = terrainHeightAt(nx, nz);
+          if (ng - player.position.y > 0.55) break; // 高台阶：冲刺不能上
+          probe.x = nx;
+          probe.y = player.position.y;
+          probe.z = nz;
+          player.collide(probe);
+          const movedX = probe.x - player.position.x;
+          const movedZ = probe.z - player.position.z;
+          if (movedX * dx + movedZ * dz < step * 0.25) break; // 撞墙
+          player.position.x = probe.x;
+          player.position.z = probe.z;
+          const gHere = terrainHeightAt(player.position.x, player.position.z);
+          if (gHere > player.position.y && gHere - player.position.y <= 0.55) player.position.y = gHere;
+        }
         tracer.fire(player.eye(), player.eye().clone().addScaledVector(fireCtx.direction, 3), 0x9fc9e8, 1.4);
       }
       keyState.dash = snap.key('KeyF');
@@ -2355,6 +2375,15 @@ function boot(): void {
     },
     playerHp(): number {
       return Math.round(hp);
+    },
+    playerPos(): { x: number; y: number; z: number; ground: number; onGround: boolean } {
+      return {
+        x: +player.position.x.toFixed(2),
+        y: +player.position.y.toFixed(2),
+        z: +player.position.z.toFixed(2),
+        ground: +player.terrainHeight(player.position.x, player.position.z).toFixed(2),
+        onGround: player.onGround,
+      };
     },
     /** 调试：切换角色（验证召唤/炼狱等角色技能的视线判定） */
     setRole(id: string): boolean {

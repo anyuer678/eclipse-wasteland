@@ -21,6 +21,9 @@ export interface ControllerOptions {
   collide?: (p: { x: number; y: number; z: number }) => void;
 }
 
+/** 可直接迈上的最大高差；超过就阻挡水平移动，避免从坡体/台阶侧面走上去 */
+const STEP_UP = 0.55;
+
 export class PlayerController {
   position = new THREE.Vector3(0, 0, 0);
   velocity = new THREE.Vector3();
@@ -45,6 +48,8 @@ export class PlayerController {
   /** 每逻辑帧推进 */
   update(input: InputSnapshot, dt: number): void {
     const o = this.opts;
+    const prevX = this.position.x;
+    const prevZ = this.position.z;
 
     // 视角（由外部喂入鼠标增量，避免依赖 Input 直接引用）
     // 注意：yaw/pitch 由 look() 更新，这里只做位移
@@ -84,7 +89,21 @@ export class PlayerController {
 
     // 落地（地形高度：平地 0 / 平台高度；仅下降时判定，避免上升穿透）
     const ground = this.opts.terrainHeight(this.position.x, this.position.z);
-    if (this.position.y <= ground && this.velocity.y <= 0) {
+    // 站在地上时，新位置地面高出脚面超过台阶上限：本帧水平移动无效。
+    // 斜坡/台阶侧面不是 AABB 障碍，必须靠这里挡住，否则会直接“走上”1m 高的坡体。
+    if (ground - this.position.y > STEP_UP) {
+      // 不管是否刚离地（下坡瞬间也算），都不能从侧面进入高台阶
+      this.position.x = prevX;
+      this.position.z = prevZ;
+      const prevGround = this.opts.terrainHeight(prevX, prevZ);
+      if (this.position.y <= prevGround && this.velocity.y <= 0) {
+        this.position.y = prevGround;
+        this.velocity.y = 0;
+        this.onGround = true;
+      } else {
+        this.onGround = false;
+      }
+    } else if (this.position.y <= ground && this.velocity.y <= 0) {
       this.position.y = ground;
       this.velocity.y = 0;
       this.onGround = true;
