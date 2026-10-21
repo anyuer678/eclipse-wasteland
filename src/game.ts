@@ -246,8 +246,8 @@ function boot(): void {
     const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), new THREE.MeshBasicMaterial({ color: pick.color }));
     core.position.y = 0.9;
     g.add(core);
-    g.position.copy(pos);
-    g.position.y = 0;
+    // 贴真实地面：平台/坡上的掉落物不能固定写 y=0
+    g.position.set(pos.x, player.terrainHeight(pos.x, pos.z), pos.z);
     world.scene.add(g);
     buffOrbs.push({ mesh: g, kind: pick.kind });
   };
@@ -2619,6 +2619,18 @@ function boot(): void {
     },
     orbState(): { orbs: number; short: { fireSpd: number; crit: number; move: number } } {
       return { orbs: buffOrbs.length, short: { ...shortBuffs } };
+    },
+    /** 调试：在指定水平位置生成 BUFF 球（校验平台/坡上的贴地） */
+    spawnOrbAt(x: number, z: number): void {
+      spawnBuffOrb(new THREE.Vector3(x, 0, z));
+    },
+    orbsInfo(): { x: number; y: number; z: number; ground: number }[] {
+      return buffOrbs.map((o) => ({
+        x: +o.mesh.position.x.toFixed(2),
+        y: +o.mesh.position.y.toFixed(2),
+        z: +o.mesh.position.z.toFixed(2),
+        ground: +player.terrainHeight(o.mesh.position.x, o.mesh.position.z).toFixed(2),
+      }));
     },
     spawnOrbHere(kind?: string): void {
       if (kind) {
