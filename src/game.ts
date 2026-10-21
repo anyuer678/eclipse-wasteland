@@ -1925,17 +1925,28 @@ function boot(): void {
         resolveEnemyObstacles(activeBoss.root.position, 1.25);
         activeBoss.applyGround(terrainHeightAt(activeBoss.root.position.x, activeBoss.root.position.z));
         if (bevt) {
+          const bp = activeBoss.root.position;
+          // BOSS 的所有直接伤害都要过视线：隔墙不结算
+          const bossLos = nav.hasLineOfSight3D(
+            bp.x,
+            bp.y + 1.2,
+            bp.z,
+            player.position.x,
+            player.position.y + 1.0,
+            player.position.z
+          );
           if (bevt.melee !== undefined) {
-            applyDamageToPlayer(bevt.melee);
-            shell.hud.hit();
-          } else if (bevt.chargeDir) {
-            if (player.position.distanceTo(activeBoss.root.position) < 7) {
-              applyDamageToPlayer(14);
+            // 横扫 / 冲锋撞击（撞击是冲锋结束帧的 melee 结算）
+            if (bossLos) {
+              applyDamageToPlayer(bevt.melee);
               shell.hud.hit();
             }
+          } else if (bevt.chargeDir) {
+            // 冲锋起手只做预警，伤害只在撞击帧结算；不能起手瞬发
+            addShake(0.1, 0.2);
           } else if (bevt.stompRadius) {
             addShake(0.2, 0.4);
-            if (player.position.distanceTo(activeBoss.root.position) < bevt.stompRadius) {
+            if (bossLos && player.position.distanceTo(bp) < bevt.stompRadius) {
               applyDamageToPlayer(8);
               shell.hud.hit();
             }
