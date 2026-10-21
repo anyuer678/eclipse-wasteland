@@ -31,12 +31,12 @@ import type { SkillLine } from './shell';
 function skillLinesFor(def: WeaponDef): SkillLine[] {  const m = def.mech;
   const lines: SkillLine[] = [];
   if (m.kind === 'energy') {
-    lines.push({ key: '右键', label: '过载射击', value: `消耗 ${m.cost} 能量，伤害倍率 ${m.multiplier.toFixed(1)}` });
+    lines.push({ key: 'E', label: '过载射击', value: `消耗 ${m.cost} 能量，伤害倍率 ${m.multiplier.toFixed(1)}` });
     lines.push({ key: '左键', label: '充能', value: `每发 +${def.energyGain} 能量` });
   } else if (m.kind === 'overload') {
     lines.push({ key: 'E', label: '过载形态', value: `耗能 ${m.energyPerSec}/s，伤害提升` });
   } else if (m.kind === 'lockon') {
-    lines.push({ key: '右键', label: '电弧索敌', value: `范围 ${m.range}m，伤害倍率 ${m.damageFactor.toFixed(1)}` });
+    lines.push({ key: 'E', label: '电弧索敌', value: `范围 ${m.range}m，伤害倍率 ${m.damageFactor.toFixed(1)}` });
   } else if (m.kind === 'slow') {
     lines.push({ key: '命中', label: '霜缓', value: `减速 ${Math.round((1 - m.factor) * 100)}% · ${m.seconds}s` });
   } else if (m.kind === 'charge') {
