@@ -11,6 +11,12 @@ import type { BossSpec, Element } from './types';
 
 export type BossSkill = 'charge' | 'stomp' | 'summon' | 'swipe' | 'aoe_blast' | 'summon_elite';
 
+/** 每帧由 game 注入的导航方向（追击用；冲锋仍走直线） */
+export interface BossStepContext {
+  navX: number;
+  navZ: number;
+}
+
 /** 挥臂用的临时轴向量（模块级复用） */
 const _swingAxis = new THREE.Vector3(1, 0, 0);
 
@@ -192,6 +198,8 @@ export class Boss {
   /** 践踏状态 */
   private stomping = false;
   private stompTimer = 0;
+  /** 践踏跳跃离地高度（相对当前地形，不再按世界 y=0 起跳） */
+  private stompLift = 0;
   /** 召唤冷却 */
   private summonCooldown = 0;
 
@@ -212,7 +220,7 @@ export class Boss {
     this.actionIdle.setEffectiveWeight(1 - k * 0.65);
   }
 
-  update(dt: number, playerPos: THREE.Vector3): {
+  update(dt: number, playerPos: THREE.Vector3, ctx?: BossStepContext): {
     skill?: BossSkill;
     melee?: number;
     chargeDir?: THREE.Vector3;
@@ -275,13 +283,14 @@ export class Boss {
       this.applyMoveWeight(this.moveWeight);
     }
 
-    // 践踏中（跳跃砸地）
+    // 践踏中（相对当前地形起跳/落地，不能把 y 写死成 0）
     if (this.stomping) {
       this.stompTimer -= dt;
-      this.root.position.y = Math.sin(this.stompTimer * 10) * 2.5;
+      const t = Math.min(1, Math.max(0, 1 - this.stompTimer / 0.45));
+      this.stompLift = Math.sin(t * Math.PI) * 2.5;
       if (this.stompTimer <= 0) {
         this.stomping = false;
-        this.root.position.y = 0;
+        this.stompLift = 0;
         return { skill: 'stomp', stompRadius: 6 + this.phase * 2 };
       }
       return null;
@@ -298,7 +307,12 @@ export class Boss {
 
     this.summonCooldown -= dt;
     const moveSpeed = 1.3 + this.phase * 0.4;
-    this.root.position.addScaledVector(dir, moveSpeed * dt);
+    // 正常追击沿导航流场绕障；冲锋仍用上面的直线 chargeDir
+    const navLen = ctx ? Math.hypot(ctx.navX, ctx.navZ) : 0;
+    const mx = navLen > 0.01 ? ctx!.navX / navLen : dir.x;
+    const mz = navLen > 0.01 ? ctx!.navZ / navLen : dir.z;
+    this.root.position.x += mx * moveSpeed * dt;
+    this.root.position.z += mz * moveSpeed * dt;
     // 追击时播走路、贴近后回到待机（交叉淡化，避免抽帧式硬切）
     this.moveWeight += (1 - this.moveWeight) * Math.min(1, dt * 4);
     this.applyMoveWeight(this.moveWeight);
@@ -351,6 +365,11 @@ export class Boss {
     }
 
     return null;
+  }
+
+  /** 每帧由 game 注入地形高度（践踏跳跃叠加在真实地面之上） */
+  applyGround(groundY: number): void {
+    this.root.position.y = groundY + this.stompLift;
   }
 
   /** 按元素类型受伤，返回是否死亡 */

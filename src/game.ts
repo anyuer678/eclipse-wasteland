@@ -192,6 +192,8 @@ function boot(): void {
   const spawner = new Spawner(world.scene, 20260813);
   /** 小怪导航流场：换图时烘焙，玩家跨格时更新 */
   const nav = new NavField();
+  /** BOSS 专用导航：体积更大，用更宽的膨胀半径单独烘焙 */
+  const bossNav = new NavField();
   /** 刷怪落点专用随机（与战斗随机分离，保证波次可复现） */
   const placementRng = new Rng(20260814);
 
@@ -508,6 +510,11 @@ function boot(): void {
       stepHeight: 0.4,
       walkRadius: 38.5,
     });
+    bossNav.build((mapRoot.userData.obstacles ?? []) as NavObstacle[], player.terrainHeight, {
+      agentRadius: 1.3,
+      stepHeight: 0.5,
+      walkRadius: 38.5,
+    });
     spawner.setPlacement((kind, _index, _total, placed, opts) =>
       nav.findSpawnPoint(
         () => placementRng.next(),
@@ -698,6 +705,21 @@ function boot(): void {
     if (activeBoss) world.scene.remove(activeBoss.root);
     activeBoss = flow.activeBoss;
     bossPhaseSeen = -1;
+    // BOSS 出生点：用更大的体宽导航落点，避免从中央高台里面/墙体里钻出来
+    if (phase === 'boss' && activeBoss) {
+      bossNav.updateTarget(player.position.x, player.position.z);
+      let spot: { x: number; z: number; y: number } | null = null;
+      for (let i = 0; i < 12; i++) {
+        const p = bossNav.findSpawnPoint(() => placementRng.next(), player.position.x, player.position.z, 9, 16, [], 2.5);
+        if (!p) continue;
+        if (bossNav.reachable(p.x, p.z)) {
+          spot = p;
+          break;
+        }
+        if (!spot) spot = p;
+      }
+      if (spot) activeBoss.root.position.set(spot.x, spot.y, spot.z);
+    }
     projectiles.clear();
     // 背景音乐按地图换情绪（火山低沉 / 冰原清冷）
     const MOODS: Record<string, [number, number[]]> = {
@@ -1872,29 +1894,6 @@ function boot(): void {
         }
       }
 
-      // 敌人互斥：避免几十只叠成一坨互相穿模（单遍 O(n^2)，n<=80 可接受）
-      for (let i = 0; i < crowd.length; i++) {
-        const a = crowd[i];
-        if (!a.alive) continue;
-        for (let j = i + 1; j < crowd.length; j++) {
-          const b = crowd[j];
-          if (!b.alive) continue;
-          const dx = b.root.position.x - a.root.position.x;
-          const dz = b.root.position.z - a.root.position.z;
-          const min = (a.def.radius + b.def.radius) * 0.92;
-          const d2 = dx * dx + dz * dz;
-          if (d2 >= min * min || d2 < 1e-6) continue;
-          const d = Math.sqrt(d2);
-          const push = (min - d) * 0.5;
-          const nx = dx / d;
-          const nz = dz / d;
-          a.root.position.x -= nx * push;
-          a.root.position.z -= nz * push;
-          b.root.position.x += nx * push;
-          b.root.position.z += nz * push;
-        }
-      }
-
       // 敌人弹丸推进与命中
       const projDmg = projectiles.update(dt, player.position);
       if (projDmg > 0) {
@@ -1915,7 +1914,16 @@ function boot(): void {
           }
           bossPhaseSeen = activeBoss.phase;
         }
-        const bevt = activeBoss.update(dt, player.position);
+        // BOSS 追击也走导航流场绕障；地面高度每帧注入（践踏跳跃叠在地形上）
+        bossNav.updateTarget(player.position.x, player.position.z);
+        const bossDir = { x: 0, z: 0 };
+        bossNav.steer(activeBoss.root.position.x, activeBoss.root.position.z, activeBoss.root.position.y, bossDir);
+        const bevt = activeBoss.update(dt, player.position, { navX: bossDir.x, navZ: bossDir.z });
+        activeBoss.applyGround(terrainHeightAt(activeBoss.root.position.x, activeBoss.root.position.z));
+        // BOSS 体积碰撞兜底：冲锋/被击退都不得穿墙，也不许站进斜坡体内
+        clampArena(activeBoss.root.position);
+        resolveEnemyObstacles(activeBoss.root.position, 1.25);
+        activeBoss.applyGround(terrainHeightAt(activeBoss.root.position.x, activeBoss.root.position.z));
         if (bevt) {
           if (bevt.melee !== undefined) {
             applyDamageToPlayer(bevt.melee);
@@ -2146,14 +2154,26 @@ function boot(): void {
     moveTo(x: number, z: number): void {
       player.position.set(x, player.terrainHeight(x, z), z);
     },
+    /** 调试：把 BOSS 挪到指定水平位置（寻路回归用） */
+    moveBoss(x: number, z: number): void {
+      if (!activeBoss) return;
+      activeBoss.root.position.set(x, player.terrainHeight(x, z), z);
+    },
     /** BOSS 状态与动画（调试用） */
     bossInfo(): Record<string, unknown> | null {
       if (!activeBoss) return null;
+      const p = activeBoss.root.position;
       return {
         hp: Math.round(activeBoss.hp),
         phase: activeBoss.phase,
         children: activeBoss.root.children.length,
         anim: activeBoss.animState(),
+        x: +p.x.toFixed(2),
+        y: +p.y.toFixed(2),
+        z: +p.z.toFixed(2),
+        ground: +player.terrainHeight(p.x, p.z).toFixed(2),
+        dist: +Math.hypot(p.x - player.position.x, p.z - player.position.z).toFixed(2),
+        alive: activeBoss.alive,
       };
     },
     /** 按兵种刷怪（调试/截图用） */
