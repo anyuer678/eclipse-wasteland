@@ -2223,10 +2223,13 @@ function boot(): void {
       // 毒池陷阱：玩家/敌人踩入持续掉毒伤
       const pools = (mapRoot?.userData.poisonPools ?? []) as { x: number; z: number; r: number }[];
       if (pools.length > 0 && !inMenu && flow.phase !== 'clear' && flow.phase !== 'failed') {
+        const hf = (mapRoot?.userData.heightfield as ((x: number, z: number) => number) | undefined) ?? (() => 0);
         for (const pool of pools) {
+          // 以池子所在地面为基准：高地上的池照样生效，平台上的玩家/敌人不会被隔空毒到
+          const poolGround = hf(pool.x, pool.z);
           const dx = player.position.x - pool.x;
           const dz = player.position.z - pool.z;
-          if (dx * dx + dz * dz < pool.r * pool.r && player.position.y < 1.2) {
+          if (dx * dx + dz * dz < pool.r * pool.r && Math.abs(player.position.y - poolGround) < 0.7) {
             setHp(hp - 8 * dt);
             if (Math.random() < 0.08) spawnParticles(player.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0x3a8a4a, 1, 0.5);
           }
@@ -2235,7 +2238,7 @@ function boot(): void {
             if (!e.alive) continue;
             const ex = e.root.position.x - pool.x;
             const ez = e.root.position.z - pool.z;
-            if (ex * ex + ez * ez < pool.r * pool.r && e.root.position.y < 1.2) {
+            if (ex * ex + ez * ez < pool.r * pool.r && Math.abs(e.root.position.y - poolGround) < 0.7) {
               const dead = e.takeDamage(8 * dt);
               if (dead) {
                 flow.kills += 1;
@@ -2424,6 +2427,16 @@ function boot(): void {
     },
     playerHp(): number {
       return Math.round(hp);
+    },
+    /** 调试：毒池位置与所在地面高度 */
+    poolsInfo(): { x: number; z: number; r: number; ground: number }[] {
+      const hf = (mapRoot?.userData.heightfield as ((x: number, z: number) => number) | undefined) ?? (() => 0);
+      return ((mapRoot?.userData.poisonPools ?? []) as { x: number; z: number; r: number }[]).map((p) => ({
+        x: +p.x.toFixed(2),
+        z: +p.z.toFixed(2),
+        r: +p.r.toFixed(2),
+        ground: +hf(p.x, p.z).toFixed(2),
+      }));
     },
     /** 调试：宝箱落点/奖励 */
     chestsInfo(): { x: number; y: number; z: number; ground: number; reward: string; amount: number }[] {
