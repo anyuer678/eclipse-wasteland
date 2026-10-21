@@ -75,15 +75,22 @@ function boot(): void {
 
   const input = new Input();
   input.attach(mount);
-  world.renderer.domElement.addEventListener('click', () => world.renderer.domElement.requestPointerLock());
+  /** 指针锁定安全壳：sandbox/无头环境会抛 WrongDocumentError，不能让全局错误层接管 */
+  const requestPointerLockSafe = (): void => {
+    try {
+      const ret = world.renderer.domElement.requestPointerLock() as unknown;
+      if (ret && typeof (ret as Promise<void>).catch === 'function') (ret as Promise<void>).catch(() => {});
+    } catch {
+      /* 环境不支持指针锁定：忽略，仍可继续游戏 */
+    }
+  };
+  world.renderer.domElement.addEventListener('click', requestPointerLockSafe);
   /** 弹出交互界面时解锁鼠标（升级选牌/暂停/结算）；返回战斗时重新锁定 */
   const unlockMouse = (): void => {
     if (document.pointerLockElement) document.exitPointerLock();
   };
   const lockMouse = (): void => {
-    if (!document.pointerLockElement && !paused && !inMenu) {
-      world.renderer.domElement.requestPointerLock();
-    }
+    if (!document.pointerLockElement && !paused && !inMenu) requestPointerLockSafe();
   };
 
   const inventory = new Inventory();
