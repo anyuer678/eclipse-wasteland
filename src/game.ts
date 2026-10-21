@@ -1189,6 +1189,7 @@ function boot(): void {
             const sdy = centerScratch.y - pos.y;
             const sdz = centerScratch.z - pos.z;
             if (sdx * sdx + sdy * sdy + sdz * sdz > 9) continue;
+            if (!nav.hasLineOfSight3D(pos.x, pos.y, pos.z, centerScratch.x, centerScratch.y, centerScratch.z)) continue;
             const sdead = se.takeDamage(splitDmg);
             if (sdead) {
               flow.kills += 1;
@@ -1203,34 +1204,46 @@ function boot(): void {
       let best: { e: Enemy; d: number } | null = null;
       for (const e of spawner.all()) {
         if (!e.alive) continue;
-        const d = e.center().distanceToSquared(origin);
+        const c = e.center();
+        const d = c.distanceToSquared(origin);
         if (d > maxRange * maxRange) continue;
+        if (!nav.hasLineOfSight3D(origin.x, origin.y, origin.z, c.x, c.y, c.z)) continue;
         if (best === null || d < best.d) best = { e, d };
       }
       return best ? best.e.center() : null;
     },
     resolvePierce(origin, dir, max) {
+      // 穿透也要被墙截断：先求墙距，挡在墙后的目标不进列表
+      let wallT = Infinity;
+      for (const o of nav.obstacles) {
+        const t = rayAabbT(origin, dir, o.x - o.hw, o.x + o.hw, -1000, o.top, o.z - o.hd, o.z + o.hd, 60);
+        if (t !== null && t > 0.02 && t < wallT) wallT = t;
+      }
       // 沿方向收集射线附近敌人（按距离排序）
       const hits: { e: Enemy; t: number }[] = [];
       for (const e of spawner.all()) {
         if (!e.alive) continue;
-        const t = raySphere(origin, dir, e.center(), 0.9);
-        if (t !== null) hits.push({ e, t });
+        const c = e.center();
+        const t = raySphere(origin, dir, c, 0.9);
+        if (t !== null && t < wallT) hits.push({ e, t });
       }
       hits.sort((a, b) => a.t - b.t);
       return hits.slice(0, max).map((h) => h.e.center());
     },
     onChain(pos, damage, jumps, falloff) {
-      // 连锁闪电：从命中点向附近敌人弹跳，伤害逐跳衰减
+      // 连锁闪电：从命中点向附近敌人弹跳，伤害逐跳衰减；每跳都要求视线
       let fromPos = pos;
       let dmg = damage;
       const alive = (): Enemy[] => spawner.all().filter((e) => e.alive);
       for (let j = 0; j < jumps; j++) {
         let best: { e: Enemy; d: number } | null = null;
         for (const e of alive()) {
-          const d = e.center().distanceToSquared(fromPos);
+          const c = e.center();
+          const d = c.distanceToSquared(fromPos);
           if (d < 1e-4) continue;
-          if (d < 100 && (best === null || d < best.d)) best = { e, d };
+          if (d >= 100) continue;
+          if (!nav.hasLineOfSight3D(fromPos.x, fromPos.y, fromPos.z, c.x, c.y, c.z)) continue;
+          if (best === null || d < best.d) best = { e, d };
         }
         if (!best) break;
         dmg *= falloff;
@@ -1347,11 +1360,14 @@ function boot(): void {
     const afterArmor = v * (1 - mitig) * (shieldTimer > 0 ? 0.3 : 1);
     setHp(hp - Math.max(0, afterArmor));
     if (runB.thorns > 0) {
-      // 荆棘：反弹伤害给最近敌人
+      // 荆棘：反弹给最近的可见敌人（不能反弹给墙后的怪）
       let best: { e: Enemy; d: number } | null = null;
+      const pe = player.eye();
       for (const e of spawner.all()) {
         if (!e.alive) continue;
-        const d = e.center().distanceToSquared(player.position);
+        const c = e.center();
+        if (!nav.hasLineOfSight3D(pe.x, pe.y, pe.z, c.x, c.y, c.z)) continue;
+        const d = c.distanceToSquared(player.position);
         if (best === null || d < best.d) best = { e, d };
       }
       if (best) {
@@ -1693,6 +1709,8 @@ function boot(): void {
         for (const e of spawner.all()) {
           if (!e.alive) continue;
           if (e.root.position.distanceTo(infernoMesh.position) < 2.4) {
+            const c = e.center();
+            if (!nav.hasLineOfSight3D(infernoMesh.position.x, infernoMesh.position.y + 0.5, infernoMesh.position.z, c.x, c.y, c.z)) continue;
             const dead = e.takeDamage(infernoDmg * dt * 10);
             e.applySlow(0.5, 0.5);
             if (dead) {
@@ -1723,14 +1741,17 @@ function boot(): void {
         summonShoot -= dt;
         if (summonShoot <= 0) {
           summonShoot = 0.55;
+          const from = summonGroup.position.clone().add(new THREE.Vector3(0, 0.8, 0));
           let best: { e: Enemy; d: number } | null = null;
           for (const e of spawner.all()) {
             if (!e.alive) continue;
-            const d = e.center().distanceToSquared(summonGroup.position);
-            if (d < 196 && (best === null || d < best.d)) best = { e, d };
+            const c = e.center();
+            const d = c.distanceToSquared(from);
+            if (d >= 196) continue;
+            if (!nav.hasLineOfSight3D(from.x, from.y, from.z, c.x, c.y, c.z)) continue;
+            if (best === null || d < best.d) best = { e, d };
           }
           if (best) {
-            const from = summonGroup.position.clone().add(new THREE.Vector3(0, 0.8, 0));
             tracer.fire(from, best.e.center(), 0x66e0ff, 1.4);
             const dead = best.e.takeDamage(summonDmg);
             if (dead) {
@@ -2335,6 +2356,12 @@ function boot(): void {
     },
     playerHp(): number {
       return Math.round(hp);
+    },
+    /** 调试：切换角色（验证召唤/炼狱等角色技能的视线判定） */
+    setRole(id: string): boolean {
+      if (!ROLES.some((r) => r.id === id)) return false;
+      selectedRoleId = id;
+      return true;
     },
     /** 导航网格状态（校验换图后是否成功烘焙） */
     navInfo(): { ready: boolean; obstacles: number; cell: number } {
