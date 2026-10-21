@@ -3,9 +3,9 @@
  *
  * 所有可调数值集中在此，调平衡只改这一个文件。
  * 每把武器挂一种"机制"（mech），对应经典射击游戏式玩法：
- *   energy  — 能量资源：射击积攒，右键耗能爆发
+ *   energy  — 能量资源：射击积攒，E 耗能爆发
  *   overload— 形态切换：E 在常规/过载形态间切换
- *   lockon  — 索敌：右键锁定并连线最近目标
+ *   lockon  — 索敌：E 锁定并连线最近目标（带冷却）
  *   slow    — 控制：命中施加减速
  *   charge  — 蓄力：按住左键提升伤害
  *   beam    — 持续射线：按住左键喷射，耗能量不耗弹
@@ -37,7 +37,7 @@ export const RARITY_LABEL: Record<Rarity, string> = {
 export type MechSpec =
   | { kind: 'energy'; cost: number; multiplier: number }
   | { kind: 'overload'; energyPerSec: number }
-  | { kind: 'lockon'; range: number; damageFactor: number }
+  | { kind: 'lockon'; range: number; damageFactor: number; cooldown: number }
   | { kind: 'slow'; factor: number; seconds: number }
   | { kind: 'charge'; maxMult: number; time: number }
   | { kind: 'beam'; dps: number; energyPerSec: number; range: number }
@@ -110,7 +110,7 @@ export const ARSENAL: WeaponDef[] = [
     energyGain: 6,
     energyMax: 100,
     color: 0x8e5ad9,
-    mech: { kind: 'lockon', range: 18, damageFactor: 1.8 },
+    mech: { kind: 'lockon', range: 18, damageFactor: 1.8, cooldown: 1.2 },
   },
   {
     id: 'frost-smg',

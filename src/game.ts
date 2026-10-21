@@ -36,7 +36,7 @@ function skillLinesFor(def: WeaponDef): SkillLine[] {  const m = def.mech;
   } else if (m.kind === 'overload') {
     lines.push({ key: 'E', label: '过载形态', value: `耗能 ${m.energyPerSec}/s，伤害提升` });
   } else if (m.kind === 'lockon') {
-    lines.push({ key: 'E', label: '电弧索敌', value: `范围 ${m.range}m，伤害倍率 ${m.damageFactor.toFixed(1)}` });
+    lines.push({ key: 'E', label: '电弧索敌', value: `范围 ${m.range}m，伤害倍率 ${m.damageFactor.toFixed(1)} · 冷却 ${m.cooldown.toFixed(1)}s` });
   } else if (m.kind === 'slow') {
     lines.push({ key: '命中', label: '霜缓', value: `减速 ${Math.round((1 - m.factor) * 100)}% · ${m.seconds}s` });
   } else if (m.kind === 'charge') {

@@ -63,6 +63,8 @@ export class Weapon {
   reloadMult = 1;
 
   private fireCooldown = 0;
+  /** 电弧索敌等主动技能的独立冷却 */
+  private skillCooldown = 0;
 
   constructor(def: WeaponDef) {
     this.def = def;
@@ -99,6 +101,7 @@ export class Weapon {
   update(dt: number, _ctx: FireContext): void {
     const s = this.state;
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+    this.skillCooldown = Math.max(0, this.skillCooldown - dt);
 
     if (s.reloading) {
       s.reloadTimer -= dt;
@@ -152,8 +155,10 @@ export class Weapon {
         }
       }
     } else if (m.kind === 'lockon') {
+      if (this.skillCooldown > 0) return;
       const target = ctx.findTarget?.(ctx.origin, m.range) ?? null;
       if (target && ctx.onHitEnemy) {
+        this.skillCooldown = m.cooldown;
         ctx.tracer.fire(ctx.origin, target, 0x66e0ff, 2);
         ctx.onHitEnemy(target, shotDamage(this.def.damage, m.damageFactor, this.growthMech), { lockTarget: true });
       }
