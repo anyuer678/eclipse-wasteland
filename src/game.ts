@@ -834,24 +834,83 @@ function boot(): void {
   const eyeScratch = new THREE.Vector3();
   const hitScratch = new THREE.Vector3();
   const centerScratch = new THREE.Vector3();
+  const clipDir = new THREE.Vector3();
 
-  /** 弹道被掩体遮挡时截断：沿射线采样，命中障碍即返回交点（敌人弹丸穿墙修复） */
-  const clipToObstacles = (from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3 => {
-    const obs = (mapRoot?.userData.obstacles ?? []) as { x: number; z: number; hw: number; hd: number; top: number }[];
-    if (obs.length === 0) return to;
-    const steps = 10;
-    for (let i = 1; i <= steps; i++) {
-      const t = i / steps;
-      const x = from.x + (to.x - from.x) * t;
-      const y = from.y + (to.y - from.y) * t;
-      const z = from.z + (to.z - from.z) * t;
-      for (const o of obs) {
-        if (y < o.top - 0.05 && Math.abs(x - o.x) < o.hw && Math.abs(z - o.z) < o.hd) {
-          return new THREE.Vector3(x, y, z);
-        }
-      }
+  /**
+   * 射线与 AABB 的最近命中距离（slab 法，障碍从地面延伸到 top）。
+   * 返回 null 表示不相交；t=0 表示起点已在盒内。
+   */
+  function rayAabbT(
+    origin: THREE.Vector3,
+    dir: THREE.Vector3,
+    minX: number,
+    maxX: number,
+    minY: number,
+    maxY: number,
+    minZ: number,
+    maxZ: number,
+    maxT: number
+  ): number | null {
+    let tmin = 0;
+    let tmax = maxT;
+    if (Math.abs(dir.x) < 1e-8) {
+      if (origin.x < minX || origin.x > maxX) return null;
+    } else {
+      let t1 = (minX - origin.x) / dir.x;
+      let t2 = (maxX - origin.x) / dir.x;
+      if (t1 > t2) [t1, t2] = [t2, t1];
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return null;
     }
-    return to;
+    if (Math.abs(dir.y) < 1e-8) {
+      if (origin.y < minY || origin.y > maxY) return null;
+    } else {
+      let t1 = (minY - origin.y) / dir.y;
+      let t2 = (maxY - origin.y) / dir.y;
+      if (t1 > t2) [t1, t2] = [t2, t1];
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return null;
+    }
+    if (Math.abs(dir.z) < 1e-8) {
+      if (origin.z < minZ || origin.z > maxZ) return null;
+    } else {
+      let t1 = (minZ - origin.z) / dir.z;
+      let t2 = (maxZ - origin.z) / dir.z;
+      if (t1 > t2) [t1, t2] = [t2, t1];
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return null;
+    }
+    return tmin;
+  }
+
+  /** 命中点是否落在障碍物表面（打在墙上时不能再按邻近伤害到墙后的敌人） */
+  const pointOnObstacleSurface = (pos: THREE.Vector3): boolean => {
+    const eps = 0.08;
+    for (const o of nav.obstacles) {
+      if (pos.y > o.top + eps) continue;
+      const ax = Math.abs(pos.x - o.x);
+      const az = Math.abs(pos.z - o.z);
+      if (ax > o.hw + eps || az > o.hd + eps) continue;
+      if (Math.abs(ax - o.hw) <= eps || Math.abs(az - o.hd) <= eps || Math.abs(pos.y - o.top) <= eps) return true;
+    }
+    return false;
+  };
+
+  /** 弹道被掩体遮挡时截断（精确射线-AABB，不再用 10 步采样漏掉薄墙） */
+  const clipToObstacles = (from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3 => {
+    clipDir.subVectors(to, from);
+    const len = clipDir.length();
+    if (len < 1e-6) return to;
+    clipDir.multiplyScalar(1 / len);
+    let best = len;
+    for (const o of nav.obstacles) {
+      const t = rayAabbT(from, clipDir, o.x - o.hw, o.x + o.hw, -1000, o.top, o.z - o.hd, o.z + o.hd, len);
+      if (t !== null && t < best) best = t;
+    }
+    return best < len ? from.clone().addScaledVector(clipDir, best) : to;
   };
 
   /**
@@ -923,12 +982,18 @@ function boot(): void {
       // 逻辑命中：射线对敌人/BOSS 球体检测（不依赖模型 mesh raycast，稳定可靠）
       let bestT = 60;
       let hit = false;
+      // 先算最近的掩体交点：玩家射击是 hitscan，必须和敌人弹丸一样被墙截断
+      let wallT = Infinity;
+      for (const o of nav.obstacles) {
+        const t = rayAabbT(origin, dir, o.x - o.hw, o.x + o.hw, -1000, o.top, o.z - o.hd, o.z + o.hd, 60);
+        if (t !== null && t > 0.02 && t < wallT) wallT = t;
+      }
       // 可破坏箱优先（若命中箱子，先打箱子）
       for (const c of crates) {
         if (!c.alive) continue;
         hitScratch.set(c.x, 0.7, c.z);
         const t = raySphere(origin, dir, hitScratch, 1.0);
-        if (t !== null && t < bestT) {
+        if (t !== null && t < bestT && t < wallT) {
           bestT = t;
           hit = true;
         }
@@ -938,7 +1003,7 @@ function boot(): void {
         // 命中半径放宽到 1.1（容忍地形高度差，玩家平视可打高处敌人）
         e.centerInto(centerScratch);
         const t = raySphere(origin, dir, centerScratch, 1.1);
-        if (t !== null && t < bestT) {
+        if (t !== null && t < bestT && t < wallT) {
           bestT = t;
           hit = true;
         }
@@ -946,12 +1011,13 @@ function boot(): void {
       if (activeBoss && activeBoss.alive) {
         activeBoss.centerInto(centerScratch);
         const t = raySphere(origin, dir, centerScratch, 3.2);
-        if (t !== null && t < bestT) {
+        if (t !== null && t < bestT && t < wallT) {
           bestT = t;
           hit = true;
         }
       }
       if (hit) return hitScratch.copy(origin).addScaledVector(dir, bestT);
+      if (wallT < 60) return hitScratch.copy(origin).addScaledVector(dir, wallT);
       if (dir.y < -1e-4) {
         const t = -origin.y / dir.y;
         if (t > 0) return hitScratch.copy(origin).addScaledVector(dir, t);
@@ -959,6 +1025,8 @@ function boot(): void {
       return hitScratch.copy(origin).addScaledVector(dir, 60);
     },
     onHitEnemy(pos, damage, extra) {
+      // 射线停在掩体表面：这一发不算命中任何单位（哪怕敌人贴在墙后）
+      if (pointOnObstacleSurface(pos)) return false;
       let hitSomething = false;
       // 可破坏箱：优先扣箱子血（打碎掉补给）
       for (const c of crates) {
@@ -1417,7 +1485,8 @@ function boot(): void {
       const dist = to.length();
       if (dist > 2.6) continue;
       const dot = to.dot(dir) / dist;
-      if (dot < 0.5) continue; // 前方�?60° 扇形
+      if (dot < 0.5) continue; // 前方 ±60° 扇形
+      if (!nav.hasLineOfSight3D(origin.x, origin.y, origin.z, c.x, c.y, c.z)) continue;
       const dead = e.takeDamage(meleeDamage);
       if (dead) {
         flow.kills += 1;
@@ -1430,7 +1499,7 @@ function boot(): void {
       const c = activeBoss.center();
       const to = c.clone().sub(origin);
       const dist = to.length();
-      if (dist <= 3.4) {
+      if (dist <= 3.4 && nav.hasLineOfSight3D(origin.x, origin.y, origin.z, c.x, c.y, c.z)) {
         const dead = activeBoss.takeDamage(meleeDamage);
         if (dead) {
           flow.kills += 1;
