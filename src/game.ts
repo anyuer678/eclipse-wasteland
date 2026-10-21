@@ -774,11 +774,14 @@ function boot(): void {
 
     // ---- BOSS 登场演出 ----
     if (phase === 'boss' && activeBoss) {
+      const boss = activeBoss;
       showAnnouncement('', '#000000', 600);
       setTimeout(() => {
-        showAnnouncement(activeBoss!.spec.name, '#' + activeBoss!.spec.color.toString(16).padStart(6, '0'), 3000);
+        // 600ms 内可能已被击杀/进入下一阶段，定时器不能再访问已置空的 activeBoss
+        if (activeBoss !== boss || !boss.alive) return;
+        showAnnouncement(boss.spec.name, '#' + boss.spec.color.toString(16).padStart(6, '0'), 3000);
         sfx.roar();
-        shell.hud.boss(activeBoss!.spec.name, activeBoss!.hp / activeBoss!.spec.hp);
+        shell.hud.boss(boss.spec.name, boss.hp / boss.spec.hp);
       }, 600);
     }
 
