@@ -63,6 +63,19 @@ describe('horde/nav', () => {
     expect(noRamp.reachable(0, 0)).toBe(false)
   })
 
+  it('a crate fills a wall gap; removing it opens the line', () => {
+    // 两道墙留出 1.2m 缺口，木箱正好堵住缺口
+    const walls: NavObstacle[] = [
+      { x: 0, z: -3.3, hw: 0.2, hd: 2.7, top: 2 },
+      { x: 0, z: 3.3, hw: 0.2, hd: 2.7, top: 2 },
+    ]
+    const crate: NavObstacle = { x: 0, z: 0, hw: 0.6, hd: 0.6, top: 0.8, crate: true }
+    const blocked = field([...walls, crate])
+    expect(blocked.lineClear(-5, 0, 5, 0, 0, 0)).toBe(false)
+    const opened = field(walls)
+    expect(opened.lineClear(-5, 0, 5, 0, 0, 0)).toBe(true)
+  })
+
   it('does not connect a 1.2m cliff when there is no ramp', () => {
     // 无碰撞体，但东侧地面整体抬高 1.2m：流场不能把单位导上悬崖
     const nav = field([], (x) => (x >= 2 ? 1.2 : 0))
