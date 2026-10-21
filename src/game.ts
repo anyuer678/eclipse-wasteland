@@ -2395,6 +2395,15 @@ function boot(): void {
     playerHp(): number {
       return Math.round(hp);
     },
+    /** 调试：木箱位置/存活（校验是否被平台吞掉） */
+    cratesInfo(): { x: number; z: number; alive: boolean; ground: number }[] {
+      return crates.map((c) => ({
+        x: c.x,
+        z: c.z,
+        alive: c.alive,
+        ground: +player.terrainHeight(c.x, c.z).toFixed(2),
+      }));
+    },
     playerPos(): { x: number; y: number; z: number; ground: number; onGround: boolean } {
       return {
         x: +player.position.x.toFixed(2),

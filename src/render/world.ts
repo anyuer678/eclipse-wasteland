@@ -867,7 +867,7 @@ export class World {
       addPlatform(0, -9, 3.2, 2.8, 1.3);
       addRamp(-4.8, -9, 6, 2.8, 0, 1.3, 'x');
       addPlatform(4, 8, 2.4, 2.4, 1.2);
-      addCrate(-10, -4); addCrate(10, 4); addCrate(0, -10);
+      addCrate(-10, -4); addCrate(10, 4); addCrate(2.8, -10);
     } else {
       // 实验室 / 火山 / 冰原 共用骨架：网格矮墙 + 设备柜 + 中央舱体
       for (let i = -1; i <= 1; i++) {
@@ -881,6 +881,8 @@ export class World {
         // 西侧高台斜坡走廊与平台顶面禁放随机设备柜：否则会堵死小怪上坡的唯一入口
         if (x > -8.6 && x < -1.0 && z > -11 && z < -7.2) continue;
         if (Math.abs(x) < 2.1 && Math.abs(z + 9) < 1.8) continue;
+        // 高台东侧固定木箱的位置也不放随机设备柜
+        if (Math.abs(x - 2.8) < 0.9 && Math.abs(z + 9) < 0.9) continue;
         addBox(0.95, 0.85, 0.95, x, z, matWood);
         bag.shape(new THREE.SphereGeometry(0.07, 6, 5), glowMat, x, heightfield(x, z) + 0.98, z);
       }
@@ -899,7 +901,7 @@ export class World {
       addPlatform(7, -6, 2.4, 2.4, 0.9);
       addPlatform(0, -9, 3.4, 2.6, 1.2);
       addRamp(-4.8, -9, 6, 2.8, 0, 1.2, 'x');
-      addCrate(-8, 4); addCrate(8, -4); addCrate(0, -9); addCrate(9, 6);
+      addCrate(-8, 4); addCrate(8, -4); addCrate(2.8, -9); addCrate(9, 6);
     }
 
     // ---------- 地图专属装饰 ----------
