@@ -1875,8 +1875,7 @@ function boot(): void {
                 e.root.position.z,
                 player.position.x,
                 player.position.y + 1.0,
-                player.position.z,
-                10
+                player.position.z
               );
               if (dx * dx + dz * dz <= radius * radius && Math.abs(dy) < 2.2 && exposed) {
                 applyDamageToPlayer(evt.blast);

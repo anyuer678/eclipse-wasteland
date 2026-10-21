@@ -72,6 +72,15 @@ describe('horde/nav', () => {
     expect(nav.reachable(2.5, 0)).toBe(true)
   })
 
+  it('blocks a thin wall on a long ray (no sampling gaps)', () => {
+    // 0.1m 薄墙，位于固定 14 步采样的空档上；精确求交必须挡住
+    const thin: NavObstacle = { x: 0.7, z: 0, hw: 0.05, hd: 2, top: 2.5 }
+    const nav = field([thin])
+    expect(nav.hasLineOfSight3D(-10, 1.2, 0, 10, 1.2, 0)).toBe(false)
+    // 从墙的侧面绕过去则可见
+    expect(nav.hasLineOfSight3D(-10, 1.2, 3, 10, 1.2, 3)).toBe(true)
+  })
+
   it('uses 3D line of sight so low cover does not block chest-height shots', () => {
     const lowWall: NavObstacle = { x: 0, z: 0, hw: 0.5, hd: 2, top: 0.9 }
     const tallWall: NavObstacle = { x: 0, z: 0, hw: 0.5, hd: 2, top: 2.5 }

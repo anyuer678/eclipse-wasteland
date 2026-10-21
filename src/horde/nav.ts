@@ -326,17 +326,55 @@ export class NavField {
     return true;
   }
 
-  /** 弹道/攻击视线：3D 采样，低掩体不挡胸口高度的子弹 */
-  hasLineOfSight3D(ax: number, ay: number, az: number, bx: number, by: number, bz: number, steps = 14): boolean {
-    for (let s = 1; s < steps; s++) {
-      const t = s / steps;
-      const x = ax + (bx - ax) * t;
-      const y = ay + (by - ay) * t;
-      const z = az + (bz - az) * t;
-      for (const o of this.obstacles) {
-        if (y >= o.top - 0.05) continue;
-        if (Math.abs(x - o.x) < o.hw && Math.abs(z - o.z) < o.hd) return false;
+  /**
+   * 弹道/攻击视线：精确 3D 线段-AABB 求交。
+   * 障碍从地面延伸到 top，低于 top-0.05 的穿越算遮挡；
+   * 比固定步数采样可靠，细墙在远距离也不会被跨过。
+   */
+  hasLineOfSight3D(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const dz = bz - az;
+    for (const o of this.obstacles) {
+      const minX = o.x - o.hw;
+      const maxX = o.x + o.hw;
+      const minZ = o.z - o.hd;
+      const maxZ = o.z + o.hd;
+      const top = o.top - 0.05;
+      let t0 = 0;
+      let t1 = 1;
+      if (Math.abs(dx) < 1e-9) {
+        if (ax < minX || ax > maxX) continue;
+      } else {
+        let ta = (minX - ax) / dx;
+        let tb = (maxX - ax) / dx;
+        if (ta > tb) [ta, tb] = [tb, ta];
+        if (ta > t0) t0 = ta;
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) continue;
       }
+      if (Math.abs(dz) < 1e-9) {
+        if (az < minZ || az > maxZ) continue;
+      } else {
+        let ta = (minZ - az) / dz;
+        let tb = (maxZ - az) / dz;
+        if (ta > tb) [ta, tb] = [tb, ta];
+        if (ta > t0) t0 = ta;
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) continue;
+      }
+      if (Math.abs(dy) < 1e-9) {
+        if (ay > top) continue;
+      } else {
+        const ty = (top - ay) / dy;
+        if (dy > 0) {
+          if (ty < t1) t1 = ty;
+        } else {
+          if (ty > t0) t0 = ty;
+        }
+        if (t0 > t1) continue;
+      }
+      return false;
     }
     return true;
   }
