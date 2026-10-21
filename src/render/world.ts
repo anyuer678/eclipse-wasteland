@@ -588,7 +588,8 @@ export class World {
     const pal = PALETTES[mapId] ?? PALETTES.facility;
     const platforms: { x: number; z: number; w: number; d: number; h: number }[] = [];
     const ramps: { x: number; z: number; w: number; d: number; h0: number; h1: number; along: 'x' | 'z' }[] = [];
-    const crates: { x: number; z: number }[] = [];
+    type WorldObstacle = { x: number; z: number; hw: number; hd: number; top: number; crate?: boolean };
+    const crates: { x: number; z: number; obstacle: WorldObstacle }[] = [];
     const pools: { x: number; z: number; r: number }[] = [];
 
     // ---------- 天空 & 雾 ----------
@@ -720,7 +721,7 @@ export class World {
     const bag = new Merger();
 
     // ---------- 碰撞体（玩家/敌人共用，杜绝穿模） ----------
-    const obstacles: { x: number; z: number; hw: number; hd: number; top: number }[] = [];
+    const obstacles: WorldObstacle[] = [];
     const addObstacle = (x: number, z: number, w: number, d: number, top: number): void => {
       obstacles.push({ x, z, hw: w / 2, hd: d / 2, top });
     };
@@ -765,13 +766,18 @@ export class World {
     crateMat.map = propTex;
     const crateGroup = new THREE.Group();
     const addCrate = (x: number, z: number): void => {
-      crates.push({ x, z });
       const s = 0.72 + rng() * 0.26;
+      const rot = rng() * Math.PI;
       const baseY = heightfield(x, z);
+      // 旋转木箱按外接正方形近似碰撞；击碎后由 game 移除并重建导航
+      const half = (Math.abs(Math.cos(rot)) + Math.abs(Math.sin(rot))) * s * 0.5;
+      const obstacle: WorldObstacle = { x, z, hw: half, hd: half, top: baseY + s, crate: true };
+      obstacles.push(obstacle);
+      crates.push({ x, z, obstacle });
       const box = new THREE.Mesh(crateGeo, crateMat);
       box.scale.setScalar(s);
       box.position.set(x, baseY + s / 2, z);
-      box.rotation.y = rng() * Math.PI;
+      box.rotation.y = rot;
       box.castShadow = true;
       box.receiveShadow = true;
       crateGroup.add(box);

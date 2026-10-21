@@ -16,6 +16,8 @@ export interface NavObstacle {
   hd: number;
   /** 碰撞体顶面绝对高度（世界坐标 y） */
   top: number;
+  /** 可破坏木箱：击碎后从障碍/导航中移除；射线命中时可结算木箱伤害 */
+  crate?: boolean;
 }
 
 export interface NavPoint {

@@ -497,24 +497,22 @@ function boot(): void {
     // 可破坏箱（从地图配置重建；mesh 引用用于击碎后隐藏）
     crates.length = 0;
     const crateGroup = mapRoot.userData.crateGroup as THREE.Group | undefined;
-    const crateDefs = (mapRoot.userData.crates ?? []) as { x: number; z: number }[];
+    const crateDefs = (mapRoot.userData.crates ?? []) as { x: number; z: number; obstacle?: NavObstacle }[];
     for (let i = 0; i < crateDefs.length; i++) {
       const c = crateDefs[i];
-      crates.push({ x: c.x, z: c.z, hp: 25, alive: true, mesh: crateGroup?.children[i] as THREE.Mesh | undefined });
+      crates.push({
+        x: c.x,
+        z: c.z,
+        hp: 25,
+        alive: true,
+        mesh: crateGroup?.children[i] as THREE.Mesh | undefined,
+        obstacle: c.obstacle,
+      });
     }
     mountEnv(); // 挂载开源环境素材（Kenney CC0：岩石/树木/灌木）
     player.position.set(SPAWN_POINT.x, 0, SPAWN_POINT.z);
     // 换图后重新烘焙导航网格；刷怪落点由导航网格给出（不再随机刷在玩家脸上/墙里）
-    nav.build((mapRoot.userData.obstacles ?? []) as NavObstacle[], player.terrainHeight, {
-      agentRadius: 0.62,
-      stepHeight: 0.4,
-      walkRadius: 38.5,
-    });
-    bossNav.build((mapRoot.userData.obstacles ?? []) as NavObstacle[], player.terrainHeight, {
-      agentRadius: 1.3,
-      stepHeight: 0.5,
-      walkRadius: 38.5,
-    });
+    buildNavsForMap();
     spawner.setPlacement((kind, _index, _total, placed, opts) =>
       nav.findSpawnPoint(
         () => placementRng.next(),
@@ -535,8 +533,25 @@ function boot(): void {
 
   let mapRoot: THREE.Group | null = null;
   /** 可破坏箱（打碎掉补给） */
-  interface Crate { x: number; z: number; hp: number; alive: boolean; mesh?: THREE.Mesh }
+  interface Crate { x: number; z: number; hp: number; alive: boolean; mesh?: THREE.Mesh; obstacle?: NavObstacle }
   const crates: Crate[] = [];
+
+  /** 当前地图碰撞体 → 小怪/BOSS 两套导航网格（木箱击碎后也必须重烘） */
+  function buildNavsForMap(): void {
+    const obs = (mapRoot?.userData.obstacles ?? []) as NavObstacle[];
+    nav.build(obs, player.terrainHeight, { agentRadius: 0.62, stepHeight: 0.4, walkRadius: 38.5 });
+    bossNav.build(obs, player.terrainHeight, { agentRadius: 1.3, stepHeight: 0.5, walkRadius: 38.5 });
+  }
+
+  /** 木箱被击碎：从地图障碍中移除并重烘导航，打开被堵住的路线 */
+  function removeCrateObstacle(c: Crate): void {
+    if (!c.obstacle) return;
+    const obs = (mapRoot?.userData.obstacles ?? []) as NavObstacle[];
+    const i = obs.indexOf(c.obstacle);
+    if (i >= 0) obs.splice(i, 1);
+    c.obstacle = undefined;
+    buildNavsForMap();
+  }
 
   // ---------- 开源环境素材（Kenney CC0 nature-kit） ----------
   /** 按地图类型放置的环境模型清单 */
@@ -890,6 +905,8 @@ function boot(): void {
   const pointOnObstacleSurface = (pos: THREE.Vector3): boolean => {
     const eps = 0.08;
     for (const o of nav.obstacles) {
+      // 木箱本身是射击目标，不当作“墙命中”吞掉伤害
+      if (o.crate) continue;
       if (pos.y > o.top + eps) continue;
       const ax = Math.abs(pos.x - o.x);
       const az = Math.abs(pos.z - o.z);
@@ -1038,8 +1055,9 @@ function boot(): void {
           c.hp -= damage;
           if (c.hp <= 0) {
             c.alive = false;
-            // 视觉同步：真正藏掉箱子（旧实现击碎后箱子仍然立在那里）
+            // 视觉与碰撞同步：藏掉箱子并移除障碍/导航阻挡
             if (c.mesh) c.mesh.visible = false;
+            removeCrateObstacle(c);
             spawnBuffOrb(new THREE.Vector3(c.x, 0.8, c.z));
             maybeDropOrb(new THREE.Vector3(c.x, 0.8, c.z));
             addDamagePopup(new THREE.Vector3(c.x, 1.2, c.z), '箱子击碎', '#ffd24a');
@@ -2396,8 +2414,8 @@ function boot(): void {
       return { ready: nav.ready, obstacles: nav.obstacles.length, cell: nav.cell };
     },
     /** 碰撞体列表（地图调试：确认随机道具是否堵路） */
-    obstaclesDump(): { x: number; z: number; hw: number; hd: number; top: number }[] {
-      return nav.obstacles.map((o) => ({ x: o.x, z: o.z, hw: o.hw, hd: o.hd, top: +o.top.toFixed(2) }));
+    obstaclesDump(): { x: number; z: number; hw: number; hd: number; top: number; crate: boolean }[] {
+      return nav.obstacles.map((o) => ({ x: o.x, z: o.z, hw: o.hw, hd: o.hd, top: +o.top.toFixed(2), crate: !!o.crate }));
     },
     /** 单点导航探针：可走/可达/流场方向（AI 调试用） */
     navProbe(x: number, z: number): { walkable: boolean; reachable: boolean; dx: number; dz: number; dist: number; rawDx: number; rawDz: number } {
