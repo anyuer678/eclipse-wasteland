@@ -252,6 +252,11 @@ function boot(): void {
     buffOrbs.push({ mesh: g, kind: pick.kind });
   };
 
+  /** 掉落拾取：同层 + 中间没有掩体阻挡（避免隔墙/隔平台吸走） */
+  const canPickupLoot = (x: number, y: number, z: number): boolean =>
+    Math.abs(player.position.y - y) < 0.9 &&
+    nav.lineClear(player.position.x, player.position.z, x, z, player.position.y, 0.2);
+
   const pickOrb = (kind: OrbKind): void => {
     if (kind === 'heal') setHp(hp + 30);
     else if (kind === 'energy') arsenal.current.state.energy = arsenal.current.def.energyMax;
@@ -311,7 +316,10 @@ function boot(): void {
   const pickChests = (): void => {
     for (let i = chests.length - 1; i >= 0; i--) {
       const c = chests[i];
-      if (c.mesh.position.distanceTo(player.position) < 2.0) {
+      if (
+        c.mesh.position.distanceTo(player.position) < 2.0 &&
+        canPickupLoot(c.mesh.position.x, c.mesh.position.y, c.mesh.position.z)
+      ) {
         world.scene.remove(c.mesh);
         chests.splice(i, 1);
         addDailyProgress(dailyState, 'chests'); // 每日任务：开箱
@@ -2142,7 +2150,10 @@ function boot(): void {
         const orb = buffOrbs[i];
         orb.mesh.rotation.y += dt * 2.2;
         orb.mesh.children[0]!.position.y = 0.9 + Math.sin(time * 3 + i) * 0.15;
-        if (player.position.distanceToSquared(orb.mesh.position) < 2.6) {
+        if (
+          player.position.distanceToSquared(orb.mesh.position) < 2.6 &&
+          canPickupLoot(orb.mesh.position.x, orb.mesh.position.y, orb.mesh.position.z)
+        ) {
           pickOrb(orb.kind);
           world.scene.remove(orb.mesh);
           sfx.pickup();
