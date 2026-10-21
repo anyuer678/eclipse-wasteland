@@ -1823,7 +1823,8 @@ function boot(): void {
         for (let i = 0; i < steps; i++) {
           const nx = player.position.x + dx * step;
           const nz = player.position.z + dz * step;
-          if (nx < -13 || nx > 13 || nz < -13 || nz > 13) break;
+          // 与 PlayerController 的活动半径一致（旧的 ±13 方形是遗留的中央竞技场限制）
+          if (Math.hypot(nx, nz) > 38) break;
           const ng = terrainHeightAt(nx, nz);
           if (ng - player.position.y > 0.55) break; // 高台阶：冲刺不能上
           probe.x = nx;
