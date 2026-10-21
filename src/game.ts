@@ -277,12 +277,17 @@ function boot(): void {
     const glow = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
     glow.position.y = 0.75;
     g.add(glow);
-    // 随机位置（远离玩家 4-10m）
-    const a = Math.random() * Math.PI * 2;
-    const d = 4 + Math.random() * 6;
-    g.position.set(player.position.x + Math.cos(a) * d, 0, player.position.z + Math.sin(a) * d);
-    g.position.x = clamp(g.position.x, -12, 12);
-    g.position.z = clamp(g.position.z, -12, 12);
+    // 随机位置（远离玩家 4-10m）：优先走导航落点，保证不埋墙/平台，且贴真实地形
+    const spot = nav.findSpawnPoint(() => Math.random(), player.position.x, player.position.z, 4, 10, [], 0.8);
+    if (spot) {
+      g.position.set(spot.x, spot.y, spot.z);
+    } else {
+      const a = Math.random() * Math.PI * 2;
+      const d = 4 + Math.random() * 6;
+      const x = clamp(player.position.x + Math.cos(a) * d, -12, 12);
+      const z = clamp(player.position.z + Math.sin(a) * d, -12, 12);
+      g.position.set(x, player.terrainHeight(x, z), z);
+    }
     world.scene.add(g);
     // 随机奖励
     const roll = Math.random();
@@ -2408,6 +2413,17 @@ function boot(): void {
     },
     playerHp(): number {
       return Math.round(hp);
+    },
+    /** 调试：宝箱落点/奖励 */
+    chestsInfo(): { x: number; y: number; z: number; ground: number; reward: string; amount: number }[] {
+      return chests.map((c) => ({
+        x: +c.mesh.position.x.toFixed(2),
+        y: +c.mesh.position.y.toFixed(2),
+        z: +c.mesh.position.z.toFixed(2),
+        ground: +player.terrainHeight(c.mesh.position.x, c.mesh.position.z).toFixed(2),
+        reward: c.reward,
+        amount: c.amount,
+      }));
     },
     /** 调试：木箱位置/存活（校验是否被平台吞掉） */
     cratesInfo(): { x: number; z: number; alive: boolean; ground: number }[] {
