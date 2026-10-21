@@ -200,6 +200,8 @@ export class Boss {
   private stompTimer = 0;
   /** 践踏跳跃离地高度（相对当前地形，不再按世界 y=0 起跳） */
   private stompLift = 0;
+  /** 本次冲锋是否已造成接触伤害（防止同一次冲锋重复/漏结算） */
+  private chargeHit = false;
   /** 召唤冷却 */
   private summonCooldown = 0;
 
@@ -270,9 +272,15 @@ export class Boss {
     if (this.charging) {
       this.chargeTimer -= dt;
       this.root.position.addScaledVector(this.chargeDir, 14 * dt);
+      // 身体接触即结算一次；高速冲锋即使冲过头也能命中
+      const dNow = Math.hypot(playerPos.x - this.root.position.x, playerPos.z - this.root.position.z);
+      if (!this.chargeHit && dNow < 2.4) {
+        this.chargeHit = true;
+        return { skill: 'charge', melee: 18 + this.phase * 5, chargeDir: this.chargeDir };
+      }
       if (this.chargeTimer <= 0) {
         this.charging = false;
-        if (dist < 4) return { skill: 'charge', melee: 18 + this.phase * 5, chargeDir: this.chargeDir };
+        if (!this.chargeHit && dNow < 4) return { skill: 'charge', melee: 18 + this.phase * 5, chargeDir: this.chargeDir };
       }
       return null;
     }
@@ -331,6 +339,7 @@ export class Boss {
 
       if (pick === 'charge' && dist > 3) {
         this.charging = true;
+        this.chargeHit = false;
         this.pose = 0.7;
         this.poseDir = 1;
         this.chargeTimer = 0.55;
@@ -370,6 +379,11 @@ export class Boss {
   /** 每帧由 game 注入地形高度（践踏跳跃叠加在真实地面之上） */
   applyGround(groundY: number): void {
     this.root.position.y = groundY + this.stompLift;
+  }
+
+  /** 调试/回归：当前是否在冲锋 */
+  isCharging(): boolean {
+    return this.charging;
   }
 
   /** 按元素类型受伤，返回是否死亡 */

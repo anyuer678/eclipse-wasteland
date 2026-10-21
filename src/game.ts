@@ -2312,6 +2312,7 @@ function boot(): void {
         ground: +player.terrainHeight(p.x, p.z).toFixed(2),
         dist: +Math.hypot(p.x - player.position.x, p.z - player.position.z).toFixed(2),
         alive: activeBoss.alive,
+        charging: activeBoss.isCharging(),
       };
     },
     /** 按兵种刷怪（调试/截图用） */
