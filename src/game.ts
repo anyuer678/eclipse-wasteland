@@ -21,7 +21,7 @@ import { Enemy, NavField, Spawner, separationDelta } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow } from './campaign';
-import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken } from './growth';
+import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
@@ -435,7 +435,10 @@ function boot(): void {
     },
     onOpenAchievement: () => shell.showAchievement(),
     onOpenStats: () => shell.showStats(),
-    onOpenDaily: () => shell.showDaily(),
+    onOpenDaily: () => {
+      ensureDaily(dailyState);
+      shell.showDaily();
+    },
     onClaimDaily: (id) => {
       if (claimDaily(dailyState, inventory, id)) shell.showDaily();
     },

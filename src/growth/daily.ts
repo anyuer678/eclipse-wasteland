@@ -38,7 +38,7 @@ export function genDailyTasks(dateStr: string): DailyTask[] {
     kills: (t) => `猎杀敌人 ${t} 个`,
     clears: (t) => `通关副本 ${t} 次`,
     upgrades: (t) => `强化武器 ${t} 次`,
-    chests: (t) => `击碎补给箱 ${t} 个`,
+    chests: (t) => `拾取补给箱 ${t} 个`,
   };
   return kinds.map((k, i) => ({
     id: `d-${dateStr}-${i}`,
@@ -83,14 +83,18 @@ export function saveDaily(s: DailyState): void {
   }
 }
 
+/** 跨天重置（返回是否发生重置）；进度写入与领奖前都调用，避免结算昨天的任务 */
+export function ensureDaily(state: DailyState, today = todayKey()): boolean {
+  if (state.date === today) return false;
+  state.date = today;
+  state.progress = {};
+  state.claimed = [];
+  return true;
+}
+
 /** 记录进度（击杀/通关/强化/开箱时调用） */
 export function addDailyProgress(state: DailyState, kind: DailyKind, amount = 1): void {
-  if (state.date !== todayKey()) {
-    // 跨天重置
-    state.date = todayKey();
-    state.progress = {};
-    state.claimed = [];
-  }
+  ensureDaily(state);
   const tasks = genDailyTasks(state.date);
   for (const t of tasks) {
     if (t.kind === kind) {
@@ -102,6 +106,7 @@ export function addDailyProgress(state: DailyState, kind: DailyKind, amount = 1)
 
 /** 领取任务奖励 */
 export function claimDaily(state: DailyState, inventory: Inventory, taskId: string): boolean {
+  ensureDaily(state);
   if (state.claimed.includes(taskId)) return false;
   const tasks = genDailyTasks(state.date);
   const t = tasks.find((x) => x.id === taskId);
