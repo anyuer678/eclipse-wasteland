@@ -758,6 +758,7 @@ function boot(): void {
   // 打击停顿（hit-stop）：连杀/BOSS 死亡瞬间冻结逻辑几十毫秒，渲染继续，
   // 是动作游戏"顿挫感"的标准做法（比慢动作更干脆）
   let hitStopT = 0;
+  let fixedTicks = 0;
 
   // 打击感：镜头微震 + FOV 冲击
   let shakeT = 0;
@@ -1716,6 +1717,7 @@ function boot(): void {
   const loop = new FixedLoop({
     fixedDt: 1 / 60,
     onFixed: (dt, time) => {
+      fixedTicks += 1;
       // hit-stop：冻结逻辑（渲染继续，画面整体停住），比慢动作更有顿挫
       if (hitStopT > 0) {
         hitStopT -= dt;
@@ -1723,9 +1725,9 @@ function boot(): void {
       }
       const snap = input.snapshot();
 
-      // 暂停态（死亡/通关/主动暂停/设置面板）：冻结玩家与战斗逻辑
+      // 暂停/菜单态（死亡/通关/主动暂停/设置面板/主菜单）：冻结玩家与战斗逻辑
       // （直接读面板可见性，关面板的两种方式都能正确恢复）
-      if (paused || settingsPanel.visible()) {
+      if (paused || inMenu || settingsPanel.visible()) {
         // 局内商店/设置面板打开时主循环在上面就返回了，关闭键必须在这里处理
         if (shopOpen && snap.key('Tab') && !keyState.shopTab) {
           shopOpen = false;
@@ -1738,6 +1740,12 @@ function boot(): void {
         }
         keyState.shopTab = snap.key('Tab');
         if (settingsPanel.visible() && snap.key('KeyO') && !keyState.settings) {
+          settingsPanel.toggle();
+          keyState.settings = true;
+          return;
+        }
+        // 主菜单没有设置卡片，O 仍应能打开设置
+        if (inMenu && !settingsPanel.visible() && snap.key('KeyO') && !keyState.settings) {
           settingsPanel.toggle();
           keyState.settings = true;
           return;
@@ -2569,8 +2577,17 @@ function boot(): void {
       return Math.round(hp);
     },
     /** 调试：UI/暂停状态（验证面板开关与输入分支） */
-    uiState(): { paused: boolean; shopOpen: boolean; settings: boolean; menu: boolean } {
-      return { paused, shopOpen, settings: settingsPanel.visible(), menu: inMenu };
+    uiState(): { paused: boolean; shopOpen: boolean; settings: boolean; menu: boolean; phase: string; wave: number; enemies: number; ticks: number } {
+      return {
+        paused,
+        shopOpen,
+        settings: settingsPanel.visible(),
+        menu: inMenu,
+        phase: flow.phase,
+        wave: flow.waveIndex,
+        enemies: spawner.remaining(),
+        ticks: fixedTicks,
+      };
     },
     /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
     weaponState(): { id: string; name: string; index: number; count: number; viewmodelId: string } {
