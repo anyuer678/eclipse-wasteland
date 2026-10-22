@@ -1551,14 +1551,14 @@ function boot(): void {
   applyMaxHpGrowth();
 
   /** 玩家受伤统一结算（护甲 + 护盾减伤 + 局内铁壁 + 荆棘反弹 + 受击无敌帧） */  let hurtInvuln = 0;
-  const applyDamageToPlayer = (v: number): void => {
+  const applyDamageToPlayer = (v: number): boolean => {
     // 等级压制：怪物等级高于玩家时伤害放大
     v *= suppressionTaken(runState.level - flow.monsterLevel);
+    if (hurtInvuln > 0) return false; // 无敌帧：防多敌人同帧秒杀，也不再播放受击反馈
+    if (!Number.isFinite(v) || v <= 0) return false; // NaN 防护
+    hurtInvuln = 0.4;
     sfx.hurt();
     addShake(0.14, 0.32);
-    if (hurtInvuln > 0) return; // 无敌帧：防多敌人同帧秒杀
-    if (!Number.isFinite(v) || v <= 0) return; // NaN 防护
-    hurtInvuln = 0.4;
     // 受击红色碎片
     spawnParticles(player.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xff4444, 2, 2.2);
     const st = computeStats();
@@ -1583,6 +1583,7 @@ function boot(): void {
         if (dead) registerEnemyKill(best.e);
       }
     }
+    return true;
   };
 
   // ---------- 特效封装（统一交给 fx：零分配 / 单 draw call / 单 canvas 跳字） ----------
@@ -2133,12 +2134,10 @@ function boot(): void {
                 player.position.z
               );
               if (dx * dx + dz * dz <= radius * radius && Math.abs(dy) < 2.2 && exposed) {
-                applyDamageToPlayer(evt.blast);
-                shell.hud.hit();
+                if (applyDamageToPlayer(evt.blast)) shell.hud.hit();
               }
             } else {
-              applyDamageToPlayer(evt.melee ?? 0);
-              shell.hud.hit();
+              if (applyDamageToPlayer(evt.melee ?? 0)) shell.hud.hit();
             }
           }
           if (evt.spit) {
@@ -2240,10 +2239,7 @@ function boot(): void {
 
       // 敌人弹丸推进与命中
       const projDmg = projectiles.update(dt, player.position, terrainHeightAt);
-      if (projDmg > 0) {
-        applyDamageToPlayer(projDmg);
-        shell.hud.hit();
-      }
+      if (projDmg > 0 && applyDamageToPlayer(projDmg)) shell.hud.hit();
 
       // BOSS AI
       if (activeBoss && activeBoss.alive) {
@@ -2282,8 +2278,7 @@ function boot(): void {
           if (bevt.melee !== undefined) {
             // 横扫 / 冲锋撞击（撞击是冲锋结束帧的 melee 结算）
             if (bossLos) {
-              applyDamageToPlayer(bevt.melee);
-              shell.hud.hit();
+              if (applyDamageToPlayer(bevt.melee)) shell.hud.hit();
             }
           } else if (bevt.chargeDir) {
             // 冲锋起手只做预警，伤害只在撞击帧结算；不能起手瞬发
@@ -2291,8 +2286,7 @@ function boot(): void {
           } else if (bevt.stompRadius) {
             addShake(0.2, 0.4);
             if (bossLos && player.position.distanceTo(bp) < bevt.stompRadius) {
-              applyDamageToPlayer(8);
-              shell.hud.hit();
+              if (applyDamageToPlayer(8)) shell.hud.hit();
             }
           } else if (bevt.summon) {
             // 召唤物围绕 BOSS 出现，而不是全图随机位置 / 玩家脚下
