@@ -459,12 +459,18 @@ function boot(): void {
     onPickBoost: (id) => {
       const b = applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
       refreshRun();
+      pendingLevelUps = Math.max(0, pendingLevelUps - 1);
+      // 选牌反馈
+      addDamagePopup(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), `获得 · ${b.name} ×${runState.boosts[id as keyof typeof runState.boosts]}`, '#e8c377');
+      if (pendingLevelUps > 0) {
+        // 还有欠着的等级：继续弹下一张，不解除暂停
+        showLevelUpChoices();
+        return;
+      }
       paused = false;
       shell.hideLevelUp();
       shell.hud.root.style.display = 'block';
       lockMouse();
-      // 选牌反馈
-      addDamagePopup(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), `获得 · ${b.name} ×${runState.boosts[id as keyof typeof runState.boosts]}`, '#e8c377');
     },
     onSetDifficulty: (d) => {
       difficulty = d;
@@ -499,6 +505,7 @@ function boot(): void {
     // 局内成长：每局重置
     runState = newRun();
     runB = runBonuses(runState);
+    pendingLevelUps = 0;
     spawner.clear();
     // 跨局状态重置（否则重开一局后击杀/波次推进判定失效）
     lastKills = 0;
@@ -1071,6 +1078,8 @@ function boot(): void {
       return hitScratch.copy(origin).addScaledVector(dir, 60);
     },
     onHitEnemy(pos, damage, extra) {
+      // 升级选牌已暂停：同一发/后续弹丸不再继续结算
+      if (paused) return false;
       // 射线停在掩体表面：这一发不算命中任何单位（哪怕敌人贴在墙后）
       if (pointOnObstacleSurface(pos)) return false;
       let hitSomething = false;
@@ -1118,23 +1127,7 @@ function boot(): void {
         if (bdx * bdx + bdy * bdy + bdz * bdz < 12) {
           popupKey = 'boss';
           const dead = activeBoss.takeDamage(dmg);
-          if (dead) {
-            flow.kills += 1;
-            syncBossModel();
-            // BOSS 必掉 2 个 BUFF 球
-            spawnBuffOrb(activeBoss.root.position.clone());
-            spawnBuffOrb(activeBoss.root.position.clone().add(new THREE.Vector3(1.5, 0, 0)));
-            // BOSS 经验按怪物等级结算（天赋战意加成）
-            addKillExp(runState, true, activeBoss.monsterLevel, 1 + bonuses.expBonus);
-            // 死亡爆点：双环 + 大量火花（一次性事件，允许临时分配）
-            const bp = activeBoss.root.position;
-            fx.burst(bp, 0xff8844, 5);
-            fx.burst(bp, 0xffd24a, 2.6);
-            fx.emit(new THREE.Vector3(bp.x, bp.y + 1.6, bp.z), 0xff7a33, 26, 7.5, 2.2);
-            addKillBurst(bp);
-            addShake(0.3, 0.6);
-            hitStopT = 0.14; // BOSS 死亡长顿
-          }
+          if (dead) onBossKilled(activeBoss);
           hitSomething = true;
         }
       }
@@ -1177,37 +1170,8 @@ function boot(): void {
           if (runB.frost > 0) e.applySlow(1 - runB.frost, 1.5);
           const dead = e.takeDamage(finalDmg);
           if (dead) {
-            flow.kills += 1;
-            sfx.kill();
-            if (addKillExp(runState, !!e.elite, e.level, 1 + bonuses.expBonus)) {
-              sfx.levelUp();
-              paused = true;
-              unlockMouse();
-              shell.hidePause();
-              shell.showLevelUp(runState.level, rollChoices(runState).map((b) => ({ id: b.id, name: b.name, desc: b.desc })));
-            }
+            registerEnemyKill(e);
             fovKick = Math.max(fovKick, 2.2);
-            if (killStreak >= 3) hitStopT = 0.07; // 连杀瞬间顿一拍
-            syncBossModel();
-            maybeDropOrb(e.root.position);
-            addKillBurst(e.root.position);
-            spawnParticles(e.root.position, 0xffd24a, 4, 3.5);
-            // 连杀系统
-            killStreak += 1;
-            killStreakTimer = 2.5;
-            if (killStreak >= 3) {
-              const streakNames: Record<number, string> = {
-                3: '🔥 三连杀!', 5: '⚡ 五连杀!', 8: '💀 八连杀!',
-                10: '🌟 十连杀!!', 15: '👑 十五连杀!!!', 20: '🏆 无敌!!!',
-              };
-              const msg = streakNames[killStreak] || `🔥 ${killStreak}连杀!`;
-              const color = killStreak >= 10 ? '#ffd700' : killStreak >= 5 ? '#ff6644' : '#ff9944';
-              showAnnouncement(msg, color, 1200);
-              sfx.streak(killStreak);
-              // 连杀回血
-              if (killStreak >= 5) setHp(hp + 5);
-              if (killStreak >= 10) setHp(hp + 10);
-            }
             // 武器熟练度
             const curG = inventory.getWeapon(arsenal.current.def.id);
             curG.kills += 1;
@@ -1226,8 +1190,8 @@ function boot(): void {
         // 吸血：词缀吸血 + 局内嗜血
         const vamp = affixVampMult(inventory.getWeapon(arsenal.current.def.id)) + runB.vamp;
         if (vamp > 0) setHp(hp + dmg * vamp);
-        // 分裂弹：命中附近敌人溅射（伤害 × 分裂系数）
-        if (runB.split > 0) {
+        // 分裂弹：命中附近敌人溅射（伤害 × 分裂系数；升级暂停后不再继续结算）
+        if (!paused && runB.split > 0) {
           const splitDmg = dmg * runB.split;
           for (const se of spawner.all()) {
             if (!se.alive) continue;
@@ -1238,10 +1202,7 @@ function boot(): void {
             if (sdx * sdx + sdy * sdy + sdz * sdz > 9) continue;
             if (!nav.hasLineOfSight3D(pos.x, pos.y, pos.z, centerScratch.x, centerScratch.y, centerScratch.z)) continue;
             const sdead = se.takeDamage(splitDmg);
-            if (sdead) {
-              flow.kills += 1;
-              syncBossModel();
-            }
+            if (sdead && registerEnemyKill(se)) break;
           }
         }
       }
@@ -1278,6 +1239,8 @@ function boot(): void {
       return hits.slice(0, max).map((h) => h.e.center());
     },
     onChain(pos, damage, jumps, falloff) {
+      // 升级暂停后不再继续弹跳结算
+      if (paused) return;
       // 连锁闪电：从命中点向附近敌人弹跳，伤害逐跳衰减；每跳都要求视线
       let fromPos = pos;
       let dmg = damage;
@@ -1297,10 +1260,7 @@ function boot(): void {
         const to = best.e.center();
         tracer.fire(fromPos, to, 0x7ab0ff, 1.8);
         const dead = best.e.takeDamage(dmg);
-        if (dead) {
-          flow.kills += 1;
-          syncBossModel();
-        }
+        if (dead && registerEnemyKill(best.e)) break;
         fromPos = to;
       }
     },
@@ -1362,12 +1322,93 @@ function boot(): void {
   /** 局内成长（升级选牌） */
   let runState = newRun();
   let runB = runBonuses(runState);
+  /** 待选的升级次数（一次经验结算可能跨多级，必须逐级给牌） */
+  let pendingLevelUps = 0;
   const refreshRun = (): void => {
     runB = runBonuses(runState);
     refreshGrowth();
     applySpeedMult();
     applyMaxHpGrowth();
   };
+
+  /** 展示当前待选的升级牌；每一级都会单独给一次选择 */
+  function showLevelUpChoices(): void {
+    if (pendingLevelUps <= 0) return;
+    sfx.levelUp();
+    paused = true;
+    unlockMouse();
+    shell.hidePause();
+    const showLevel = runState.level - pendingLevelUps + 1;
+    shell.showLevelUp(showLevel, rollChoices(runState).map((b) => ({ id: b.id, name: b.name, desc: b.desc })));
+  }
+
+  /** 记录跨级产生的待选次数；若当前没弹牌则立即弹第一张 */
+  function queueLevelUps(gained: number): void {
+    if (gained <= 0) return;
+    pendingLevelUps += gained;
+    if (!paused) showLevelUpChoices();
+  }
+
+  /** 小怪击杀经验：所有玩家来源统一结算，返回是否触发升级 */
+  function awardKillExp(e: Enemy): boolean {
+    const before = runState.level;
+    const leveled = addKillExp(runState, !!e.elite, e.level, 1 + bonuses.expBonus);
+    if (leveled) queueLevelUps(runState.level - before);
+    return leveled;
+  }
+
+  /** BOSS 死亡统一结算：经验/掉落/爆点；普通副本由结算界面接管升级牌 */
+  function onBossKilled(boss: import('./campaign').Boss): void {
+    flow.kills += 1;
+    syncBossModel();
+    // BOSS 必掉 2 个 BUFF 球
+    spawnBuffOrb(boss.root.position.clone());
+    spawnBuffOrb(boss.root.position.clone().add(new THREE.Vector3(1.5, 0, 0)));
+    // BOSS 经验按怪物等级结算（天赋战意加成）
+    const before = runState.level;
+    const leveled = addKillExp(runState, true, boss.monsterLevel, 1 + bonuses.expBonus);
+    const gained = runState.level - before;
+    // 死亡爆点：双环 + 大量火花（一次性事件，允许临时分配）
+    const bp = boss.root.position;
+    fx.burst(bp, 0xff8844, 5);
+    fx.burst(bp, 0xffd24a, 2.6);
+    fx.emit(new THREE.Vector3(bp.x, bp.y + 1.6, bp.z), 0xff7a33, 26, 7.5, 2.2);
+    addKillBurst(bp);
+    addShake(0.3, 0.6);
+    hitStopT = 0.14; // BOSS 死亡长顿
+    // 普通副本紧接着通关结算；塔模式要逐级展示升级选牌
+    if (leveled && flow.mission.tower) queueLevelUps(gained);
+  }
+
+  /**
+   * 小怪击杀统一结算（所有玩家来源）：
+   * 击杀数/经验/连杀/掉落/爆点，返回是否触发升级。
+   */
+  function registerEnemyKill(e: Enemy): boolean {
+    flow.kills += 1;
+    syncBossModel();
+    sfx.kill();
+    const leveled = awardKillExp(e);
+    maybeDropOrb(e.root.position);
+    addKillBurst(e.root.position);
+    spawnParticles(e.root.position, 0xffd24a, 4, 3.5);
+    killStreak += 1;
+    killStreakTimer = 2.5;
+    if (killStreak >= 3) hitStopT = 0.07; // 连杀瞬间顿一拍
+    if (killStreak >= 3) {
+      const streakNames: Record<number, string> = {
+        3: '🔥 三连杀!', 5: '⚡ 五连杀!', 8: '💀 八连杀!',
+        10: '🌟 十连杀!!', 15: '👑 十五连杀!!!', 20: '🏆 无敌!!!',
+      };
+      const msg = streakNames[killStreak] || `🔥 ${killStreak}连杀!`;
+      const color = killStreak >= 10 ? '#ffd700' : killStreak >= 5 ? '#ff6644' : '#ff9944';
+      showAnnouncement(msg, color, 1200);
+      sfx.streak(killStreak);
+      if (killStreak >= 5) setHp(hp + 5);
+      if (killStreak >= 10) setHp(hp + 10);
+    }
+    return leveled;
+  }
   const computeStats = (): ReturnType<typeof applyBuffs> => {
     if (statsCache) return statsCache;
     const base = baseStats(bonuses, growthSummary());
@@ -1419,10 +1460,7 @@ function boot(): void {
       }
       if (best) {
         const dead = best.e.takeDamage(runB.thorns);
-        if (dead) {
-          flow.kills += 1;
-          syncBossModel();
-        }
+        if (dead) registerEnemyKill(best.e);
       }
     }
   };
@@ -1551,23 +1589,17 @@ function boot(): void {
       if (dot < 0.5) continue; // 前方 ±60° 扇形
       if (!nav.hasLineOfSight3D(origin.x, origin.y, origin.z, c.x, c.y, c.z)) continue;
       const dead = e.takeDamage(meleeDamage);
-      if (dead) {
-        flow.kills += 1;
-        syncBossModel();
-      }
       hitSomething = true;
+      if (dead && registerEnemyKill(e)) break;
     }
-    // BOSS
-    if (activeBoss && activeBoss.alive) {
+    // BOSS（小怪击杀触发升级暂停后不再继续结算 BOSS）
+    if (!paused && activeBoss && activeBoss.alive) {
       const c = activeBoss.center();
       const to = c.clone().sub(origin);
       const dist = to.length();
       if (dist <= 3.4 && nav.hasLineOfSight3D(origin.x, origin.y, origin.z, c.x, c.y, c.z)) {
         const dead = activeBoss.takeDamage(meleeDamage);
-        if (dead) {
-          flow.kills += 1;
-          syncBossModel();
-        }
+        if (dead) onBossKilled(activeBoss);
         hitSomething = true;
       }
     }
@@ -1760,10 +1792,7 @@ function boot(): void {
             if (!nav.hasLineOfSight3D(infernoMesh.position.x, infernoMesh.position.y + 0.5, infernoMesh.position.z, c.x, c.y, c.z)) continue;
             const dead = e.takeDamage(infernoDmg * dt * 10);
             e.applySlow(0.5, 0.5);
-            if (dead) {
-              flow.kills += 1;
-              syncBossModel();
-            }
+            if (dead && registerEnemyKill(e)) break;
           }
         }
         if (infernoTimer <= 0) {
@@ -1801,10 +1830,7 @@ function boot(): void {
           if (best) {
             tracer.fire(from, best.e.center(), 0x66e0ff, 1.4);
             const dead = best.e.takeDamage(summonDmg);
-            if (dead) {
-              flow.kills += 1;
-              syncBossModel();
-            }
+            if (dead) registerEnemyKill(best.e);
           }
         }
         if (summonTimer <= 0) {
@@ -1916,8 +1942,7 @@ function boot(): void {
         if (stealthTimer > 0) continue;
         const died = e.tickBurn(dt);
         if (died) {
-          flow.kills += 1;
-          syncBossModel();
+          if (registerEnemyKill(e)) break;
           continue;
         }
         const ep = e.root.position;
@@ -2130,18 +2155,7 @@ function boot(): void {
         achAdd('kills', gained);
         addDailyProgress(dailyState, 'kills', gained); // 每日任务：击杀
         lastKills = flow.kills;
-        killStreak += gained;
-        killStreakTimer = 5;
-        // 局内成长：击杀攒经验，升级时暂停弹出 3 选 1
-        for (let i = 0; i < gained; i++) {
-          if (addKillExp(runState, false, 1, 1 + bonuses.expBonus)) {
-            paused = true;
-            unlockMouse(); // 选牌界面需要鼠标
-            shell.hidePause();
-            shell.showLevelUp(runState.level, rollChoices(runState).map((b) => ({ id: b.id, name: b.name, desc: b.desc })));
-            break;
-          }
-        }
+        // 击杀经验/连杀已由各击杀来源统一结算，这里只做成就/每日进度
       }
 
       tracer.update(dt);

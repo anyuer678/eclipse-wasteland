@@ -873,8 +873,9 @@ export function createLevelUpScreen(cb: { onPick: (id: string) => void }): { scr
         <div style="color:var(--ink);font-size:16px;letter-spacing:0.1em;margin-bottom:8px">${c.name}</div>
         <div style="color:var(--ink-dim);font-size:13px;line-height:1.7">${c.desc}</div>`;
       card.addEventListener('click', () => {
-        cb.onPick(c.id);
+        // 先隐藏当前牌，再交给回调；回调可能在还有欠级时立刻展示下一张
         screen.classList.add('hidden');
+        cb.onPick(c.id);
       });
       cards.appendChild(card);
     }
