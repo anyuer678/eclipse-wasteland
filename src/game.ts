@@ -360,7 +360,11 @@ function boot(): void {
     },
     onExitMission: () => {
       escPaused = false;
-      paused = false;
+      // 返回任务简报是菜单态：必须冻结战斗并停止 3D 渲染，否则选关界面下
+      // 流场仍会刷怪、玩家输入仍会移动射击。
+      paused = true;
+      inMenu = true;
+      unlockMouse();
       spawner.clear();
       shell.showSelect();
     },
