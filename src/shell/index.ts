@@ -81,7 +81,8 @@ export class Shell {
 
     this.menu = createMenuScreen(callbacks);
     this.select = createSelectScreen(callbacks);
-    this.result = createResultScreen(callbacks);
+    // 结算页“返回任务简报”应回到选关页；主菜单可从选关页返回
+    this.result = createResultScreen({ ...callbacks, onBackToMenu: () => this.showSelect() });
     this.armory = createArmoryPanel(inventory, callbacks);
     this.result.screen.querySelector('.ss-card')!.appendChild(this.armory.root);
     this.pause = createPauseScreen({
@@ -252,6 +253,7 @@ export class Shell {
     this.menu.screen.classList.add('hidden');
     this.select.classList.remove('hidden');
     this.pause.classList.add('hidden');
+    this.result.screen.classList.add('hidden');
     this.hud.root.style.display = 'none';
   }
 
