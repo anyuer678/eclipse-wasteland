@@ -2362,7 +2362,7 @@ function boot(): void {
           weaponAsc: g.ascension,
           damageMult: arsenal.current.growthDamage,
           ammo: arsenal.current.state.ammo,
-          mag: arsenal.current.def.mag,
+          mag: arsenal.current.magCap(),
           reloading: arsenal.current.state.reloading,
           phase: flow.phase,
           wave: flow.waveIndex,
@@ -2627,7 +2627,7 @@ function boot(): void {
       inventory.getWeapon(arsenal.current.def.id).kills = Math.max(0, Math.floor(n));
     },
     /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
-    weaponState(): { id: string; name: string; index: number; count: number; viewmodelId: string; kills: number; growthDamage: number } {
+    weaponState(): { id: string; name: string; index: number; count: number; viewmodelId: string; kills: number; growthDamage: number; magMult: number; magCap: number; ammo: number } {
       const g = inventory.getWeapon(arsenal.current.def.id);
       return {
         id: arsenal.current.def.id,
@@ -2637,6 +2637,9 @@ function boot(): void {
         viewmodelId: viewmodelWeaponId,
         kills: g.kills,
         growthDamage: +arsenal.current.growthDamage.toFixed(4),
+        magMult: arsenal.current.magMult,
+        magCap: arsenal.current.magCap(),
+        ammo: arsenal.current.state.ammo,
       };
     },
     /** 调试：跨局战斗状态（验证重开清理） */
@@ -2820,6 +2823,13 @@ function boot(): void {
     },
     runDump(): { level: number; exp: number; boosts: Record<string, number> } {
       return { level: runState.level, exp: runState.exp, boosts: { ...runState.boosts } };
+    },
+    /** 调试：直接设置局内强化层数（验证 HUD/倍率刷新） */
+    setBoost(id: string, stacks: number): boolean {
+      if (!(id in runState.boosts)) return false;
+      runState.boosts[id as keyof typeof runState.boosts] = Math.max(0, Math.floor(stacks));
+      refreshRun();
+      return true;
     },
     killAll(): { killed: number; level: number } {
       // 调试：击杀场上所有敌人（走完整击杀结算：经验/升级/每日/熟练度）
