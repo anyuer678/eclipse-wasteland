@@ -1715,7 +1715,17 @@ function boot(): void {
       // 暂停态（死亡/通关/主动暂停/设置面板）：冻结玩家与战斗逻辑
       // （直接读面板可见性，关面板的两种方式都能正确恢复）
       if (paused || settingsPanel.visible()) {
-        // 设置面板打开时主循环在上面就返回了，O 键必须在这里处理才能关闭
+        // 局内商店/设置面板打开时主循环在上面就返回了，关闭键必须在这里处理
+        if (shopOpen && snap.key('Tab') && !keyState.shopTab) {
+          shopOpen = false;
+          paused = false;
+          shell.hideCombatShop();
+          shell.hud.root.style.display = 'block';
+          lockMouse();
+          keyState.shopTab = true;
+          return;
+        }
+        keyState.shopTab = snap.key('Tab');
         if (settingsPanel.visible() && snap.key('KeyO') && !keyState.settings) {
           settingsPanel.toggle();
           keyState.settings = true;
@@ -2546,6 +2556,10 @@ function boot(): void {
     },
     playerHp(): number {
       return Math.round(hp);
+    },
+    /** 调试：UI/暂停状态（验证面板开关与输入分支） */
+    uiState(): { paused: boolean; shopOpen: boolean; settings: boolean; menu: boolean } {
+      return { paused, shopOpen, settings: settingsPanel.visible(), menu: inMenu };
     },
     /** 调试：跨局战斗状态（验证重开清理） */
     combatState(): {
