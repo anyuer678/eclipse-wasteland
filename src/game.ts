@@ -1756,7 +1756,7 @@ function boot(): void {
           paused = false;
           shell.hidePause();
         }
-        if (snap.key('KeyR') && !keyState.restart) {
+        if (snap.key('KeyR') && !keyState.restart && shell.resultVisible()) {
           if (flow.phase === 'clear' || flow.phase === 'failed') beginMission();
         }
         keyState.restart = snap.key('KeyR');

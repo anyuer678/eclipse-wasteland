@@ -269,4 +269,9 @@ export class Shell {
     this.result.show(result, weaponOf('pulse-rifle'));
     this.armory.refresh(weaponOf('pulse-rifle'));
   }
+
+  /** 结算屏是否可见（R 重开只在结算屏生效） */
+  resultVisible(): boolean {
+    return !this.result.screen.classList.contains('hidden');
+  }
 }
