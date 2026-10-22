@@ -1715,6 +1715,13 @@ function boot(): void {
       // 暂停态（死亡/通关/主动暂停/设置面板）：冻结玩家与战斗逻辑
       // （直接读面板可见性，关面板的两种方式都能正确恢复）
       if (paused || settingsPanel.visible()) {
+        // 设置面板打开时主循环在上面就返回了，O 键必须在这里处理才能关闭
+        if (settingsPanel.visible() && snap.key('KeyO') && !keyState.settings) {
+          settingsPanel.toggle();
+          keyState.settings = true;
+          return;
+        }
+        keyState.settings = snap.key('KeyO');
         if (escPaused && snap.key('Escape') && !keyState.esc) {
           escPaused = false;
           paused = false;
