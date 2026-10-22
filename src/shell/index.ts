@@ -27,7 +27,7 @@ export interface ShellCallbacks {
   onOpenTalent?: () => void;
   onUpgradeTalent?: (id: string) => void;
   onOpenForge?: () => void;
-  onForgeUpgrade?: () => void;
+  onForgeUpgrade?: (action: string) => void;
   onOpenRole?: () => void;
   onSelectRole?: (id: string) => void;
   onUpgradeRole?: (id: string) => void;
@@ -102,7 +102,7 @@ export class Shell {
       onBack: () => this.showMenu(),
     });
     this.forgeScreen = createForgeScreen(inventory, {
-      onUpgrade: () => cb.onForgeUpgrade?.(),
+      onUpgrade: (action) => cb.onForgeUpgrade?.(action),
       onBack: () => this.showMenu(),
     });
     this.roleScreen = createRoleScreen(inventory, {

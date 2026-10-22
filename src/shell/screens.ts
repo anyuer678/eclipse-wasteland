@@ -284,9 +284,11 @@ export function createAchievementScreen(
   return { screen, refresh };
 }
 
+export type ForgeAction = 'sync' | 'ascend' | 'rune' | 'enchant' | 'pinnacle';
+
 export function createForgeScreen(
   inventory: Inventory,
-  cb: { onUpgrade: () => void; onBack: () => void }
+  cb: { onUpgrade: (action: ForgeAction) => void; onBack: () => void }
 ): { screen: HTMLElement; refresh: () => void } {
   const screen = el('div', 'ss-screen hidden');
   screen.appendChild(el('div', 'ss-title', '强化'));
@@ -352,9 +354,11 @@ export function createForgeScreen(
       b.disabled = disabled;
       return b;
     };
-    const run = (fn: () => void): void => {
-      fn();
-      cb.onUpgrade();
+    const run = (fn: () => unknown, action: ForgeAction): void => {
+      const r = fn();
+      // 材料不足/已满级时返回 null；批量接口返回成功次数。只有真的升级成功才计数
+      const ok = typeof r === 'object' ? r !== null : typeof r === 'number' ? r > 0 : !!r;
+      if (ok) cb.onUpgrade(action);
       refresh();
     };
     const upLevelCap = (): number => Math.max(g.level, Math.min(40, Math.ceil((g.level + 1) / 10) * 10));
@@ -397,43 +401,50 @@ export function createForgeScreen(
       '同步强化',
       g.level, upLevelCap(), `Lv.${g.level} · 每级 +5% 伤害`,
       btnRow([
-        mk(`+1（合金×${upCost}）`, inventory.material('合金碎片') < upCost, () => run(() => tryUpgrade(d, inventory))),
-        mk('+5', inventory.material('合金碎片') < upCost * 5, () => run(() => tryUpgradeN(d, inventory, 5))),
-        mk('+10', inventory.material('合金碎片') < upCost * 10, () => run(() => tryUpgradeN(d, inventory, 10))),
-        mk('拉满', false, () => run(() => tryUpgradeMax(d, inventory))),
+        mk(`+1（合金×${upCost}）`, inventory.material('合金碎片') < upCost, () => run(() => tryUpgrade(d, inventory), 'sync')),
+        mk('+5', inventory.material('合金碎片') < upCost * 5, () => run(() => tryUpgradeN(d, inventory, 5), 'sync')),
+        mk('+10', inventory.material('合金碎片') < upCost * 10, () => run(() => tryUpgradeN(d, inventory, 10), 'sync')),
+        mk('拉满', false, () => run(() => tryUpgradeMax(d, inventory), 'sync')),
       ])
     ));
     body.appendChild(module(
       '进阶',
       g.ascension, MAX_ASCENSION, `阶${g.ascension} · 机制强化 + 配件`,
       btnRow([
-        mk(`进阶（核心×${asCost}）`, inventory.material('核心晶体') < asCost || g.ascension >= MAX_ASCENSION, () => run(() => tryAscend(d, inventory))),
+        mk(`进阶（核心×${asCost}）`, inventory.material('核心晶体') < asCost || g.ascension >= MAX_ASCENSION, () => run(() => tryAscend(d, inventory), 'ascend')),
       ])
     ));
     body.appendChild(module(
       '符文',
       g.rune, MAX_RUNE, `Lv.${g.rune} · 每级 +2% · 每 2 级解锁词缀`,
       btnRow([
-        mk(`+1（核心×${runeCost}）`, inventory.material('核心晶体') < runeCost || g.rune >= MAX_RUNE, () => run(() => tryRuneUpgrade(d, inventory))),
-        mk('+5', g.rune >= MAX_RUNE, () => run(() => { for (let i = 0; i < 5; i++) if (!tryRuneUpgrade(d, inventory)) break; })),
+        mk(`+1（核心×${runeCost}）`, inventory.material('核心晶体') < runeCost || g.rune >= MAX_RUNE, () => run(() => tryRuneUpgrade(d, inventory), 'rune')),
+        mk('+5', g.rune >= MAX_RUNE, () => run(() => {
+          let done = 0;
+          for (let i = 0; i < 5; i++) {
+            if (!tryRuneUpgrade(d, inventory)) break;
+            done += 1;
+          }
+          return done;
+        }, 'rune')),
       ])
     ));
     body.appendChild(module(
       '附魔',
       g.enchant, MAX_ENCHANT, `Lv.${g.enchant} · 暴击 +${critPct}% · 攻速 +${spdPct}%`,
       btnRow([
-        mk(`+1（核心×${enCost}）`, inventory.material('核心晶体') < enCost || g.enchant >= MAX_ENCHANT, () => run(() => tryEnchant(d, inventory))),
-        mk('+5', g.enchant >= MAX_ENCHANT, () => run(() => tryEnchantN(d, inventory, 5))),
-        mk('拉满', g.enchant >= MAX_ENCHANT, () => run(() => tryEnchantN(d, inventory, 1e9))),
+        mk(`+1（核心×${enCost}）`, inventory.material('核心晶体') < enCost || g.enchant >= MAX_ENCHANT, () => run(() => tryEnchant(d, inventory), 'enchant')),
+        mk('+5', g.enchant >= MAX_ENCHANT, () => run(() => tryEnchantN(d, inventory, 5), 'enchant')),
+        mk('拉满', g.enchant >= MAX_ENCHANT, () => run(() => tryEnchantN(d, inventory, 1e9), 'enchant')),
       ])
     ));
     body.appendChild(module(
       '巅峰突破',
       g.pinnacle, MAX_PINNACLE, `Lv.${g.pinnacle} · 伤害 +${Math.round(g.pinnacle * PINNACLE_DMG_STEP * 100)}% · 生命 +${hpBonus}`,
       btnRow([
-        mk(`突破（合金×${piCostM} 金币×${piCostG}）`, inventory.material('合金碎片') < piCostM || inventory.gold < piCostG || g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacle(d, inventory))),
-        mk('+5', g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacleN(d, inventory, 5))),
-        mk('拉满', g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacleN(d, inventory, 1e9))),
+        mk(`突破（合金×${piCostM} 金币×${piCostG}）`, inventory.material('合金碎片') < piCostM || inventory.gold < piCostG || g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacle(d, inventory), 'pinnacle')),
+        mk('+5', g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacleN(d, inventory, 5), 'pinnacle')),
+        mk('拉满', g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacleN(d, inventory, 1e9), 'pinnacle')),
       ])
     ));
     panel.appendChild(body);

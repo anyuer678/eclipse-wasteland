@@ -411,9 +411,11 @@ function boot(): void {
       }
     },
     onOpenForge: () => shell.showForge(),
-    onForgeUpgrade: () => {
+    onForgeUpgrade: (action) => {
       refreshGrowth();
       addDailyProgress(dailyState, 'upgrades');
+      achAdd('upgrades', 1);
+      if (action === 'ascend') achAdd('ascensions', 1);
     },
     onOpenRole: () => {
       shell.currentRoleId = selectedRoleId;
@@ -1995,13 +1997,19 @@ function boot(): void {
 
       if (snap.key('KeyT') && !keyState.upgrade) {
         const r = tryUpgrade(arsenal.current.def, inventory);
-        if (r) achAdd('upgrades', 1);
+        if (r) {
+          achAdd('upgrades', 1);
+          addDailyProgress(dailyState, 'upgrades');
+        }
         refreshGrowth();
       }
       keyState.upgrade = snap.key('KeyT');
       if (snap.key('KeyY') && !keyState.ascend) {
         const r = tryAscend(arsenal.current.def, inventory);
-        if (r) achAdd('ascensions', 1);
+        if (r) {
+          achAdd('ascensions', 1);
+          addDailyProgress(dailyState, 'upgrades');
+        }
         refreshGrowth();
       }
       keyState.ascend = snap.key('KeyY');
