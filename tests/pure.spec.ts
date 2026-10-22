@@ -123,7 +123,8 @@ describe('growth/stats', () => {
   it('baseStats layers growth bonuses', async () => {
     const { baseStats, fourStats, BUFF_DURATION } = await import('../src/growth/stats')
     const s = baseStats({ dmg: 0.5, hp: 20, energyGain: 0.25, spd: 0, crit: 0, armor: 0 }, { enchant: 10, pinnacle: 5 })
-    expect(s.attackMult).toBeCloseTo(1 + 0.5 + 5 * 0.03)
+    // 巅峰伤害只算在武器自身（damageMultiplier），属性层再乘一次就是双倍加成
+    expect(s.attackMult).toBeCloseTo(1.5)
     expect(s.critRate).toBeLessThanOrEqual(0.6)
     expect(s.critRate).toBeGreaterThan(0.06)
     expect(s.energyRegen).toBeCloseTo(1.25)
@@ -134,6 +135,22 @@ describe('growth/stats', () => {
     expect(BUFF_DURATION.atk).toBe(20)
     expect(BUFF_DURATION.shield).toBe(10)
     expect(BUFF_DURATION.speed).toBe(12)
+  })
+
+  it('pinnacle damage bonus is applied once, on the weapon itself', async () => {
+    const { damageMultiplier } = await import('../src/growth/upgrade')
+    const { baseStats } = await import('../src/growth/stats')
+    const { ARSENAL } = await import('../src/arsenal')
+    const { Inventory } = await import('../src/growth')
+    const def = ARSENAL[0]
+    const inv = new Inventory()
+    inv.getWeapon(def.id).pinnacle = 15
+    // 15 级巅峰 = 本武器 +45%，走 damageMultiplier
+    expect(damageMultiplier(def, inv)).toBeCloseTo(1.45)
+    // 属性层不得再叠加同一份巅峰加成
+    const talents = { dmg: 0, hp: 0, energyGain: 0, spd: 0, crit: 0, armor: 0 }
+    expect(baseStats(talents, { enchant: 0, pinnacle: 15 }).attackMult).toBe(1)
+    expect(baseStats({ ...talents, dmg: 0.42 }, { enchant: 0, pinnacle: 15 }).attackMult).toBeCloseTo(1.42)
   })
 
   it('talent bonuses feed crit / armor / fire rate', async () => {

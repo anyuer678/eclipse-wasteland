@@ -120,7 +120,7 @@ function boot(): void {
     arsenal.refreshGrowth(inventory);
     for (const w of arsenal.weapons) {
       const g = inventory.getWeapon(w.def.id);
-      w.growthDamage *= 1 + bonuses.dmg;
+      // 天赋伤害加成统一走 computeStats().attackMult，不再折进武器自身倍率（否则乘两次）
       w.energyGainMult = (1 + bonuses.energyGain) * (1 + affixEnergyMult(g));
     }
     // 攻速倍率（敏捷/附魔 + 词缀 + 速射球 + 局内攻速）应用到武器
@@ -1695,7 +1695,8 @@ function boot(): void {
     meleeCooldown = 0.55;
     const origin = fireCtx.origin;
     const dir = fireCtx.direction;
-    const meleeDamage = 30 * arsenal.current.growthDamage;
+    // 近战直接走 takeDamage，不经过 onHitEnemy 的统一结算，角色攻击倍率要在这里显式乘上
+    const meleeDamage = 30 * arsenal.current.growthDamage * computeStats().attackMult;
     // 逻辑判定不依赖 world matrix（旧实现在这里强制整场景 updateMatrixWorld，开销极大）
 
     let hitSomething = false;

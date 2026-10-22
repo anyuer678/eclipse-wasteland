@@ -6,12 +6,12 @@
  *   力量 Power  → 伤害倍率
  *   知识 Mind   → 暴击率 / 能量回复
  *   敏捷 Agility→ 移速 / 攻速
- * 四围来源：武器成长（附魔/巅峰）与天赋。
+ * 四围来源：天赋（力量/体质/能量）；武器成长按全装备汇总到暴击·攻速·生命（巅峰伤害只算在武器自身，见 damageMultiplier）。
  * 战力 = 四围属性加权折算的综合评分。
  */
 
 export interface PlayerStats {
-  /** 攻击倍率（1 + 天赋dmg + 攻击药水 + 巅峰） */
+  /** 攻击倍率（1 + 天赋dmg + 攻击药水）；武器自身的成长/巅峰走 damageMultiplier，此处不重复计入 */
   attackMult: number;
   /** 暴击率 0-0.6（基础 + 附魔 + 巅峰 + 天赋致命） */
   critRate: number;
@@ -56,12 +56,12 @@ export function baseStats(
   talents: { dmg: number; hp: number; energyGain: number; spd: number; crit: number; armor: number },
   growth: { enchant: number; pinnacle: number }
 ): PlayerStats {
-  // 力量：巅峰伤害加成；知识：附魔+巅峰暴击；敏捷：附魔攻速；体质：巅峰生命
-  const powerBonus = growth.pinnacle * 0.03;
+  // 知识：附魔+巅峰暴击；敏捷：附魔攻速；体质：巅峰生命
+  // 力量只吃天赋：巅峰的 +3%/级 已经算进武器自身的 damageMultiplier，两处再乘一次就是双倍加成
   const critBonus = growth.enchant * 0.01 + Math.floor(growth.pinnacle / 5) * 0.01;
   const speedBonus = growth.enchant * 0.02;
   return {
-    attackMult: 1 + talents.dmg + powerBonus,
+    attackMult: 1 + talents.dmg,
     // 暴击上限 0.6：天赋致命（+21%）+ 附魔巅峰仍有空间，但不至于必暴
     critRate: Math.min(0.6, 0.06 + critBonus + talents.crit),
     critMult: 1.6,
