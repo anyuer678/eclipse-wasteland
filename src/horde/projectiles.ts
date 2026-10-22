@@ -19,6 +19,7 @@ interface Proj {
 }
 
 const HIT_RADIUS = 0.95;
+const GRAVITY = 9;
 
 export class ProjectilePool {
   private readonly scene: THREE.Scene;
@@ -51,7 +52,8 @@ export class ProjectilePool {
     this.items.push({
       mesh,
       vx: (to.x - from.x) / flight,
-      vy: (to.y - from.y) / flight - 2.2 * flight, // 抛物线下坠
+      // 重力补偿必须与 update 中的 g 一致：Δy/T + gT/2，否则远距离会全部砸地
+      vy: (to.y - from.y) / flight + 0.5 * GRAVITY * flight,
       vz: (to.z - from.z) / flight,
       life: flight + 0.5,
       damage,
@@ -63,7 +65,7 @@ export class ProjectilePool {
    * 每帧推进：命中玩家返回伤害并出火花；超时/落地自灭。
    * 返回本帧对玩家造成的总伤害（由调用方统一结算 HUD/音效）。
    */
-  update(dt: number, playerPos: THREE.Vector3): number {
+  update(dt: number, playerPos: THREE.Vector3, groundAt?: (x: number, z: number) => number): number {
     let damage = 0;
     for (let i = this.items.length - 1; i >= 0; i--) {
       const p = this.items[i];
@@ -72,13 +74,19 @@ export class ProjectilePool {
       m.position.x += p.vx * dt;
       m.position.y += p.vy * dt;
       m.position.z += p.vz * dt;
-      p.vy -= 9 * dt; // 重力
+      p.vy -= GRAVITY * dt;
       const dx = m.position.x - playerPos.x;
       const dy = m.position.y - (playerPos.y + 1.2);
       const dz = m.position.z - playerPos.z;
       if (dx * dx + dy * dy + dz * dz < HIT_RADIUS * HIT_RADIUS) {
         damage += p.damage;
         this.fx.emit(m.position, p.color, 5, 2.4);
+        this.remove(i);
+        continue;
+      }
+      // 落地/钻进山坡即消失：否则弹丸会穿地形继续飞
+      if (groundAt && m.position.y < groundAt(m.position.x, m.position.z) + 0.02) {
+        this.fx.emit(m.position, p.color, 3, 1.6);
         this.remove(i);
         continue;
       }

@@ -329,7 +329,32 @@ export class NavField {
   }
 
   /**
-   * 弹道/攻击视线：精确 3D 线段-AABB 求交。
+   * 地形遮挡：沿线段按格查烘焙地面高度，返回首个遮挡点的 3D 距离（无遮挡返回 null）。
+   * 两端各留 0.6m，脚下斜坡/平台边缘不会被误判成挡墙；0.12m 余量用于吞掉网格量化误差。
+   */
+  terrainRayDistance(ax: number, ay: number, az: number, bx: number, by: number, bz: number): number | null {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const dz = bz - az;
+    const horiz = Math.hypot(dx, dz);
+    if (horiz < 1.2) return null;
+    const segLen = Math.hypot(dx, dy, dz);
+    const steps = Math.max(2, Math.min(48, Math.ceil(horiz / 0.9)));
+    const endPad = 0.6 / horiz;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      if (t < endPad || t > 1 - endPad) continue;
+      const x = ax + dx * t;
+      const z = az + dz * t;
+      const gi = this.indexOf(x, z);
+      const ground = gi >= 0 ? this.floor[gi] : this.heightAt(x, z);
+      if (ground > ay + dy * t + 0.12) return segLen * t;
+    }
+    return null;
+  }
+
+  /**
+   * 弹道/攻击视线：精确 3D 线段-AABB 求交 + 地形高度遮挡。
    * 障碍从地面延伸到 top，低于 top-0.05 的穿越算遮挡；
    * 比固定步数采样可靠，细墙在远距离也不会被跨过。
    */
@@ -378,7 +403,7 @@ export class NavField {
       }
       return false;
     }
-    return true;
+    return this.terrainRayDistance(ax, ay, az, bx, by, bz) === null;
   }
 
   /** 沿流场选一个尽量远的、可直视的路径点；返回是否找到方向 */

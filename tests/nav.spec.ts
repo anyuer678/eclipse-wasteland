@@ -107,6 +107,24 @@ describe('horde/nav', () => {
     expect(tall.hasLineOfSight3D(-3, 1.3, 0, 3, 1.3, 0)).toBe(false)
   })
 
+  it('terrain hills block line of sight and rays (no shooting through slopes)', () => {
+    // 半径 4m、高 3m 的圆锥土丘，其余为平地
+    const hill = (x: number, z: number): number => Math.max(0, 3 * (1 - Math.hypot(x, z) / 4))
+    const nav = field([], hill)
+    // 两侧地面的人互相看不见（旧实现只看 AABB，会隔山对射）
+    expect(nav.hasLineOfSight3D(-6, 1.2, 0, 6, 1.2, 0)).toBe(false)
+    // 从山脚看山顶可见（视线贴着坡面往上）
+    expect(nav.hasLineOfSight3D(6, 1.2, 0, 0, 4.2, 0)).toBe(true)
+    // 绕开土丘、从足够高处越过则不遮挡
+    expect(nav.hasLineOfSight3D(-6, 1.2, 6, 6, 1.2, 6)).toBe(true)
+    expect(nav.hasLineOfSight3D(-6, 5.2, 0, 6, 5.2, 0)).toBe(true)
+    // 射线截断：从一侧射向另一侧，命中点落在土丘表面而不是穿过去
+    const t = nav.terrainRayDistance(-6, 1.2, 0, 6, 1.2, 0)
+    expect(t).not.toBeNull()
+    expect(t as number).toBeGreaterThan(2)
+    expect(t as number).toBeLessThan(5)
+  })
+
   it('spawn points are walkable and stay in the requested ring', () => {
     const nav = field([{ x: 0, z: 0, hw: 3, hd: 3, top: 3 }], (x, z) => (Math.abs(x) <= 3 && Math.abs(z) <= 3 ? 3 : 0))
     let seed = 12345

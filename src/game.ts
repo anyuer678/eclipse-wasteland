@@ -1004,6 +1004,8 @@ function boot(): void {
       const t = rayAabbT(from, clipDir, o.x - o.hw, o.x + o.hw, -1000, o.top, o.z - o.hd, o.z + o.hd, len);
       if (t !== null && t < best) best = t;
     }
+    const terrainT = nav.terrainRayDistance(from.x, from.y, from.z, to.x, to.y, to.z);
+    if (terrainT !== null && terrainT < best) best = terrainT;
     return best < len ? from.clone().addScaledVector(clipDir, best) : to;
   };
 
@@ -1061,6 +1063,9 @@ function boot(): void {
   window.addEventListener('pointerdown', unlockAudio);
   window.addEventListener('keydown', unlockAudio);
 
+  /** 上一次 resolveHit 是否停在地形上（用于禁止对山后敌人的邻近结算） */
+  let hitTerrainSurface = false;
+
   const fireCtx: FireContext = {
     origin: new THREE.Vector3(),
     direction: new THREE.Vector3(),
@@ -1074,6 +1079,7 @@ function boot(): void {
     },
     resolveHit(origin, dir) {
       // 逻辑命中：射线对敌人/BOSS 球体检测（不依赖模型 mesh raycast，稳定可靠）
+      hitTerrainSurface = false;
       let bestT = 60;
       let hit = false;
       // 先算最近的掩体交点：玩家射击是 hitscan，必须和敌人弹丸一样被墙截断
@@ -1082,6 +1088,16 @@ function boot(): void {
         const t = rayAabbT(origin, dir, o.x - o.hw, o.x + o.hw, -1000, o.top, o.z - o.hd, o.z + o.hd, 60);
         if (t !== null && t > 0.02 && t < wallT) wallT = t;
       }
+      // 山坡/丘陵同样截断 hitscan（否则可以隔山点杀）
+      const terrainT = nav.terrainRayDistance(
+        origin.x,
+        origin.y,
+        origin.z,
+        origin.x + dir.x * 60,
+        origin.y + dir.y * 60,
+        origin.z + dir.z * 60
+      );
+      if (terrainT !== null && terrainT < wallT) wallT = terrainT;
       // 可破坏箱优先（若命中箱子，先打箱子）
       for (const c of crates) {
         if (!c.alive) continue;
@@ -1111,18 +1127,25 @@ function boot(): void {
         }
       }
       if (hit) return hitScratch.copy(origin).addScaledVector(dir, bestT);
-      if (wallT < 60) return hitScratch.copy(origin).addScaledVector(dir, wallT);
+      if (wallT < 60) {
+        hitTerrainSurface = terrainT !== null && terrainT <= wallT;
+        return hitScratch.copy(origin).addScaledVector(dir, wallT);
+      }
       if (dir.y < -1e-4) {
         const t = -origin.y / dir.y;
-        if (t > 0) return hitScratch.copy(origin).addScaledVector(dir, t);
+        if (t > 0) {
+          hitTerrainSurface = true;
+          return hitScratch.copy(origin).addScaledVector(dir, t);
+        }
       }
       return hitScratch.copy(origin).addScaledVector(dir, 60);
     },
     onHitEnemy(pos, damage, extra) {
       // 升级选牌已暂停：同一发/后续弹丸不再继续结算
       if (paused) return false;
-      // 射线停在掩体表面：这一发不算命中任何单位（哪怕敌人贴在墙后）
+      // 射线停在掩体/地形表面：这一发不算命中任何单位（哪怕敌人贴在墙后/山后）
       if (pointOnObstacleSurface(pos)) return false;
+      if (hitTerrainSurface) return false;
       let hitSomething = false;
       // 可破坏箱：优先扣箱子血（打碎掉补给）
       for (const c of crates) {
@@ -1268,6 +1291,15 @@ function boot(): void {
         const t = rayAabbT(origin, dir, o.x - o.hw, o.x + o.hw, -1000, o.top, o.z - o.hd, o.z + o.hd, 60);
         if (t !== null && t > 0.02 && t < wallT) wallT = t;
       }
+      const terrainT = nav.terrainRayDistance(
+        origin.x,
+        origin.y,
+        origin.z,
+        origin.x + dir.x * 60,
+        origin.y + dir.y * 60,
+        origin.z + dir.z * 60
+      );
+      if (terrainT !== null && terrainT < wallT) wallT = terrainT;
       // 沿方向收集射线附近敌人（按距离排序）
       const hits: { e: Enemy; t: number }[] = [];
       for (const e of spawner.all()) {
@@ -2118,7 +2150,7 @@ function boot(): void {
       }
 
       // 敌人弹丸推进与命中
-      const projDmg = projectiles.update(dt, player.position);
+      const projDmg = projectiles.update(dt, player.position, terrainHeightAt);
       if (projDmg > 0) {
         applyDamageToPlayer(projDmg);
         shell.hud.hit();
