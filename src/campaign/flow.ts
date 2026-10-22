@@ -92,6 +92,8 @@ export class MissionFlow {
           if (this.waveIndex % 5 === 4) {
             this.phase = 'boss';
             this.boss = new Boss(this.towerBossSpec(), this.rng);
+            // 塔主经验必须按层数等级结算，否则击杀只给 1 级经验
+            this.boss.monsterLevel = this.monsterLevel;
           } else {
             this.spawnCurrentWave();
           }

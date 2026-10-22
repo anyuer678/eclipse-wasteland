@@ -2711,6 +2711,14 @@ function boot(): void {
         syncBossModel();
       }
     },
+    /** 调试：对 BOSS 造成伤害并走统一死亡结算（验证经验/掉落/塔模式升级队列） */
+    damageBoss(amount: number): { dead: boolean; hp: number } | null {
+      if (!activeBoss || !activeBoss.alive) return null;
+      const boss = activeBoss;
+      const dead = boss.takeDamage(amount);
+      if (dead) onBossKilled(boss);
+      return { dead, hp: Math.max(0, Math.round(boss.hp)) };
+    },
   };
 
   shell.showMenu();
