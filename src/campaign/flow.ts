@@ -108,6 +108,7 @@ export class MissionFlow {
           this.boss = new Boss(this.mission.boss, this.rng);
           this.boss.monsterLevel = bossLvl;
           this.boss.hp = Math.round(this.boss.hp * (1 + 0.32 * (bossLvl - 1)) * this.difficulty);
+          this.boss.maxHp = this.boss.hp;
           this.monsterLevel = bossLvl;
           this.emitPhase();
         } else {

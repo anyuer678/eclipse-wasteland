@@ -848,7 +848,7 @@ function boot(): void {
         if (activeBoss !== boss || !boss.alive) return;
         showAnnouncement(boss.spec.name, '#' + boss.spec.color.toString(16).padStart(6, '0'), 3000);
         sfx.roar();
-        shell.hud.boss(boss.spec.name, boss.hp / boss.spec.hp);
+        shell.hud.boss(boss.spec.name, (boss.hp / boss.maxHp) * 100);
       }, 600);
     }
 
@@ -2312,7 +2312,7 @@ function boot(): void {
         });
         shell.hud.setSpread(snap.fire ? 0.5 : 0);
         if (activeBoss && activeBoss.alive) {
-          shell.hud.boss(activeBoss.spec.name, Math.max(0, (activeBoss.hp / activeBoss.spec.hp) * 100));
+          shell.hud.boss(activeBoss.spec.name, Math.max(0, (activeBoss.hp / activeBoss.maxHp) * 100));
         } else {
           shell.hud.hideBoss();
         }
@@ -2433,6 +2433,7 @@ function boot(): void {
       const p = activeBoss.root.position;
       return {
         hp: Math.round(activeBoss.hp),
+        maxHp: Math.round(activeBoss.maxHp),
         phase: activeBoss.phase,
         children: activeBoss.root.children.length,
         anim: activeBoss.animState(),

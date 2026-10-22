@@ -24,6 +24,8 @@ export class Boss {
   readonly spec: BossSpec;
   readonly root: THREE.Group;
   hp: number;
+  /** 实际最大生命（关卡按等级/难度缩放后同步；阶段阈值与血条都用它） */
+  maxHp: number;
   alive = true;
   /** 距离玩家过近（近战判定） */
   readonly meleeRange = 3.2;
@@ -43,6 +45,7 @@ export class Boss {
   constructor(spec: BossSpec, _rng?: { pick: <T>(a: readonly T[]) => T }) {
     this.spec = spec;
     this.hp = spec.hp;
+    this.maxHp = spec.hp;
     this.root = this.buildMesh(spec);
     this.root.position.set(0, 0, -8);
     this.skillTimer = 2;
@@ -407,7 +410,7 @@ export class Boss {
   private checkPhaseTransition(): void {
     const thresholds = this.spec.phaseThresholds;
     if (!thresholds || thresholds.length === 0) return;
-    const hpPct = this.hp / this.spec.hp;
+    const hpPct = this.hp / this.maxHp;
     for (let i = this.phase; i < thresholds.length; i++) {
       if (hpPct <= thresholds[i]) {
         this.phase = i + 1;
