@@ -115,7 +115,7 @@ export class Enemy {
   tickBurn(dt: number): boolean {
     if (this.burnTimer <= 0) return false;
     this.burnTimer -= dt;
-    return this.takeDamage(this.burnDps * dt);
+    return this.takeDamage(this.burnDps * dt, 'fire');
   }
 
   /** 怪物等级（等级压制 / 经验结算） */

@@ -18,7 +18,7 @@ import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
 import type { WeaponDef, FireContext } from './arsenal';
 import { Enemy, NavField, Spawner, separationDelta } from './horde';
-import type { NavObstacle } from './horde';
+import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken } from './growth';
@@ -1066,6 +1066,15 @@ function boot(): void {
   /** 上一次 resolveHit 是否停在地形上（用于禁止对山后敌人的邻近结算） */
   let hitTerrainSurface = false;
 
+  /** 当前武器机制对应的伤害元素（烈焰/霜锋/雷暴/过载），其余按物理结算 */
+  const currentElement = (): Element => {
+    const kind = arsenal.current.def.mech.kind;
+    if (kind === 'beam') return 'fire';
+    if (kind === 'slow') return 'ice';
+    if (kind === 'chain' || kind === 'energy' || kind === 'lockon') return 'energy';
+    return 'physical';
+  };
+
   const fireCtx: FireContext = {
     origin: new THREE.Vector3(),
     direction: new THREE.Vector3(),
@@ -1146,6 +1155,7 @@ function boot(): void {
       // 射线停在掩体/地形表面：这一发不算命中任何单位（哪怕敌人贴在墙后/山后）
       if (pointOnObstacleSurface(pos)) return false;
       if (hitTerrainSurface) return false;
+      const elem = currentElement();
       let hitSomething = false;
       // 可破坏箱：优先扣箱子血（打碎掉补给）
       for (const c of crates) {
@@ -1190,7 +1200,7 @@ function boot(): void {
         // 命中球体半径 3.2，判定半径需匹配（distance² < 12）
         if (bdx * bdx + bdy * bdy + bdz * bdz < 12) {
           popupKey = 'boss';
-          const dead = activeBoss.takeDamage(dmg);
+          const dead = activeBoss.takeDamage(dmg, elem);
           if (dead) onBossKilled(activeBoss);
           hitSomething = true;
         }
@@ -1232,7 +1242,7 @@ function boot(): void {
           const finalDmg = (e.elite ? dmg * runB.eliteDmg : dmg) * furyMult;
           // 寒霜弹：命中减速
           if (runB.frost > 0) e.applySlow(1 - runB.frost, 1.5);
-          const dead = e.takeDamage(finalDmg);
+          const dead = e.takeDamage(finalDmg, elem);
           if (dead) {
             registerEnemyKill(e);
             fovKick = Math.max(fovKick, 2.2);
@@ -1265,7 +1275,7 @@ function boot(): void {
             const sdz = centerScratch.z - pos.z;
             if (sdx * sdx + sdy * sdy + sdz * sdz > 9) continue;
             if (!nav.hasLineOfSight3D(pos.x, pos.y, pos.z, centerScratch.x, centerScratch.y, centerScratch.z)) continue;
-            const sdead = se.takeDamage(splitDmg);
+            const sdead = se.takeDamage(splitDmg, elem);
             if (sdead && registerEnemyKill(se)) break;
           }
         }
@@ -1332,7 +1342,7 @@ function boot(): void {
         dmg *= falloff;
         const to = best.e.center();
         tracer.fire(fromPos, to, 0x7ab0ff, 1.8);
-        const dead = best.e.takeDamage(dmg);
+        const dead = best.e.takeDamage(dmg, 'energy');
         if (dead && registerEnemyKill(best.e)) break;
         fromPos = to;
       }
@@ -1863,7 +1873,7 @@ function boot(): void {
           if (e.root.position.distanceTo(infernoMesh.position) < 2.4) {
             const c = e.center();
             if (!nav.hasLineOfSight3D(infernoMesh.position.x, infernoMesh.position.y + 0.5, infernoMesh.position.z, c.x, c.y, c.z)) continue;
-            const dead = e.takeDamage(infernoDmg * dt * 10);
+            const dead = e.takeDamage(infernoDmg * dt * 10, 'fire');
             e.applySlow(0.5, 0.5);
             if (dead && registerEnemyKill(e)) break;
           }
