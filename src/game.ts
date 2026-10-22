@@ -76,7 +76,10 @@ function boot(): void {
   const input = new Input();
   input.attach(mount);
   /** 指针锁定安全壳：sandbox/无头环境会抛 WrongDocumentError，不能让全局错误层接管 */
+  let pointerLockTries = 0;
+  let pointerUnlockCalls = 0;
   const requestPointerLockSafe = (): void => {
+    pointerLockTries += 1;
     try {
       const ret = world.renderer.domElement.requestPointerLock() as unknown;
       if (ret && typeof (ret as Promise<void>).catch === 'function') (ret as Promise<void>).catch(() => {});
@@ -87,6 +90,7 @@ function boot(): void {
   world.renderer.domElement.addEventListener('click', requestPointerLockSafe);
   /** 弹出交互界面时解锁鼠标（升级选牌/暂停/结算）；返回战斗时重新锁定 */
   const unlockMouse = (): void => {
+    pointerUnlockCalls += 1;
     if (document.pointerLockElement) document.exitPointerLock();
   };
   const lockMouse = (): void => {
@@ -369,6 +373,7 @@ function boot(): void {
       shell.showSelect();
     },
     onOpenArmory: () => {
+      unlockMouse();
       shell.currentWeaponId = arsenal.current.def.id;
       shell.showArmory();
     },
@@ -755,6 +760,7 @@ function boot(): void {
     radar.el.style.display = s2.radar ? 'block' : 'none';
   });
   radar.el.style.display = settings.radar ? 'block' : 'none';
+  let settingsWasOpen = false;
 
   // 打击停顿（hit-stop）：连杀/BOSS 死亡瞬间冻结逻辑几十毫秒，渲染继续，
   // 是动作游戏"顿挫感"的标准做法（比慢动作更干脆）
@@ -1725,6 +1731,10 @@ function boot(): void {
         return;
       }
       const snap = input.snapshot();
+      // 设置面板由按钮/O 关闭后恢复鼠标锁定（菜单态下 lockMouse 自行 no-op）
+      const settingsNowOpen = settingsPanel.visible();
+      if (settingsWasOpen && !settingsNowOpen) lockMouse();
+      settingsWasOpen = settingsNowOpen;
 
       // 暂停/菜单态（死亡/通关/主动暂停/设置面板/主菜单）：冻结玩家与战斗逻辑
       // （直接读面板可见性，关面板的两种方式都能正确恢复）
@@ -1747,6 +1757,7 @@ function boot(): void {
         }
         // 主菜单没有设置卡片，O 仍应能打开设置
         if (inMenu && !settingsPanel.visible() && snap.key('KeyO') && !keyState.settings) {
+          unlockMouse();
           settingsPanel.toggle();
           keyState.settings = true;
           return;
@@ -1756,6 +1767,7 @@ function boot(): void {
           escPaused = false;
           paused = false;
           shell.hidePause();
+          lockMouse();
         }
         if (snap.key('KeyR') && !keyState.restart && shell.resultVisible()) {
           if (flow.phase === 'clear' || flow.phase === 'failed') beginMission();
@@ -1825,8 +1837,9 @@ function boot(): void {
       } else {
         arsenal.current.releaseFire(fireCtx);
       }
-      // O = 设置面板
+      // O = 设置面板（打开时释放鼠标，关闭后由可见性变化重新锁定）
       if (snap.key('KeyO') && !keyState.settings) {
+        unlockMouse();
         settingsPanel.toggle();
         keyState.settings = true;
       } else if (!snap.key('KeyO')) {
@@ -1878,6 +1891,7 @@ function boot(): void {
       if (snap.key('Escape') && !keyState.esc) {
         escPaused = true;
         paused = true;
+        unlockMouse();
         shell.showPause();
       }
       keyState.esc = snap.key('Escape');
@@ -1895,6 +1909,7 @@ function boot(): void {
       if (snap.key('KeyB') && !keyState.bag) {
         armoryFromCombat = true;
         paused = true;
+        unlockMouse();
         shell.currentWeaponId = arsenal.current.def.id;
         shell.showArmory();
       }
@@ -2578,7 +2593,7 @@ function boot(): void {
       return Math.round(hp);
     },
     /** 调试：UI/暂停状态（验证面板开关与输入分支） */
-    uiState(): { paused: boolean; shopOpen: boolean; settings: boolean; menu: boolean; phase: string; wave: number; enemies: number; ticks: number } {
+    uiState(): { paused: boolean; shopOpen: boolean; settings: boolean; menu: boolean; phase: string; wave: number; enemies: number; ticks: number; lockTries: number; unlockCalls: number; pointerLocked: boolean } {
       return {
         paused,
         shopOpen,
@@ -2588,6 +2603,9 @@ function boot(): void {
         wave: flow.waveIndex,
         enemies: spawner.remaining(),
         ticks: fixedTicks,
+        lockTries: pointerLockTries,
+        unlockCalls: pointerUnlockCalls,
+        pointerLocked: !!document.pointerLockElement,
       };
     },
     /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
