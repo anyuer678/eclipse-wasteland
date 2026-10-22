@@ -188,10 +188,12 @@ function boot(): void {
 
   // 武器 viewmodel：跟随当前武器重建（加载开源枪模，失败回退程序化）
   let viewmodel: Viewmodel | null = null;
+  let viewmodelWeaponId = '';
   const mountViewmodel = (): void => {
     if (viewmodel) world.camera.remove(viewmodel.group);
     const w = arsenal.current;
     viewmodel = new Viewmodel(w.def.archetype, w.def.color);
+    viewmodelWeaponId = w.def.id;
     world.camera.add(viewmodel.group);
   };
 
@@ -368,6 +370,9 @@ function boot(): void {
     },
     onAddToLoadout: (id) => {
       if (arsenal.addToLoadout(id)) {
+        // 新建的 Weapon 实例需要重新注入局内倍率；第一人称模型也要跟随
+        refreshGrowth();
+        mountViewmodel();
         shell.currentWeaponId = arsenal.current.def.id;
       }
     },
@@ -376,6 +381,8 @@ function boot(): void {
       if (arsenal.weapons.length === 0) {
         arsenal.addToLoadout(arsenal.defs[0]?.id ?? 'pulse-rifle');
       }
+      refreshGrowth();
+      mountViewmodel();
       shell.currentWeaponId = arsenal.current.def.id;
     },
     onBackArmory: () => {
@@ -2560,6 +2567,16 @@ function boot(): void {
     /** 调试：UI/暂停状态（验证面板开关与输入分支） */
     uiState(): { paused: boolean; shopOpen: boolean; settings: boolean; menu: boolean } {
       return { paused, shopOpen, settings: settingsPanel.visible(), menu: inMenu };
+    },
+    /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
+    weaponState(): { id: string; name: string; index: number; count: number; viewmodelId: string } {
+      return {
+        id: arsenal.current.def.id,
+        name: arsenal.current.def.name,
+        index: arsenal.index,
+        count: arsenal.weapons.length,
+        viewmodelId: viewmodelWeaponId,
+      };
     },
     /** 调试：跨局战斗状态（验证重开清理） */
     combatState(): {
