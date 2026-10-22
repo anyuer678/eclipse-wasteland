@@ -481,14 +481,17 @@ function boot(): void {
       difficulty = d;
     },
   });
-  // 天赋状态必须与 Shell 共享同一对象引用（createTalentScreen 捕获的是构造时的引用）
+  // 天赋/成就/每日都必须与 Shell 共享同一外层对象（各界面捕获的是构造时的引用），
+  // 整体替换会让界面一直读到旧空对象，跨天重置也会与界面脱节。
   shell.talentState.talents = talentState.talents;
-  shell.achievementState = loadAchievements();
-  // 每日任务：与 Shell 共享同一对象引用（createDailyScreen 捕获的是构造时的引用）
-  const dailyState = loadDaily();
-  shell.dailyState.date = dailyState.date;
-  shell.dailyState.progress = dailyState.progress;
-  shell.dailyState.claimed = dailyState.claimed;
+  const loadedAch = loadAchievements();
+  shell.achievementState.counters = loadedAch.counters;
+  shell.achievementState.claimed = loadedAch.claimed;
+  const loadedDaily = loadDaily();
+  shell.dailyState.date = loadedDaily.date;
+  shell.dailyState.progress = loadedDaily.progress;
+  shell.dailyState.claimed = loadedDaily.claimed;
+  const dailyState = shell.dailyState;
   const achAdd = (cond: 'kills' | 'clears' | 'upgrades' | 'ascensions', amount: number): void => {
     const newly = addProgress(shell.achievementState, cond, amount);
     for (const a of newly) grantReward(inventory, a);

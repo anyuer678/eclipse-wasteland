@@ -258,7 +258,7 @@ export function createAchievementScreen(
   const refresh = (): void => {
     list.innerHTML = '';
     for (const a of ACHIEVEMENTS as AchievementDef[]) {
-      const cur = state.counters[a.id] ?? 0;
+      const cur = state.counters[a.cond] ?? 0;
       const done = cur >= a.target;
       const row = el('div', 'ss-brief-row');
       row.style.gridTemplateColumns = '1fr auto';
