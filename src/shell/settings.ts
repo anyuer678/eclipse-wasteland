@@ -44,6 +44,7 @@ export function saveSettings(s: SettingsState): void {
 export interface SettingsPanel {
   el: HTMLElement;
   toggle: () => void;
+  hide: () => void;
   visible: () => boolean;
   /** 外部状态变化（如读档）后刷新控件 */
   refresh: () => void;
@@ -203,6 +204,9 @@ export function createSettingsPanel(
     toggle: () => {
       el.style.display = el.style.display === 'none' ? 'block' : 'none';
       sfx.resume(); // 面板交互也是用户手势
+    },
+    hide: () => {
+      el.style.display = 'none';
     },
     visible: () => el.style.display !== 'none',
     refresh,

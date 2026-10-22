@@ -520,6 +520,7 @@ function boot(): void {
     paused = false;
     escPaused = false;
     inMenu = false;
+    settingsPanel.hide();
     shell.hideLevelUp();
     // 局内成长：每局重置
     runState = newRun();
