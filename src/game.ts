@@ -1288,8 +1288,7 @@ function boot(): void {
       if (hitSomething) {
         shell.hud.hitConfirm();
         sfx.hit();
-        const st = computeStats();
-        const isCrit = Math.random() < st.critRate + affixCritMult(inventory.getWeapon(arsenal.current.def.id));
+        // 复用本发的实际暴击判定；不要再掷一次，否则跳字颜色/字号会与伤害不符
         addDamagePopup(pos, `-${Math.round(dmg)}`, isCrit ? '#ffd24a' : '#ffb0a0', isCrit ? 27 : 20, popupKey);
         // 命中火花（小而淡，避免遮挡视野）
         spawnParticles(pos, isCrit ? 0xffd24a : 0xffaa66, isCrit ? 3 : 2, 2);
