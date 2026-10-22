@@ -2330,10 +2330,7 @@ function boot(): void {
             const ez = e.root.position.z - pool.z;
             if (ex * ex + ez * ez < pool.r * pool.r && Math.abs(e.root.position.y - poolGround) < 0.7) {
               const dead = e.takeDamage(8 * dt);
-              if (dead) {
-                flow.kills += 1;
-                syncBossModel();
-              }
+              if (dead && registerEnemyKill(e)) break;
             }
           }
         }
