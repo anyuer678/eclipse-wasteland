@@ -15,7 +15,7 @@ export interface PlayerStats {
   attackMult: number;
   /** 暴击率 0-0.6（基础 + 附魔 + 巅峰 + 天赋致命） */
   critRate: number;
-  /** 暴击伤害倍率 */
+  /** 暴击伤害倍率：战斗命中取当前武器 def.critMult（1.2–2.8），此处 1.6 仅为无武器上下文时的基线 */
   critMult: number;
   /** 护甲减伤 0-0.6（天赋韧性；护盾药剂临时提升） */
   armor: number;
@@ -64,7 +64,7 @@ export function baseStats(
     attackMult: 1 + talents.dmg,
     // 暴击上限 0.6：天赋致命（+21%）+ 附魔巅峰仍有空间，但不至于必暴
     critRate: Math.min(0.6, 0.06 + critBonus + talents.crit),
-    critMult: 1.6,
+    critMult: 1.6, // 基线；实际命中用 arsenal.current.def.critMult（见 game.ts 暴击结算）
     // 天赋韧性减伤（上限 0.6，与护盾药剂叠加时由 applyBuffs 再夹取）
     armor: Math.min(0.6, talents.armor),
     speedMult: 1,

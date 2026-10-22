@@ -394,7 +394,7 @@ export function createForgeScreen(
       <h3 style="margin-bottom:14px">${d.name} <span style="color:var(--ink-dim);font-size:12px;font-family:var(--mono)">${mechLabel(d)}</span></h3>
       <div class="row"><span>总伤害加成</span><b>+${dmgPct}%</b></div>
       <div class="row"><span>机制加成</span><b>+${Math.round((mechMultiplier(d, inventory) - 1) * 100)}%</b></div>
-      <div class="row"><span>词缀暴击</span><b>+${critPct}%</b></div>
+      <div class="row"><span>附魔/巅峰暴击</span><b>+${critPct}%</b></div>
     `;
     const body = el('div', '', '');
     body.appendChild(module(
@@ -431,7 +431,7 @@ export function createForgeScreen(
     ));
     body.appendChild(module(
       '附魔',
-      g.enchant, MAX_ENCHANT, `Lv.${g.enchant} · 暴击 +${critPct}% · 攻速 +${spdPct}%`,
+      g.enchant, MAX_ENCHANT, `Lv.${g.enchant} · 暴击 +${g.enchant}% · 攻速 +${spdPct}%`,
       btnRow([
         mk(`+1（核心×${enCost}）`, inventory.material('核心晶体') < enCost || g.enchant >= MAX_ENCHANT, () => run(() => tryEnchant(d, inventory), 'enchant')),
         mk('+5', g.enchant >= MAX_ENCHANT, () => run(() => tryEnchantN(d, inventory, 5), 'enchant')),
@@ -440,7 +440,7 @@ export function createForgeScreen(
     ));
     body.appendChild(module(
       '巅峰突破',
-      g.pinnacle, MAX_PINNACLE, `Lv.${g.pinnacle} · 伤害 +${Math.round(g.pinnacle * PINNACLE_DMG_STEP * 100)}% · 生命 +${hpBonus}`,
+      g.pinnacle, MAX_PINNACLE, `Lv.${g.pinnacle} · 伤害 +${Math.round(g.pinnacle * PINNACLE_DMG_STEP * 100)}% · 暴击 +${Math.floor(g.pinnacle / 5)}% · 生命 +${hpBonus}`,
       btnRow([
         mk(`突破（合金×${piCostM} 金币×${piCostG}）`, inventory.material('合金碎片') < piCostM || inventory.gold < piCostG || g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacle(d, inventory), 'pinnacle')),
         mk('+5', g.pinnacle >= MAX_PINNACLE, () => run(() => tryPinnacleN(d, inventory, 5), 'pinnacle')),
@@ -743,7 +743,7 @@ export function createStatsScreen(
     const score = powerScore(s, 100 + s.maxHpBonus);
     const fourRows: [string, string, string][] = [
       ['体质', `${four.body}`, '最大生命（巅峰成长）'],
-      ['力量', `${four.power}`, '伤害加成%（巅峰）'],
+      ['力量', `${four.power}`, '伤害加成%（天赋）'],
       ['知识', `${four.mind}`, '暴击率%（附魔/巅峰）'],
       ['敏捷', `${four.agility}`, '攻速加成%（附魔）'],
     ];

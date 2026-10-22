@@ -476,7 +476,8 @@ function boot(): void {
       shell.hud.root.style.display = 'block';
       lockMouse();
     },
-    onStatsQuery: () => computeStats(),
+    // 面板「暴击伤害」与战力按当前手持武器结算，与战斗一致（简报「暴击×N」即实际倍率）
+    onStatsQuery: () => ({ ...computeStats(), critMult: arsenal.current.def.critMult }),
     onPickBoost: (id) => {
       const b = applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
       refreshRun();
@@ -1215,13 +1216,13 @@ function boot(): void {
       let popupKey = '';
       // 等级压制：玩家等级 vs 怪物等级（升级后打同级怪一定更轻松）
       const supDealt = suppressionDealt(runState.level - flow.monsterLevel);
-      // 连杀增伤 + 隐身增伤 + 攻击倍率 + 局内成长 + 暴击（含词缀/暴击球）
+      // 连杀增伤 + 隐身增伤 + 攻击倍率 + 局内成长 + 暴击（概率含词缀/暴击球；倍率取当前武器 def.critMult，与武器简报一致）
       const st = computeStats();
       const curG = inventory.getWeapon(arsenal.current.def.id);
       const critBonus = affixCritMult(curG) + (shortBuffs.crit > 0 ? 0.2 : 0) + runB.critBonus;
       const streakMult = 1 + Math.min(killStreak, 6) * 0.05;
       const isCrit = Math.random() < st.critRate + critBonus;
-      const critMult = (isCrit ? st.critMult : 1) + (isCrit ? runB.critDmgBonus : 0);
+      const critMult = isCrit ? arsenal.current.def.critMult + runB.critDmgBonus : 1;
       let dmg = damage * supDealt * streakMult * (stealthTimer > 0 ? 2 * (1 + inventory.roleLevel(selectedRoleId) * 0.15) : 1) * st.attackMult * critMult * runB.dmgMult;
       if (!Number.isFinite(dmg) || dmg <= 0) dmg = damage; // NaN 防护
       // 高地优势：玩家比命中点低 0.4m 以上 → +20% 伤害（旧实现每次命中扫全部敌人找高度）
