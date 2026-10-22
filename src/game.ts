@@ -506,6 +506,47 @@ function boot(): void {
     runState = newRun();
     runB = runBonuses(runState);
     pendingLevelUps = 0;
+    // 跨局战斗状态：连杀、消耗品/短期 BUFF、角色技能与冷却、场景特效
+    killStreak = 0;
+    killStreakTimer = 0;
+    shortBuffs.fireSpd = 0;
+    shortBuffs.crit = 0;
+    shortBuffs.move = 0;
+    buffs.atk = 0;
+    buffs.shield = 0;
+    buffs.speed = 0;
+    shieldTimer = 0;
+    shieldCooldown = 0;
+    furyTimer = 0;
+    stealthTimer = 0;
+    roleCooldown = 0;
+    meleeCooldown = 0;
+    dashCooldown = 0;
+    if (summonGroup) {
+      world.scene.remove(summonGroup);
+      summonGroup = null;
+    }
+    summonTimer = 0;
+    if (infernoMesh) {
+      world.scene.remove(infernoMesh);
+      infernoMesh = null;
+    }
+    infernoTimer = 0;
+    if (healMesh) {
+      world.scene.remove(healMesh);
+      healMesh = null;
+    }
+    healTimer = 0;
+    hitStopT = 0;
+    hurtInvuln = 0;
+    fovKick = 0;
+    recoil = 0;
+    shakeT = 0;
+    shakeAmp = 0;
+    benchFire = false;
+    player.velocity.set(0, 0, 0);
+    player.onGround = true;
+    refreshRun();
     spawner.clear();
     // 跨局状态重置（否则重开一局后击杀/波次推进判定失效）
     lastKills = 0;
@@ -2444,6 +2485,42 @@ function boot(): void {
     },
     playerHp(): number {
       return Math.round(hp);
+    },
+    /** 调试：跨局战斗状态（验证重开清理） */
+    combatState(): {
+      killStreak: number;
+      shortBuffs: { fireSpd: number; crit: number; move: number };
+      buffs: { atk: number; shield: number; speed: number };
+      shield: number;
+      shieldCooldown: number;
+      fury: number;
+      stealth: number;
+      roleCooldown: number;
+      meleeCooldown: number;
+      dashCooldown: number;
+      summon: boolean;
+      inferno: boolean;
+      heal: boolean;
+      maxHp: number;
+      hp: number;
+    } {
+      return {
+        killStreak,
+        shortBuffs: { ...shortBuffs },
+        buffs: { ...buffs },
+        shield: +shieldTimer.toFixed(2),
+        shieldCooldown: +shieldCooldown.toFixed(2),
+        fury: +furyTimer.toFixed(2),
+        stealth: +stealthTimer.toFixed(2),
+        roleCooldown: +roleCooldown.toFixed(2),
+        meleeCooldown: +meleeCooldown.toFixed(2),
+        dashCooldown: +dashCooldown.toFixed(2),
+        summon: !!summonGroup,
+        inferno: !!infernoMesh,
+        heal: !!healMesh,
+        maxHp: Math.round(maxHp),
+        hp: Math.round(hp),
+      };
     },
     /** 调试：毒池位置与所在地面高度 */
     poolsInfo(): { x: number; z: number; r: number; ground: number }[] {
