@@ -870,9 +870,10 @@ export class World {
       addCrate(-10, -4); addCrate(10, 4); addCrate(2.8, -10);
     } else {
       // 实验室 / 火山 / 冰原 共用骨架：网格矮墙 + 设备柜 + 中央舱体
+      // 墙长必须短于交叉间距（7m），否则四方墙会在出生点围出封闭房间，小怪无路可进
       for (let i = -1; i <= 1; i++) {
-        addBox(0.55, 1.2, 15, i * 7, 0, matMetal);
-        addBox(15, 0.6, 0.55, 0, i * 7, matMetal);
+        addBox(0.55, 1.2, 10, i * 7, 0, matMetal);
+        addBox(10, 0.6, 0.55, 0, i * 7, matMetal);
       }
       for (let i = 0; i < 6; i++) {
         const x = (rng() - 0.5) * 18;

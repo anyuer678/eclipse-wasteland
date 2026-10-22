@@ -83,6 +83,9 @@ describe('horde/nav', () => {
     expect(nav.isWalkable(1.5, 0)).toBe(true)
     expect(nav.reachable(1.5, 0)).toBe(false)
     expect(nav.reachable(2.5, 0)).toBe(true)
+    // 主连通域按最大区域烘焙：高台孤岛不能作为刷怪点
+    expect(nav.inMain(1.5, 0)).toBe(true)
+    expect(nav.inMain(2.5, 0)).toBe(false)
   })
 
   it('blocks a thin wall on a long ray (no sampling gaps)', () => {
@@ -138,6 +141,9 @@ describe('horde/nav', () => {
       expect(p).not.toBeNull()
       if (!p) continue
       expect(nav.isWalkable(p.x, p.z)).toBe(true)
+      // 平台顶（无坡不可达）在主连通域之外，不能刷怪
+      expect(nav.inMain(p.x, p.z)).toBe(true)
+      expect(Math.abs(p.x) <= 3 && Math.abs(p.z) <= 3).toBe(false)
       expect(Math.hypot(p.x - 0, p.z - 6)).toBeGreaterThanOrEqual(4 - 1e-6)
       expect(Math.hypot(p.x - 0, p.z - 6)).toBeLessThanOrEqual(9 + 1e-6)
       placed.push({ x: p.x, z: p.z, r: 0.5 })

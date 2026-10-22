@@ -95,6 +95,8 @@ export class NavField {
   private walk = new Uint8Array(0);
   private dist = new Int32Array(0);
   private queue = new Int32Array(0);
+  /** 最大连通区域（主战场）：刷怪点必须落在这里，避免刷在无坡平台的孤岛上 */
+  private main = new Uint8Array(0);
   private heightAt: (x: number, z: number) => number = () => 0;
 
   private goalCell = -1;
@@ -144,6 +146,60 @@ export class NavField {
         }
       }
     }
+    this.bakeMain();
+  }
+
+  /** 标记最大的连通区域为主战场（平台顶/封闭山坳等孤岛不算） */
+  private bakeMain(): void {
+    const n = this.walk.length;
+    this.main = new Uint8Array(n);
+    const comp = new Int32Array(n).fill(-1);
+    const q = this.queue;
+    let bestLabel = -1;
+    let bestSize = 0;
+    let label = 0;
+    for (let s = 0; s < n; s++) {
+      if (this.walk[s] !== 1 || comp[s] !== -1) continue;
+      let head = 0;
+      let tail = 0;
+      let size = 0;
+      comp[s] = label;
+      q[tail++] = s;
+      while (head < tail) {
+        const cur = q[head++];
+        size += 1;
+        const cc = cur % this.cols;
+        const cr = (cur / this.cols) | 0;
+        for (const [dc, dr] of DIRS) {
+          const nc = cc + dc;
+          const nr = cr + dr;
+          if (!this.inBounds(nc, nr)) continue;
+          const ni = nr * this.cols + nc;
+          if (this.walk[ni] !== 1 || comp[ni] !== -1) continue;
+          if (Math.abs(this.floor[ni] - this.floor[cur]) > this.stepHeight) continue;
+          if (dc !== 0 && dr !== 0) {
+            if (this.walk[cr * this.cols + nc] !== 1 || this.walk[nr * this.cols + cc] !== 1) continue;
+          }
+          comp[ni] = label;
+          q[tail++] = ni;
+        }
+      }
+      if (size > bestSize) {
+        bestSize = size;
+        bestLabel = label;
+      }
+      label += 1;
+    }
+    if (bestLabel < 0) return;
+    for (let i = 0; i < n; i++) {
+      if (comp[i] === bestLabel) this.main[i] = 1;
+    }
+  }
+
+  /** 是否位于最大连通区域（主战场） */
+  inMain(x: number, z: number): boolean {
+    const i = this.indexOf(x, z);
+    return i >= 0 && this.main[i] === 1;
   }
 
   get ready(): boolean {
@@ -532,6 +588,7 @@ export class NavField {
       if (!this.isWalkable(x, z)) continue;
       const i = this.indexOf(x, z);
       if (i < 0 || this.walk[i] !== 1) continue;
+      if (this.main[i] !== 1) continue;
       if (!gapOk(x, z)) continue;
       return { x, z, y: this.floor[i] };
     }
@@ -542,7 +599,7 @@ export class NavField {
     const startIdx = Math.floor(random() * Math.max(1, n));
     for (let k = 0; k < n; k++) {
       const i = (startIdx + k) % n;
-      if (this.walk[i] !== 1) continue;
+      if (this.walk[i] !== 1 || this.main[i] !== 1) continue;
       const x = this.cellX(i % this.cols);
       const z = this.cellZ((i / this.cols) | 0);
       const d = Math.hypot(x - cx, z - cz);
