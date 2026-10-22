@@ -1102,6 +1102,13 @@ function boot(): void {
     return 'physical';
   };
 
+  /** 武器熟练度：本武器击杀 +1；每 20 杀 +2% 伤害，里程碑必须立即刷新缓存 */
+  const creditWeaponKill = (): void => {
+    const g = inventory.getWeapon(arsenal.current.def.id);
+    g.kills += 1;
+    if (g.kills % 20 === 0) refreshGrowth();
+  };
+
   const fireCtx: FireContext = {
     origin: new THREE.Vector3(),
     direction: new THREE.Vector3(),
@@ -1273,9 +1280,7 @@ function boot(): void {
           if (dead) {
             registerEnemyKill(e);
             fovKick = Math.max(fovKick, 2.2);
-            // 武器熟练度
-            const curG = inventory.getWeapon(arsenal.current.def.id);
-            curG.kills += 1;
+            creditWeaponKill();
           }
           hitSomething = true;
         }
@@ -1303,7 +1308,10 @@ function boot(): void {
             if (sdx * sdx + sdy * sdy + sdz * sdz > 9) continue;
             if (!nav.hasLineOfSight3D(pos.x, pos.y, pos.z, centerScratch.x, centerScratch.y, centerScratch.z)) continue;
             const sdead = se.takeDamage(splitDmg, elem);
-            if (sdead && registerEnemyKill(se)) break;
+            if (sdead) {
+              creditWeaponKill();
+              if (registerEnemyKill(se)) break;
+            }
           }
         }
       }
@@ -1370,7 +1378,10 @@ function boot(): void {
         const to = best.e.center();
         tracer.fire(fromPos, to, 0x7ab0ff, 1.8);
         const dead = best.e.takeDamage(dmg, 'energy');
-        if (dead && registerEnemyKill(best.e)) break;
+        if (dead) {
+          creditWeaponKill();
+          if (registerEnemyKill(best.e)) break;
+        }
         fromPos = to;
       }
     },
@@ -1700,7 +1711,10 @@ function boot(): void {
       if (!nav.hasLineOfSight3D(origin.x, origin.y, origin.z, c.x, c.y, c.z)) continue;
       const dead = e.takeDamage(meleeDamage);
       hitSomething = true;
-      if (dead && registerEnemyKill(e)) break;
+      if (dead) {
+        creditWeaponKill();
+        if (registerEnemyKill(e)) break;
+      }
     }
     // BOSS（小怪击杀触发升级暂停后不再继续结算 BOSS）
     if (!paused && activeBoss && activeBoss.alive) {
@@ -2608,14 +2622,21 @@ function boot(): void {
         pointerLocked: !!document.pointerLockElement,
       };
     },
+    /** 调试：设置当前武器击杀数（不刷新倍率，用于熟练度里程碑回归） */
+    setWeaponKills(n: number): void {
+      inventory.getWeapon(arsenal.current.def.id).kills = Math.max(0, Math.floor(n));
+    },
     /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
-    weaponState(): { id: string; name: string; index: number; count: number; viewmodelId: string } {
+    weaponState(): { id: string; name: string; index: number; count: number; viewmodelId: string; kills: number; growthDamage: number } {
+      const g = inventory.getWeapon(arsenal.current.def.id);
       return {
         id: arsenal.current.def.id,
         name: arsenal.current.def.name,
         index: arsenal.index,
         count: arsenal.weapons.length,
         viewmodelId: viewmodelWeaponId,
+        kills: g.kills,
+        growthDamage: +arsenal.current.growthDamage.toFixed(4),
       };
     },
     /** 调试：跨局战斗状态（验证重开清理） */
