@@ -790,9 +790,9 @@ export function createCombatShop(cb: { onBuy: (id: string) => void; onClose: () 
   screen.appendChild(cards);
   const GOODS: { id: string; name: string; desc: string; price: number }[] = [
     { id: 'heal', name: '医疗包', desc: '回复 60 生命', price: 30 },
-    { id: 'dmg', name: '狂暴药剂', desc: '伤害 +20%（30s）', price: 40 },
+    { id: 'dmg', name: '狂暴药剂', desc: '伤害 +25%（20s）', price: 40 },
     { id: 'energy', name: '能量电池', desc: '能量回满', price: 20 },
-    { id: 'shield', name: '护盾发生器', desc: '护盾 60 点（12s）', price: 35 },
+    { id: 'shield', name: '护盾发生器', desc: '减伤 70%（12s）', price: 35 },
   ];
   let goldNow = 0;
   const show = (gold: number): void => {
