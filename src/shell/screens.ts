@@ -13,6 +13,7 @@ import type { Inventory } from '../growth';
 import { genDailyTasks, damageMultiplier, mechMultiplier, MAX_ASCENSION, MAX_RUNE, MAX_ENCHANT, MAX_PINNACLE, ENCHANT_SPD_STEP, PINNACLE_DMG_STEP, PINNACLE_HP_STEP, tryAscend, tryRuneUpgrade, tryUpgrade, tryUpgradeN, tryUpgradeMax, tryEnchant, tryEnchantN, tryPinnacle, tryPinnacleN, critFromGrowth, affixSlots, AFFIX_POOL, ascensionEffectsFor, TALENT_NODES, talentLevel, ACHIEVEMENTS, fourStats, powerScore } from '../growth';
 import type { AchievementDef } from '../growth';
 import { ROLES } from '../play/roles';
+import { COMBAT_GOODS } from '../play/combatShop';
 import type { FlowResult } from '../campaign';
 
 export interface ScreenCallbacks {
@@ -788,12 +789,7 @@ export function createCombatShop(cb: { onBuy: (id: string) => void; onClose: () 
   const cards = el('div', '', '');
   cards.style.cssText = 'display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:20px;max-width:900px;';
   screen.appendChild(cards);
-  const GOODS: { id: string; name: string; desc: string; price: number }[] = [
-    { id: 'heal', name: '医疗包', desc: '回复 60 生命', price: 30 },
-    { id: 'dmg', name: '狂暴药剂', desc: '伤害 +25%（20s）', price: 40 },
-    { id: 'energy', name: '能量电池', desc: '能量回满', price: 20 },
-    { id: 'shield', name: '护盾发生器', desc: '减伤 70%（12s）', price: 35 },
-  ];
+  const GOODS = COMBAT_GOODS;
   let goldNow = 0;
   const show = (gold: number): void => {
     goldNow = gold;

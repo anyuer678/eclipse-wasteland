@@ -29,6 +29,7 @@ import { skillLinesFor } from './play/weaponBrief';
 import { separateCrowd } from './play/crowdStep';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
+import { combatGood } from './play/combatShop';
 import { ENV_MODELS, ENV_TINT } from './render/envConfig';
 
 function boot(): void {
@@ -446,12 +447,20 @@ function boot(): void {
       if (claimDaily(dailyState, inventory, id)) shell.showDaily();
     },
     onCombatBuy: (id) => {
-      if (inventory.gold < (id === 'heal' ? 30 : id === 'dmg' ? 40 : id === 'energy' ? 20 : 35)) return;
-      inventory.spendGold(id === 'heal' ? 30 : id === 'dmg' ? 40 : id === 'energy' ? 20 : 35);
+      // 价格/描述统一读 play/combatShop 的商品表，避免与界面各写一份
+      const good = combatGood(id);
+      if (!good || inventory.gold < good.price) return;
+      inventory.spendGold(good.price);
       if (id === 'heal') setHp(hp + 60);
       else if (id === 'dmg') applyBuff(buffs, 'atk');
       else if (id === 'energy') arsenal.current.state.energy = arsenal.current.def.energyMax;
       else if (id === 'shield') shieldTimer = 12;
+      else if (id === 'ammo') {
+        for (const w of arsenal.weapons) {
+          w.state.ammo = w.magCap();
+          w.state.reloading = false;
+        }
+      } else if (id === 'crit') shortBuffs.crit = 12;
       shell.showCombatShop(inventory.gold); // 刷新剩余金币
     },
     onCombatClose: () => {
@@ -2605,6 +2614,10 @@ function boot(): void {
     },
     materialOf(material: string): number {
       return inventory.material(material);
+    },
+    /** 调试：当前金币（商店/结算探针用） */
+    goldOf(): number {
+      return inventory.gold;
     },
     enemyHealths(): { hp: number; max: number; alive: boolean }[] {
       return spawner.all().map((e) => ({ hp: Math.max(0, Math.ceil(e.hp)), max: e.def.hp, alive: e.alive }));
