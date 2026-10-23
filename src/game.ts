@@ -21,7 +21,7 @@ import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty } from './campaign';
-import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest } from './growth';
+import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
@@ -761,7 +761,10 @@ function boot(): void {
       world.camera.updateProjectionMatrix();
     }
     shell.hud.setCrosshairStyle(s2.crosshair);
-  }, () => shell.showTips());
+  }, () => shell.showTips(), () => {
+    resetAllProgress(localStorage);
+    location.reload();
+  });
   radar.el.style.display = settings.radar ? 'block' : 'none';
   shell.hud.setCrosshairStyle(settings.crosshair);
   let settingsWasOpen = false;

@@ -66,7 +66,8 @@ export interface SettingsPanel {
 export function createSettingsPanel(
   state: SettingsState,
   apply: (s: SettingsState) => void,
-  onShowTips?: () => void
+  onShowTips?: () => void,
+  onResetProgress?: () => void
 ): SettingsPanel {
   const el = document.createElement('div');
   el.style.cssText =
@@ -239,6 +240,30 @@ export function createSettingsPanel(
     'background:none;border:1px solid #262e3a;color:#7d8698;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:0.1em;';
   tipsBtn.addEventListener('click', () => onShowTips?.());
   tips.body.appendChild(tipsBtn);
+
+  // 重置存档（两步确认，防止误触）
+  const resetRow = row('存档');
+  const resetBtn = document.createElement('button');
+  let resetArmed = 0;
+  const resetLabel = (armed: boolean): string => (armed ? '再点一次确认清档' : '清除本地存档');
+  resetBtn.textContent = resetLabel(false);
+  resetBtn.style.cssText =
+    'width:100%;background:none;border:1px solid #c0392b;color:#c0392b;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:0.1em;';
+  resetBtn.addEventListener('click', () => {
+    if (resetArmed) {
+      window.clearTimeout(resetArmed);
+      resetArmed = 0;
+      resetBtn.textContent = resetLabel(false);
+      onResetProgress?.();
+      return;
+    }
+    resetArmed = window.setTimeout(() => {
+      resetArmed = 0;
+      resetBtn.textContent = resetLabel(false);
+    }, 3000);
+    resetBtn.textContent = resetLabel(true);
+  });
+  resetRow.body.appendChild(resetBtn);
 
   // 关闭
   const close = document.createElement('button');
