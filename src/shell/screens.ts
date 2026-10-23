@@ -14,7 +14,7 @@ import { genDailyTasks, damageMultiplier, mechMultiplier, MAX_ASCENSION, MAX_RUN
 import type { AchievementDef } from '../growth';
 import { ROLES } from '../play/roles';
 import { COMBAT_GOODS } from '../play/combatShop';
-import { loadDifficulty, saveDifficulty, loadMissionClears } from '../campaign';
+import { loadDifficulty, saveDifficulty, loadMissionClears, difficultyLabel } from '../campaign';
 import type { FlowResult } from '../campaign';
 
 export interface ScreenCallbacks {
@@ -930,6 +930,8 @@ export interface RunSummary {
   preset: string | null;
   /** 无尽塔历史最高层数（塔模式结算展示） */
   towerBest?: number;
+  /** 本局难度（结算展示） */
+  difficulty?: number;
 }
 
 export function createResultScreen(cb: ScreenCallbacks): {
@@ -961,11 +963,16 @@ export function createResultScreen(cb: ScreenCallbacks): {
         result.mission.tower && summary?.towerBest !== undefined
           ? `<div class="row"><span>最高层数</span><b>${summary.towerBest} 层</b></div>`
           : '';
+      const diffRow =
+        summary?.difficulty !== undefined
+          ? `<div class="row"><span>难度</span><b>${difficultyLabel(summary.difficulty)}</b></div>`
+          : '';
       if (result.phase === 'clear') {
         title.textContent = '任务完成';
         title.style.color = 'var(--ok)';
         detail.innerHTML = `
           <div class="row"><span>关卡</span><b>${result.mission.name}</b></div>
+          ${diffRow}
           <div class="row"><span>波次</span><b>${result.waveIndex + 1} / ${result.totalWaves}</b></div>
           <div class="row"><span>击杀</span><b>${result.kills}</b></div>
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>
@@ -980,6 +987,7 @@ export function createResultScreen(cb: ScreenCallbacks): {
         title.style.color = 'var(--cinnabar-soft)';
         detail.innerHTML = `
           <div class="row"><span>关卡</span><b>${result.mission.name}</b></div>
+          ${diffRow}
           <div class="row"><span>${result.mission.tower ? '到达层数' : '到达波次'}</span><b>${result.waveIndex + 1}</b></div>
           <div class="row"><span>击杀</span><b>${result.kills}</b></div>
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>

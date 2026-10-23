@@ -953,6 +953,7 @@ function boot(): void {
       autoPicks: runAutoPickCount,
       preset: autoPickLabel(),
       towerBest,
+      difficulty,
     });
   };
 
@@ -1894,8 +1895,9 @@ function boot(): void {
           radar.dot(activeBoss.root.position.x, activeBoss.root.position.z, '#ff4400', 5);
         }
         for (const c of crates) if (c.alive) radar.dot(c.x, c.z, '#d9a44a', 2);
-        // 补给宝箱也标出来（雷达说明里的“补给”）
+        // 补给宝箱与 BUFF 球也标出来（雷达说明里的“补给”）
         for (const c of chests) radar.dot(c.mesh.position.x, c.mesh.position.z, '#ffe9a8', 3);
+        for (const o of buffOrbs) radar.dot(o.mesh.position.x, o.mesh.position.z, '#66d9ff', 2);
         const pools = (mapRoot?.userData.poisonPools ?? []) as { x: number; z: number }[];
         for (const pool of pools) radar.dot(pool.x, pool.z, 'rgba(62,160,85,0.85)', 4);
         radar.end();

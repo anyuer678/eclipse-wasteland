@@ -8,6 +8,12 @@ export function normalizeDifficulty(v: number): number {
   return (DIFFICULTY_OPTIONS as readonly number[]).includes(v) ? v : 1;
 }
 
+/** 难度中文名（结算展示） */
+export function difficultyLabel(v: number): string {
+  const n = normalizeDifficulty(v);
+  return n === 0.7 ? '轻松' : n === 1.5 ? '困难' : n === 2.2 ? '噩梦' : '标准';
+}
+
 export function loadDifficulty(): number {
   try {
     return normalizeDifficulty(Number(localStorage.getItem(DIFFICULTY_KEY) ?? 1));
