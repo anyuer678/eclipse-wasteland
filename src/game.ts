@@ -2405,6 +2405,16 @@ function boot(): void {
               label: findRole(selectedRoleId).name,
               value: roleCooldown > 0 ? `冷却 ${Math.ceil(roleCooldown)}s` : '就绪（大招）',
             })
+            .concat({
+              key: 'F',
+              label: '冲刺',
+              value: dashCooldown > 0 ? `冷却 ${dashCooldown.toFixed(1)}s` : '就绪',
+            })
+            .concat({
+              key: 'G',
+              label: '护盾',
+              value: shieldCooldown > 0 ? `冷却 ${shieldCooldown.toFixed(1)}s` : shieldTimer > 0 ? `生效 ${shieldTimer.toFixed(1)}s` : '就绪',
+            })
             .concat(
               killStreak > 0
                 ? [{ key: '连杀', label: `${killStreak} 连杀`, value: `伤害+${Math.min(killStreak, 6) * 5}%` }]
