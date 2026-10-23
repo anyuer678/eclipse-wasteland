@@ -56,7 +56,7 @@
 
 | # | 内容 | 验收 |
 | --- | --- | --- |
-| 4.1 🚧 | `game.ts` 拆分：战斗结算 / 敌人循环 / UI 桥接，目标 <1500 行 | 阶段 1：武器面板文案 → `play/weaponBrief.ts`、环境配置 → `render/envConfig.ts`；阶段 2：分离 → `play/crowdStep.ts`、敌人物理（障碍/玩家体积/贴地）→ `play/enemyPhysics.ts`（共 6 项单测，分离漏检 0、diag 0 浮空/埋地）；game.ts 3035 行。后续：`__ss` 调试 API 与渲染/HUD 桥接拆分（<2200 → <1500） |
+| 4.1 🚧 | `game.ts` 拆分：战斗结算 / 敌人循环 / UI 桥接，目标 <1500 行 | 阶段 1：面板文案/环境配置 → `play/weaponBrief.ts`、`render/envConfig.ts`；阶段 2：分离/敌人物理 → `play/crowdStep.ts`、`play/enemyPhysics.ts`；阶段 3a：调试只读查询（敌人/玩家/场景物/导航）→ `debug/queries.ts`（新增 3 项映射单测）。game.ts 约 2925 行；后续 3b：`uiState/weaponState/combatState` 与渲染/HUD 桥接 |
 | 4.2 ✅ | 敌人分离用空间哈希（同屏 >40 才启用） | 已完成（对所有规模启用 1.5m 均匀网格）：67 只压力场景哈希对 532、真实重叠对 138、**漏检 0**；400 点基准哈希快于暴力；30 只 diag 重叠 0、60 只 0 浮空/0 埋地 |
 | 4.3 ✅ | 存档版本号 + 迁移（v2） | 已完成：`growth/save.ts` 纯函数（缺失/越界/坏类型兜底、loadout 去重限 5）；旧档首次加载自动备份到 `-backup` 并写回 v2；单测 4 项；浏览器实测旧档 gold/材料/武器等级保留 |
 

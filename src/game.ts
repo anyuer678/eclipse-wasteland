@@ -31,6 +31,8 @@ import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
 import { MOODS } from './play/ambience';
+import { chestsInfo, cratesInfo, enemyHealths, enemyMotion, navInfo, obstaclesDump, playerPos, poolsInfo } from './debug/queries';
+import type { QueryDeps } from './debug/queries';
 import { ENV_MODELS, ENV_TINT } from './render/envConfig';
 
 function boot(): void {
@@ -2461,6 +2463,15 @@ function boot(): void {
 
   // 开发期调试钩子（正式发布前移除�?
   const dbg = window as unknown as { __ss?: Record<string, unknown> };
+  /** 调试查询依赖（只读）：交给 debug/queries 做映射，便于单测 */
+  const queryDeps: QueryDeps = {
+    enemies: () => spawner.all(),
+    player,
+    mapRoot: () => mapRoot,
+    chests: () => chests,
+    crates: () => crates,
+    nav: () => nav,
+  };
   dbg.__ss = {
     /** 性能快照：FPS / 绘制调用 / 三角形 / 资源数 / 场上次级对象数 */
     perf(): Record<string, number> {
@@ -2621,39 +2632,9 @@ function boot(): void {
     goldOf(): number {
       return inventory.gold;
     },
-    enemyHealths(): { hp: number; max: number; alive: boolean }[] {
-      return spawner.all().map((e) => ({ hp: Math.max(0, Math.ceil(e.hp)), max: e.def.hp, alive: e.alive }));
-    },
+    enemyHealths: () => enemyHealths(queryDeps),
     /** 敌人运动采样：位置/地面高度/与玩家距离/卡位状态（AI 调试与回归用） */
-    enemyMotion(): {
-      kind: string;
-      x: number;
-      y: number;
-      z: number;
-      ground: number;
-      dist: number;
-      radius: number;
-      alive: boolean;
-      stunned: boolean;
-      elite: boolean;
-      slow: boolean;
-      burn: boolean;
-    }[] {
-      return spawner.all().map((e) => ({
-        kind: e.def.kind,
-        radius: e.def.radius,
-        x: +e.root.position.x.toFixed(2),
-        y: +e.root.position.y.toFixed(2),
-        z: +e.root.position.z.toFixed(2),
-        ground: +player.terrainHeight(e.root.position.x, e.root.position.z).toFixed(2),
-        dist: +Math.hypot(e.root.position.x - player.position.x, e.root.position.z - player.position.z).toFixed(2),
-        alive: e.alive,
-        stunned: e.isStunned(),
-        elite: !!e.elite,
-        slow: e.slowTimer > 0,
-        burn: e.burnTimer > 0,
-      }));
-    },
+    enemyMotion: () => enemyMotion(queryDeps),
     playerHp(): number {
       return Math.round(hp);
     },
@@ -2729,45 +2710,12 @@ function boot(): void {
         hp: Math.round(hp),
       };
     },
-    /** 调试：毒池位置与所在地面高度 */
-    poolsInfo(): { x: number; z: number; r: number; ground: number }[] {
-      const hf = (mapRoot?.userData.heightfield as ((x: number, z: number) => number) | undefined) ?? (() => 0);
-      return ((mapRoot?.userData.poisonPools ?? []) as { x: number; z: number; r: number }[]).map((p) => ({
-        x: +p.x.toFixed(2),
-        z: +p.z.toFixed(2),
-        r: +p.r.toFixed(2),
-        ground: +hf(p.x, p.z).toFixed(2),
-      }));
-    },
+    poolsInfo: () => poolsInfo(queryDeps),
     /** 调试：宝箱落点/奖励 */
-    chestsInfo(): { x: number; y: number; z: number; ground: number; reward: string; amount: number }[] {
-      return chests.map((c) => ({
-        x: +c.mesh.position.x.toFixed(2),
-        y: +c.mesh.position.y.toFixed(2),
-        z: +c.mesh.position.z.toFixed(2),
-        ground: +player.terrainHeight(c.mesh.position.x, c.mesh.position.z).toFixed(2),
-        reward: c.reward,
-        amount: c.amount,
-      }));
-    },
+    chestsInfo: () => chestsInfo(queryDeps),
     /** 调试：木箱位置/存活（校验是否被平台吞掉） */
-    cratesInfo(): { x: number; z: number; alive: boolean; ground: number }[] {
-      return crates.map((c) => ({
-        x: c.x,
-        z: c.z,
-        alive: c.alive,
-        ground: +player.terrainHeight(c.x, c.z).toFixed(2),
-      }));
-    },
-    playerPos(): { x: number; y: number; z: number; ground: number; onGround: boolean } {
-      return {
-        x: +player.position.x.toFixed(2),
-        y: +player.position.y.toFixed(2),
-        z: +player.position.z.toFixed(2),
-        ground: +player.terrainHeight(player.position.x, player.position.z).toFixed(2),
-        onGround: player.onGround,
-      };
-    },
+    cratesInfo: () => cratesInfo(queryDeps),
+    playerPos: () => playerPos(queryDeps),
     /** 调试：切换角色（验证召唤/炼狱等角色技能的视线判定） */
     setRole(id: string): boolean {
       if (!ROLES.some((r) => r.id === id)) return false;
@@ -2775,13 +2723,9 @@ function boot(): void {
       return true;
     },
     /** 导航网格状态（校验换图后是否成功烘焙） */
-    navInfo(): { ready: boolean; obstacles: number; cell: number } {
-      return { ready: nav.ready, obstacles: nav.obstacles.length, cell: nav.cell };
-    },
+    navInfo: () => navInfo(queryDeps),
     /** 碰撞体列表（地图调试：确认随机道具是否堵路） */
-    obstaclesDump(): { x: number; z: number; hw: number; hd: number; top: number; crate: boolean }[] {
-      return nav.obstacles.map((o) => ({ x: o.x, z: o.z, hw: o.hw, hd: o.hd, top: +o.top.toFixed(2), crate: !!o.crate }));
-    },
+    obstaclesDump: () => obstaclesDump(queryDeps),
     /** 单点导航探针：可走/可达/流场方向（AI 调试用） */
     navProbe(x: number, z: number): { walkable: boolean; reachable: boolean; dx: number; dz: number; dist: number; rawDx: number; rawDz: number } {
       nav.updateTarget(player.position.x, player.position.z);
