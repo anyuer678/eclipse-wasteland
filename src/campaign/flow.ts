@@ -8,6 +8,7 @@ import { Rng } from '../core';
 import type { Spawner } from '../horde';
 import { Boss } from './boss';
 import type { BossSpec, FlowPhase, MissionDef, WaveSpec } from './types';
+import { scaleWaveSpec, WAVE_DENSITY_SCALE } from './waves';
 
 export interface FlowResult {
   phase: FlowPhase;
@@ -37,6 +38,8 @@ export class MissionFlow {
   onResult: (result: FlowResult) => void = () => {};
   /** 难度系数（轻松 0.7 / 普通 1 / 困难 1.5 / 噩梦 2.2） */
   difficulty = 1;
+  /** 波次人数补偿（大地图接敌变慢）；1 = 不缩放 */
+  waveScale = WAVE_DENSITY_SCALE;
   /** 当前怪物等级（波次/BOSS 刷新时更新，供等级压制结算） */
   monsterLevel = 1;
   /** 难度对应的怪物等级偏移 */
@@ -158,13 +161,13 @@ export class MissionFlow {
       let eliteChance = Math.min(0.05 + floor * 0.02 + lvl * 0.004, 0.4);
       if (floor % 3 === 0) eliteChance = Math.min(0.55, eliteChance * 2);
       this.monsterLevel = Math.max(1, lvl);
-      this.spawner.spawnWave(spec, { hpMult, dmgMult, eliteChance, level: this.monsterLevel });
+      this.spawner.spawnWave(scaleWaveSpec(spec, this.waveScale), { hpMult, dmgMult, eliteChance, level: this.monsterLevel });
       return;
     }
     const lvl = (this.mission.monsterLevel ?? 1) + this.waveIndex + this.levelOffset;
     this.monsterLevel = Math.max(1, lvl);
     const spec = this.mission.waves[this.waveIndex];
-    this.spawner.spawnWave(spec as WaveSpec, {
+    this.spawner.spawnWave(scaleWaveSpec(spec as WaveSpec, this.waveScale), {
       hpMult: this.difficulty * (1 + 0.32 * (lvl - 1)),
       dmgMult: this.difficulty * (1 + 0.2 * (lvl - 1)),
       eliteChance: Math.min(0.4, 0.04 + lvl * 0.005),
