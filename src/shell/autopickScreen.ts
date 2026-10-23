@@ -37,9 +37,18 @@ export function createAutoPickScreen(cb: { onBack: () => void }): AutoPickScreen
   enableRow.appendChild(enableHint);
   card.appendChild(enableRow);
 
+  const status = el('div', '');
+  status.style.cssText = 'font-size:12.5px;letter-spacing:0.08em;margin:0 0 12px;font-family:var(--mono);';
+  card.appendChild(status);
+
   const presetBar = el('div', '');
-  presetBar.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px;';
+  presetBar.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 8px;';
   card.appendChild(presetBar);
+
+  const presetHint = el('div', '');
+  presetHint.textContent = '点击流派即启用自动选择；三个默认流派可改名、删除或新增';
+  presetHint.style.cssText = 'font-size:11.5px;color:var(--ink-faint);margin:0 0 12px;letter-spacing:0.06em;';
+  card.appendChild(presetHint);
 
   const nameRow = el('div', '');
   nameRow.style.cssText = 'display:flex;gap:10px;align-items:center;margin-bottom:12px;';
@@ -90,6 +99,8 @@ export function createAutoPickScreen(cb: { onBack: () => void }): AutoPickScreen
     const preset = cfg.presets[active];
 
     enableBox.checked = cfg.enabled;
+    status.textContent = cfg.enabled ? `● 已开启 · 当前流派「${preset.name}」` : '○ 未开启 · 升级时手动三选一';
+    status.style.color = cfg.enabled ? 'var(--ok)' : 'var(--cinnabar)';
 
     presetBar.innerHTML = '';
     cfg.presets.forEach((p, i) => {
@@ -97,8 +108,10 @@ export function createAutoPickScreen(cb: { onBack: () => void }): AutoPickScreen
       chip.style.cssText = 'min-width:0;padding:6px 16px;font-size:12.5px;letter-spacing:0.12em;' +
         (i === active ? 'border-color:var(--ink);background:var(--panel-3);font-weight:600;color:var(--ink);' : '');
       chip.addEventListener('click', () => {
-        getAutoPick().active = i;
-        saveAutoPick(getAutoPick());
+        const c = getAutoPick();
+        c.active = i;
+        c.enabled = true; // 选流派即视为启用，避免只点流派以为已生效
+        saveAutoPick(c);
         refresh();
       });
       presetBar.appendChild(chip);
@@ -109,6 +122,7 @@ export function createAutoPickScreen(cb: { onBack: () => void }): AutoPickScreen
       const c = getAutoPick();
       c.presets.push({ name: `流派 ${c.presets.length + 1}`, order: [...ALL_BOOST_IDS] });
       c.active = c.presets.length - 1;
+      c.enabled = true;
       saveAutoPick(c);
       refresh();
     });

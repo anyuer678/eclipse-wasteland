@@ -68,17 +68,20 @@ export function sanitizeAutoPick(raw: Partial<AutoPickConfig> | null | undefined
 
 let cache: AutoPickConfig | null = null;
 
-export function getAutoPick(): AutoPickConfig {
-  if (!cache) {
-    let raw: Partial<AutoPickConfig> | null = null;
-    try {
-      const s = localStorage.getItem(KEY);
-      if (s) raw = JSON.parse(s) as Partial<AutoPickConfig>;
-    } catch {
-      // localStorage 不可用时用默认配置
-    }
-    cache = sanitizeAutoPick(raw);
+/** 直接从存档读（升级结算用；避免多标签页/热更新时读到内存里的旧状态） */
+export function loadAutoPick(): AutoPickConfig {
+  let raw: Partial<AutoPickConfig> | null = null;
+  try {
+    const s = localStorage.getItem(KEY);
+    if (s) raw = JSON.parse(s) as Partial<AutoPickConfig>;
+  } catch {
+    // localStorage 不可用时用默认配置
   }
+  return sanitizeAutoPick(raw);
+}
+
+export function getAutoPick(): AutoPickConfig {
+  if (!cache) cache = loadAutoPick();
   return cache;
 }
 
@@ -91,10 +94,17 @@ export function saveAutoPick(cfg: AutoPickConfig): void {
   }
 }
 
-/** 当前启用的流派；未开启或配置异常时返回 null（走手动选牌） */
-export function activePreset(cfg: AutoPickConfig = getAutoPick()): AutoPickPreset | null {
+/** 当前生效的流派；未开启或配置异常时返回 null（走手动选牌）。每次调用都读存档 */
+export function activePreset(cfg: AutoPickConfig = loadAutoPick()): AutoPickPreset | null {
   if (!cfg.enabled) return null;
   return cfg.presets[cfg.active] ?? null;
+}
+
+/** HUD 展示用（读内存缓存，避免每帧解析存档） */
+export function autoPickLabel(): string | null {
+  const cfg = getAutoPick();
+  if (!cfg.enabled) return null;
+  return cfg.presets[cfg.active]?.name ?? null;
 }
 
 /** 从本次随机牌里选优先级最高的一张；流派没覆盖到的牌退回第一张 */

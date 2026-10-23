@@ -9,7 +9,7 @@ export { baseStats, applyBuffs, applyBuff, tickBuffs, BUFF_DURATION, fourStats, 
 export type { PlayerStats, BuffState, BuffKind } from './stats';
 export { newRun, expNeeded, addKillExp, rollChoices, applyChoice, runBonuses, BOOST_POOL, suppressionDealt, suppressionTaken } from './run';
 export type { RunState, RunBoost, BoostId } from './run';
-export { defaultAutoPick, sanitizeAutoPick, getAutoPick, saveAutoPick, activePreset, pickBoost, ALL_BOOST_IDS } from './autopick';
+export { defaultAutoPick, sanitizeAutoPick, loadAutoPick, getAutoPick, saveAutoPick, activePreset, autoPickLabel, pickBoost, ALL_BOOST_IDS } from './autopick';
 export type { AutoPickConfig, AutoPickPreset } from './autopick';
 export { genDailyTasks, todayKey, loadDaily, saveDaily, ensureDaily, addDailyProgress, claimDaily } from './daily';
 export type { DailyTask, DailyKind, DailyState } from './daily';

@@ -28,6 +28,8 @@ export interface HudView {
     totalWaves: number;
     tower?: boolean;
     missionName: string;
+    /** 已开启自动选择时显示流派名 */
+    autoPick?: string | null;
     skillLines: SkillLine[];
     slots: { name: string; rarity: string }[];
     slotIndex: number;
@@ -171,7 +173,7 @@ export function createHud(): HudView {
       // 等级压制：显示怪物等级与压制状态（绿=压制怪物 红=被压制）
       const lvDiff = d.playerLevel - d.monsterLevel;
       const supTag = lvDiff >= 2 ? '压制 ↑' : lvDiff <= -2 ? '被压制 ↓' : '势均力敌';
-      const waveTxt = `${d.missionName} · ${phaseText} · 怪物 Lv.${d.monsterLevel}（${supTag}）`;
+      const waveTxt = `${d.missionName} · ${phaseText} · 怪物 Lv.${d.monsterLevel}（${supTag}）${d.autoPick ? ` · 自动:${d.autoPick}` : ''}`;
       if (waveTxt !== cacheWave) {
         cacheWave = waveTxt;
         waveInfo.textContent = waveTxt;
