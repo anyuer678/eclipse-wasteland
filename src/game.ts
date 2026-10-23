@@ -21,7 +21,7 @@ import type { FireContext } from './arsenal';
 import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
-import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards, towerFloorClearRewards } from './campaign';
+import { MISSIONS, MissionFlow, createPlacement, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards, towerFloorClearRewards } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
@@ -496,12 +496,17 @@ function boot(): void {
   let inMenu = true;
   /** 局内商店打开状态 */
   let shopOpen = false;
-  /** 区域刷怪锚点（换图时从地图 userData 读取）与轮换序号 */
+  /** 区域刷怪锚点（换图时从地图 userData 读取） */
   let spawnAnchors: { x: number; z: number }[] = [];
-  let spawnAnchorSeq = 0;
+  const spawnPlacement = createPlacement({
+    nav,
+    anchors: () => spawnAnchors,
+    rng: () => placementRng.next(),
+    player: () => player.position,
+  });
 
   function beginMission(): void {
-    spawnAnchorSeq = 0;
+    spawnPlacement.reset();
     runPickCount = 0;
     runAutoPickCount = 0;
     paused = false;
@@ -572,7 +577,6 @@ function boot(): void {
     }
     mapRoot = world.buildMap(flow.mission.mapId, Math.max(0, MISSIONS.findIndex((m) => m.id === flow.mission.id)));
     spawnAnchors = (mapRoot.userData.spawnAnchors ?? []) as { x: number; z: number }[];
-    spawnAnchorSeq = 0;
     // 可破坏箱（从地图配置重建；mesh 引用用于击碎后隐藏）
     crates.length = 0;
     const crateGroup = mapRoot.userData.crateGroup as THREE.Group | undefined;
@@ -592,38 +596,7 @@ function boot(): void {
     player.position.set(SPAWN_POINT.x, 0, SPAWN_POINT.z);
     // 换图后重新烘焙导航网格；刷怪落点由导航网格给出（不再随机刷在玩家脸上/墙里）
     buildNavsForMap();
-    spawner.setPlacement((kind, _index, _total, placed, opts) => {
-      const px = opts?.center?.x ?? player.position.x;
-      const pz = opts?.center?.z ?? player.position.z;
-      // 区域分簇：每 3 只换一个锚点（地标/外圈点位），再从锚点附近找可站立点
-      if (!opts?.center && spawnAnchors.length > 0) {
-        const anchor = pickSpawnAnchor(spawnAnchors, spawnAnchorSeq++, 3, px, pz, 12, 40);
-        if (anchor) {
-          const spot = nav.findSpawnPoint(
-            () => placementRng.next(),
-            anchor.x,
-            anchor.z,
-            0.6,
-            4.5,
-            placed,
-            kind === 'boomer' ? 2.2 : 1.5
-          );
-          if (spot) {
-            const d = Math.hypot(spot.x - px, spot.z - pz);
-            if (d >= 10 && d <= 42) return spot;
-          }
-        }
-      }
-      return nav.findSpawnPoint(
-        () => placementRng.next(),
-        px,
-        pz,
-        opts?.placeMin ?? 14,
-        opts?.placeMax ?? 26,
-        placed,
-        kind === 'boomer' ? 2.2 : 1.5
-      );
-    });
+    spawner.setPlacement(spawnPlacement.place);
     setHp(maxHp);
     flow.difficulty = difficulty;
     flow.start();

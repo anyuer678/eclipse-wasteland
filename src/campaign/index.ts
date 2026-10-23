@@ -11,4 +11,6 @@ export { clearRewards, towerFailureRewards, towerFloorClearRewards, difficultyRe
 export type { SettleInput, RewardOut } from './rewards';
 export { pickSpawnAnchor } from './spawnZones';
 export type { SpawnAnchor } from './spawnZones';
+export { createPlacement } from './placement';
+export type { Placement, PlacementDeps, PlacementNav, PlacementOpts, PlacementPoint } from './placement';
 export type { BossSpec, Element, FlowPhase, MissionDef, WaveSpec } from './types';
