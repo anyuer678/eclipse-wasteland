@@ -50,7 +50,7 @@ export interface ShellCallbacks {
 export class Shell {
   readonly hud: HudView;
   private menu: { screen: HTMLElement; addGridCard: (ico: string, name: string, desc: string, num: string, fn: () => void) => void };
-  private select: HTMLElement;
+  private select: { screen: HTMLElement; refresh: () => void };
   private pause: HTMLElement;
   private result: { screen: HTMLElement; show: (r: FlowResult, w: ReturnType<typeof weaponOf>, summary?: RunSummary) => void };
   private armory: { root: HTMLElement; refresh: (w: ReturnType<typeof weaponOf>) => void };
@@ -135,7 +135,7 @@ export class Shell {
     });
 
     this.hud = createHud();
-    document.body.append(this.menu.screen, this.select, this.result.screen, this.pause, this.armoryScreen.screen, this.shopScreen.screen, this.talentScreen.screen, this.forgeScreen.screen, this.roleScreen.screen, this.achScreen.screen, this.statsScreen.screen, this.levelUpScreen.screen, this.dailyScreen.screen, this.combatShop.screen, this.autoPickScreen.screen);
+    document.body.append(this.menu.screen, this.select.screen, this.result.screen, this.pause, this.armoryScreen.screen, this.shopScreen.screen, this.talentScreen.screen, this.forgeScreen.screen, this.roleScreen.screen, this.achScreen.screen, this.statsScreen.screen, this.levelUpScreen.screen, this.dailyScreen.screen, this.combatShop.screen, this.autoPickScreen.screen);
     // 主菜单系统网格（图标 · 名称 · 简述）
     const menuGrid = this.menu;
     const cards: [string, string, string, string, (() => void) | undefined][] = [
@@ -260,7 +260,7 @@ export class Shell {
   showMenu(): void {
     this.tips.hide();
     this.menu.screen.classList.remove('hidden');
-    this.select.classList.add('hidden');
+    this.select.screen.classList.add('hidden');
     this.result.screen.classList.add('hidden');
     this.armoryScreen.screen.classList.add('hidden');
     this.shopScreen.screen.classList.add('hidden');
@@ -279,7 +279,8 @@ export class Shell {
 
   showSelect(): void {
     this.menu.screen.classList.add('hidden');
-    this.select.classList.remove('hidden');
+    this.select.screen.classList.remove('hidden');
+    this.select.refresh();
     this.pause.classList.add('hidden');
     this.result.screen.classList.add('hidden');
     this.hud.root.style.display = 'none';
@@ -287,7 +288,7 @@ export class Shell {
 
   startGame(): void {
     this.menu.screen.classList.add('hidden');
-    this.select.classList.add('hidden');
+    this.select.screen.classList.add('hidden');
     this.result.screen.classList.add('hidden');
     this.pause.classList.add('hidden');
     this.autoPickScreen.screen.classList.add('hidden');

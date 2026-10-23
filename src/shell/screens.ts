@@ -14,7 +14,7 @@ import { genDailyTasks, damageMultiplier, mechMultiplier, MAX_ASCENSION, MAX_RUN
 import type { AchievementDef } from '../growth';
 import { ROLES } from '../play/roles';
 import { COMBAT_GOODS } from '../play/combatShop';
-import { loadDifficulty, saveDifficulty } from '../campaign';
+import { loadDifficulty, saveDifficulty, loadMissionClears } from '../campaign';
 import type { FlowResult } from '../campaign';
 
 export interface ScreenCallbacks {
@@ -112,7 +112,7 @@ export function createMenuScreen(cb: ScreenCallbacks): { screen: HTMLElement; ad
   return { screen, addGridCard };
 }
 
-export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
+export function createSelectScreen(cb: ScreenCallbacks): { screen: HTMLElement; refresh: () => void } {
   const screen = el('div', 'ss-screen hidden');
   screen.appendChild(el('div', 'ss-title', '任务简报'));
   screen.appendChild(el('div', 'ss-subtitle', '选择出击任务'));
@@ -147,6 +147,7 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
   screen.appendChild(diffRow);
   const brief = el('div', '', '');
   brief.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;width:min(900px,94vw);';
+  const recs: { id: string; el: HTMLElement; baseLv: number; tower: boolean }[] = [];
   MISSIONS.forEach((m) => {
     const baseLv = m.monsterLevel ?? 1;
     const card = el('div', 'ss-grid-card', '');
@@ -175,6 +176,7 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
     rec.style.cssText = 'font-size:10.5px;color:var(--ink-faint);font-family:var(--mono);margin-bottom:12px;';
     rec.textContent = `建议玩家等级 ${Math.max(1, baseLv - 1)}+`;
     card.appendChild(rec);
+    recs.push({ id: m.id, el: rec, baseLv, tower: !!m.tower });
     // CTA
     const cta = button('', m.tower ? '挑战无尽' : '出击任务', () => cb.onStartMission(m.id));
     cta.style.cssText = 'min-width:0;width:100%;padding:8px 0;font-size:12px;';
@@ -188,7 +190,21 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
   });
   screen.appendChild(brief);
   screen.appendChild(button('', '返回', () => cb.onBackToMenu()));
-  return screen;
+  /** 每次打开选关页刷新通关次数（通关返回后不重建界面也能更新） */
+  const refresh = (): void => {
+    const clears = loadMissionClears(localStorage);
+    for (const r of recs) {
+      const base = `建议玩家等级 ${Math.max(1, r.baseLv - 1)}+`;
+      if (r.tower) {
+        r.el.textContent = base;
+        continue;
+      }
+      const n = clears[r.id] ?? 0;
+      r.el.textContent = n > 0 ? `已通关 ×${n} · ${base}` : base;
+    }
+  };
+  refresh();
+  return { screen, refresh };
 }
 
 export function createPauseScreen(cb: { onResume: () => void; onExit: () => void }): HTMLElement {

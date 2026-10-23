@@ -20,7 +20,7 @@ import type { FireContext } from './arsenal';
 import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
-import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty } from './campaign';
+import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty, recordMissionClear } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
@@ -933,6 +933,7 @@ function boot(): void {
       achAdd('clears', 1);
       if (autoPickLabel()) achAdd('autoClears', 1);
       addDailyProgress(dailyState, 'clears'); // 每日任务：通关
+      recordMissionClear(result.mission.id, localStorage);
       refreshGrowth();
     } else if (result.phase === 'failed' && result.mission.tower) {
       // 塔模式：失败也按层数结算部分奖励（材料固定为合金碎片，避免空 key）
