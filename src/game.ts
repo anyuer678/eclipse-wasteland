@@ -17,7 +17,7 @@ import { createSettingsPanel, loadSettings } from './shell/settings';
 import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
 import type { FireContext } from './arsenal';
-import { Enemy, NavField, Spawner, separationDelta, SpatialHash } from './horde';
+import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow, pickSpawnAnchor } from './campaign';
@@ -26,6 +26,7 @@ import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
 import { skillLinesFor } from './play/weaponBrief';
+import { separateCrowd } from './play/crowdStep';
 import { ENV_MODELS, ENV_TINT } from './render/envConfig';
 
 function boot(): void {
@@ -2217,38 +2218,7 @@ function boot(): void {
       const sep = { x: 0, z: 0 };
       // 两次松弛：密集怪群里单次分离会因相互抵消而残留重叠。
       // 空间哈希只检查同格/邻格，避免同屏 40+ 时的 O(n²) 两两扫描。
-      for (let iter = 0; iter < 2; iter++) {
-        enemyHash.clear();
-        for (let i = 0; i < crowd.length; i++) {
-          const a = crowd[i];
-          if (a.alive) enemyHash.insert(i, a.root.position.x, a.root.position.z);
-        }
-        const pairs = enemyHash.pairs();
-        for (let p = 0; p < pairs.length; p += 2) {
-          const i = pairs[p];
-          const j = pairs[p + 1];
-          const a = crowd[i];
-          const b = crowd[j];
-          if (!a.alive || !b.alive) continue;
-          if (Math.abs(a.root.position.y - b.root.position.y) > 1.4) continue;
-          if (separationDelta(
-            a.root.position.x,
-            a.root.position.z,
-            a.def.radius + 0.06,
-            b.root.position.x,
-            b.root.position.z,
-            b.def.radius + 0.06,
-            sep,
-            ((i * 7 + j) * 2.399) % (Math.PI * 2),
-            0.6
-          )) {
-            a.root.position.x += sep.x;
-            a.root.position.z += sep.z;
-            b.root.position.x -= sep.x;
-            b.root.position.z -= sep.z;
-          }
-        }
-      }
+      separateCrowd(crowd, enemyHash, sep);
       for (const e of crowd) {
         if (!e.alive) continue;
         const ep = e.root.position;
