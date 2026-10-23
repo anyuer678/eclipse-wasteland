@@ -20,7 +20,7 @@ import type { FireContext } from './arsenal';
 import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
-import { MISSIONS, MissionFlow, pickSpawnAnchor } from './campaign';
+import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
@@ -487,6 +487,7 @@ function boot(): void {
     },
     onSetDifficulty: (d) => {
       difficulty = d;
+      saveDifficulty(d);
     },
   });
   // 天赋/成就/每日都必须与 Shell 共享同一外层对象（各界面捕获的是构造时的引用），
@@ -506,8 +507,8 @@ function boot(): void {
   };
   let escPaused = false;
   let armoryFromCombat = false;
-  /** 难度（普通 1 / 困难 1.5 / 噩梦 2.2） */
-  let difficulty = 1;
+  /** 难度（普通 1 / 困难 1.5 / 噩梦 2.2）；记住上次选择 */
+  let difficulty = loadDifficulty();
   /** 菜单态（不渲染 3D，省性能） */
   let inMenu = true;
   /** 局内商店打开状态 */

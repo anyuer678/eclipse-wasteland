@@ -14,6 +14,7 @@ import { genDailyTasks, damageMultiplier, mechMultiplier, MAX_ASCENSION, MAX_RUN
 import type { AchievementDef } from '../growth';
 import { ROLES } from '../play/roles';
 import { COMBAT_GOODS } from '../play/combatShop';
+import { loadDifficulty, saveDifficulty } from '../campaign';
 import type { FlowResult } from '../campaign';
 
 export interface ScreenCallbacks {
@@ -124,15 +125,16 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
     { d: 1.5, label: '困难', hint: '怪物等级 +2 · 敌人 ×1.5 · 奖励 ×1.8' },
     { d: 2.2, label: '噩梦', hint: '怪物等级 +4 · 敌人 ×2.2 · 奖励 ×3' },
   ];
-  let curDiff = 1;
+  let curDiff = loadDifficulty();
   const btns: HTMLElement[] = [];
-  const hintEl = el('div', '', DIFFS[0].hint);
+  const hintEl = el('div', '', (DIFFS.find((d) => d.d === curDiff) ?? DIFFS[1]).hint);
   hintEl.style.cssText = 'font-size:11px;color:var(--ink-faint);font-family:var(--mono);';
   for (const df of DIFFS) {
     const b = el('div', 'ss-diff-item' + (df.d === curDiff ? ' active' : ''), df.label);
     b.title = df.hint;
     b.addEventListener('click', () => {
       curDiff = df.d;
+      saveDifficulty(df.d);
       cb.onSetDifficulty?.(df.d);
       for (const x of btns) x.classList.remove('active');
       b.classList.add('active');

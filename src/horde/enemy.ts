@@ -100,6 +100,9 @@ export class Enemy {
   private readonly barSprite: THREE.Sprite;
   /** 动画相位（错开走路节奏） */
   private phase = Math.random() * Math.PI * 2;
+  /** 上一帧位置（判断是否真的在移动） */
+  private prevX = 0;
+  private prevZ = 0;
   private flashTimer = 0;
   private flashing = false;
   /** 倒地动画剩余时间（>0 时尸体还在场上，播完才回收） */
@@ -245,7 +248,7 @@ export class Enemy {
     // 朝向：看得见玩家盯玩家，绕障时看行进方向，避免倒着滑步
     if (sees || dist < 2 || navLen < 0.01) this.root.lookAt(playerPos.x, this.root.position.y, playerPos.z);
     else this.root.lookAt(this.root.position.x + navX, this.root.position.y, this.root.position.z + navZ);
-    this.animate(dt, d.speed === 0 ? 0 : dist);
+    this.animate(dt);
 
     const moveAlongPath = (multiplier: number): void => {
       if (navLen < 0.01) return;
@@ -379,9 +382,14 @@ export class Enemy {
     return null;
   }
 
-  /** 走路律动：上下起伏 + 前后摆动（单网格也能读出“在跑”） */
-  private animate(dt: number, dist: number): void {
-    const moving = dist > 1.15;
+  /** 走路律动：上下起伏 + 前后摆动（单网格也能读出“在跑”）
+   *  用「上一帧位移」判断是否真的在移动：远程兵种保持距离站定时不再原地踏步。 */
+  private animate(dt: number): void {
+    const dx = this.root.position.x - this.prevX;
+    const dz = this.root.position.z - this.prevZ;
+    const moving = Math.hypot(dx, dz) > Math.max(0.0025, dt * 0.12);
+    this.prevX = this.root.position.x;
+    this.prevZ = this.root.position.z;
     this.phase += dt * (moving ? 11 : 2.4);
     // 四肢摆动由着色器完成（enemyModel 的 ANIM_BODY），这里只喂相位/移动强度/出手前倾
     const anim = this.bodyMat.userData.anim as Record<string, { value: number }> | undefined;
@@ -453,6 +461,8 @@ export class Enemy {
     this.vertical.grounded = true;
     this.safeX = x;
     this.safeZ = z;
+    this.prevX = x;
+    this.prevZ = z;
   }
 
   /** 每帧贴地/下落（由 game 在水平碰撞处理之后调用） */
