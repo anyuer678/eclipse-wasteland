@@ -5,10 +5,16 @@
  * 也会从侧面瞬移爬上 1.2m 平台。这里用台阶上限 + 重力：
  *   - 连续坡道/小台阶：贴地跟随
  *   - 超过 stepUp 的高差：保持原高度（交给水平碰撞推开）
- *   - 地面低于脚下超过 stepUp：进入下落
+ *   - 地面低于脚下不足 MAX_STEP_DOWN：快速下滑贴地（平台/台阶边缘不腾空）
+ *   - 真正的高崖：进入自由落体
  */
 
 export const ENEMY_GRAVITY = 22;
+
+/** 平台/台阶边缘的小落差下滑速度：约 4–6 帧落地，避免小怪悬空 0.3s */
+export const STEP_DOWN_SPEED = 16;
+/** 视为可走落差的最大高度：覆盖全部平台（0.9/1.2m）与斜坡 */
+export const MAX_STEP_DOWN = 1.3;
 
 export interface VerticalBody {
   y: number;
@@ -24,8 +30,14 @@ export function stepVertical(body: VerticalBody, ground: number, dt: number, ste
       body.vy = 0;
       return;
     }
-    if (dy >= -stepUp) {
+    if (dy >= -0.05) {
       body.y = ground;
+      body.vy = 0;
+      return;
+    }
+    if (dy >= -MAX_STEP_DOWN) {
+      // 走下平台/台阶：快速下滑而不是自由落体，保持 grounded
+      body.y = Math.max(ground, body.y - STEP_DOWN_SPEED * dt);
       body.vy = 0;
       return;
     }

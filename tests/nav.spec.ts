@@ -163,13 +163,22 @@ describe('horde/motion', () => {
     expect(body.y).toBeCloseTo(0.2)
     expect(body.grounded).toBe(true)
 
-    // 站上 1.2m 平台后从边缘走空：进入下落
+    // 站上 1.2m 平台后从边缘走空：小落差快速下滑贴地，不进入悬空自由落体
     body.y = 1.2
     stepVertical(body, 0, 1 / 60)
-    expect(body.grounded).toBe(false)
-    for (let i = 0; i < 300 && !body.grounded; i++) stepVertical(body, 0, 1 / 60)
+    expect(body.grounded).toBe(true)
+    expect(body.y).toBeLessThan(1.2)
+    for (let i = 0; i < 6; i++) stepVertical(body, 0, 1 / 60)
     expect(body.grounded).toBe(true)
     expect(body.y).toBeCloseTo(0)
+
+    // 真正的高崖（>1.3m）：自由落体后落地
+    const faller = { y: 3, vy: 0, grounded: true }
+    stepVertical(faller, 0, 1 / 60)
+    expect(faller.grounded).toBe(false)
+    for (let i = 0; i < 300 && !faller.grounded; i++) stepVertical(faller, 0, 1 / 60)
+    expect(faller.grounded).toBe(true)
+    expect(faller.y).toBeCloseTo(0)
   })
 
   it('separates overlapping enemies symmetrically', () => {
