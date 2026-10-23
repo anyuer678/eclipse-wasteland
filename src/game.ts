@@ -13,6 +13,7 @@ import { Fx } from './render/fx';
 import { createAssetLib } from './render/assets';
 import { Input } from './play/input';
 import { Radar } from './shell/radar';
+import { drawRadar } from './shell/radarFeed';
 import { createSettingsPanel, loadSettings } from './shell/settings';
 import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
@@ -1739,21 +1740,18 @@ function boot(): void {
       // 雷达小地图（每 2 帧画一次）
       radarFrame += 1;
       if (radarFrame % 2 === 0) {
-        radar.begin(player.position.x, player.position.z, player.yaw);
-        for (const e of spawner.all()) {
-          if (!e.alive) continue;
-          radar.dot(e.root.position.x, e.root.position.z, '#' + e.def.color.toString(16).padStart(6, '0'), 3);
-        }
-        if (activeBoss && activeBoss.alive) {
-          radar.dot(activeBoss.root.position.x, activeBoss.root.position.z, '#ff4400', 5);
-        }
-        for (const c of crates) if (c.alive) radar.dot(c.x, c.z, '#d9a44a', 2);
-        // 补给宝箱与 BUFF 球也标出来（雷达说明里的“补给”）
-        for (const c of chests) radar.dot(c.mesh.position.x, c.mesh.position.z, '#ffe9a8', 3);
-        for (const o of buffOrbs) radar.dot(o.mesh.position.x, o.mesh.position.z, '#66d9ff', 2);
-        const pools = (mapRoot?.userData.poisonPools ?? []) as { x: number; z: number }[];
-        for (const pool of pools) radar.dot(pool.x, pool.z, 'rgba(62,160,85,0.85)', 4);
-        radar.end();
+        drawRadar({
+          radar,
+          playerX: player.position.x,
+          playerZ: player.position.z,
+          yaw: player.yaw,
+          enemies: spawner.all(),
+          boss: activeBoss,
+          crates,
+          chests,
+          orbs: buffOrbs,
+          poisonPools: (mapRoot?.userData.poisonPools ?? []) as { x: number; z: number }[],
+        });
       }
 
       fireCtx.origin.copy(eye);
