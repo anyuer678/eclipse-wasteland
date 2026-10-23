@@ -21,7 +21,8 @@ import type { FireContext } from './arsenal';
 import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
-import { MISSIONS, MissionFlow, createPlacement, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards, towerFloorClearRewards } from './campaign';
+import { MISSIONS, MissionFlow, createPlacement, rebuildMissionMap, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards, towerFloorClearRewards } from './campaign';
+import type { MissionCrate } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
@@ -569,29 +570,18 @@ function boot(): void {
     chests.length = 0;
     for (const o of buffOrbs) world.scene.remove(o.mesh);
     buffOrbs.length = 0;
-    // 重建关卡地图（移除旧障碍，按 mapId 生成新布局�?
-    if (mapRoot) {
-      world.scene.remove(mapRoot);
-      // 释放地图自建几何/材质（共享纹理与全局材质自动跳过）
-      World.disposeMap(mapRoot);
-    }
-    mapRoot = world.buildMap(flow.mission.mapId, Math.max(0, MISSIONS.findIndex((m) => m.id === flow.mission.id)));
-    spawnAnchors = (mapRoot.userData.spawnAnchors ?? []) as { x: number; z: number }[];
+    // 重建关卡地图（移除旧地图并释放几何/材质，按 mapId + 任务变体生成新布局）
+    const built = rebuildMissionMap(
+      world,
+      flow.mission.mapId,
+      Math.max(0, MISSIONS.findIndex((m) => m.id === flow.mission.id)),
+      mapRoot
+    );
+    mapRoot = built.mapRoot;
+    spawnAnchors = built.spawnAnchors;
     // 可破坏箱（从地图配置重建；mesh 引用用于击碎后隐藏）
     crates.length = 0;
-    const crateGroup = mapRoot.userData.crateGroup as THREE.Group | undefined;
-    const crateDefs = (mapRoot.userData.crates ?? []) as { x: number; z: number; obstacle?: NavObstacle }[];
-    for (let i = 0; i < crateDefs.length; i++) {
-      const c = crateDefs[i];
-      crates.push({
-        x: c.x,
-        z: c.z,
-        hp: 25,
-        alive: true,
-        mesh: crateGroup?.children[i] as THREE.Mesh | undefined,
-        obstacle: c.obstacle,
-      });
-    }
+    for (const c of built.crates) crates.push(c);
     mountEnv(); // 挂载开源环境素材（Kenney CC0：岩石/树木/灌木）
     player.position.set(SPAWN_POINT.x, 0, SPAWN_POINT.z);
     // 换图后重新烘焙导航网格；刷怪落点由导航网格给出（不再随机刷在玩家脸上/墙里）
@@ -606,8 +596,7 @@ function boot(): void {
 
   let mapRoot: THREE.Group | null = null;
   /** 可破坏箱（打碎掉补给） */
-  interface Crate { x: number; z: number; hp: number; alive: boolean; mesh?: THREE.Mesh; obstacle?: NavObstacle }
-  const crates: Crate[] = [];
+  const crates: MissionCrate[] = [];
 
   /** 当前地图碰撞体 → 小怪/BOSS 两套导航网格（木箱击碎后也必须重烘） */
   function buildNavsForMap(): void {
@@ -617,7 +606,7 @@ function boot(): void {
   }
 
   /** 木箱被击碎：从地图障碍中移除并重烘导航，打开被堵住的路线 */
-  function removeCrateObstacle(c: Crate): void {
+  function removeCrateObstacle(c: MissionCrate): void {
     if (!c.obstacle) return;
     const obs = (mapRoot?.userData.obstacles ?? []) as NavObstacle[];
     const i = obs.indexOf(c.obstacle);
