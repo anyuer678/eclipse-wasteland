@@ -36,6 +36,8 @@ import { shotDamage } from './play/shotDamage';
 import { dashStep } from './play/dash';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
+import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
+import type { OrbKind } from './play/loot';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
@@ -231,25 +233,17 @@ function boot(): void {
   const chests: Chest[] = [];
 
   // ---------- 局内 BUFF 球（击杀掉落，靠近拾取） ----------
-  type OrbKind = 'fireSpd' | 'crit' | 'heal' | 'energy' | 'move';
   interface Orb {
     mesh: THREE.Group;
     kind: OrbKind;
   }
   const buffOrbs: Orb[] = [];
-  const ORB_KINDS: { kind: OrbKind; color: number; label: string }[] = [
-    { kind: 'fireSpd', color: 0xffd24a, label: '速射' },
-    { kind: 'crit', color: 0xff6a4a, label: '暴击' },
-    { kind: 'heal', color: 0x4aff8a, label: '回复' },
-    { kind: 'energy', color: 0x4ad9ff, label: '充能' },
-    { kind: 'move', color: 0xc9a0ff, label: '疾行' },
-  ];
   /** 短期增益计时（8s） */
   const shortBuffs = { fireSpd: 0, crit: 0, move: 0 };
   const SHORT_BUFF_SECONDS = 8;
 
   const spawnBuffOrb = (pos: THREE.Vector3): void => {
-    const pick = ORB_KINDS[Math.floor(Math.random() * ORB_KINDS.length)];
+    const pick = rollOrbKind();
     const g = new THREE.Group();
     const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), new THREE.MeshBasicMaterial({ color: pick.color }));
     core.position.y = 0.9;
@@ -305,22 +299,7 @@ function boot(): void {
     }
     world.scene.add(g);
     // 随机奖励
-    const roll = Math.random();
-    let reward = '合金碎片';
-    let amount = 2;
-    if (big) {
-      reward = roll < 0.5 ? '核心晶体' : '金币';
-      amount = roll < 0.5 ? 3 : 40;
-    } else if (roll < 0.45) {
-      reward = '合金碎片';
-      amount = 2 + Math.floor(Math.random() * 3);
-    } else if (roll < 0.75) {
-      reward = '金币';
-      amount = 10 + Math.floor(Math.random() * 15);
-    } else {
-      reward = 'medkit';
-      amount = 1;
-    }
+    const { reward, amount } = rollChestReward(big);
     chests.push({ mesh: g, reward, amount });
   };
   const pickChests = (): void => {
