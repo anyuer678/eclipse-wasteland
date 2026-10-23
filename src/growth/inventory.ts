@@ -2,8 +2,9 @@
  * growth/inventory — 玩家背包（材料 + 武器成长数据）。
  *
  * 材料来自副本结算掉落；武器成长按 id 记录强化等级与进阶等级。
- * 数据持久化到 localStorage（单机存档）。
+ * 数据持久化到 localStorage（单机存档，v2 起带版本号并支持迁移）。
  */
+import { migrateSave, serializeSave } from './save';
 
 export interface WeaponAffix {
   /** 词缀类型：atk/crit/spd/energy/vamp */
@@ -46,6 +47,8 @@ export interface InventoryData {
 }
 
 const SAVE_KEY = 'ss-rebuild-save-v1';
+/** 迁移前备份旧档（只写一次，便于回滚/排查） */
+const SAVE_BACKUP_KEY = 'ss-rebuild-save-v1-backup';
 
 export class Inventory {
   data: InventoryData;
@@ -89,7 +92,7 @@ export class Inventory {
 
   private save(): void {
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+      localStorage.setItem(SAVE_KEY, serializeSave(this.data));
     } catch {
       // localStorage 不可用（隐私模式等）时静默跳过
     }
@@ -104,16 +107,29 @@ export class Inventory {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as InventoryData;
-        return {
-          materials: parsed.materials ?? {},
-          weapons: parsed.weapons ?? {},
-          loadout: Array.isArray(parsed.loadout) ? parsed.loadout : [],
-          gold: parsed.gold ?? 0,
-          consumables: parsed.consumables ?? {},
-          roleLevels: parsed.roleLevels ?? {},
-          talentPoints: parsed.talentPoints ?? 0,
-        };
+        let parsed: unknown = null;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = null;
+        }
+        if (parsed) {
+          const { data, migrated } = migrateSave(parsed);
+          if (migrated) {
+            // 旧档先备份，再立即以新格式写回（只发生一次）
+            try {
+              localStorage.setItem(SAVE_BACKUP_KEY, raw);
+            } catch {
+              /* 忽略备份失败 */
+            }
+            try {
+              localStorage.setItem(SAVE_KEY, serializeSave(data));
+            } catch {
+              /* 忽略写回失败：内存里仍按迁移后的数据运行 */
+            }
+          }
+          return data;
+        }
       }
     } catch {
       // 存档损坏时重置
