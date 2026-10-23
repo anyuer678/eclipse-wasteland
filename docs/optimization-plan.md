@@ -6,11 +6,11 @@
 
 | 维度 | 现状 | 证据 |
 | --- | --- | --- |
-| 战场 | 半径 52m，5 图 11 关 + 塔，每图 1 处地标 + 每关布局变体 | `ARENA_RADIUS=52`；mapsize 探针 5 图连通率 98.8–99.8% |
-| 内容量 | 6 兵种、18 种局内强化、10 武器、5 角色、11 BOSS + 塔主 | `ENEMY_DEFS` / `BOOST_POOL` / `ARSENAL` / `ROLES` / `MISSIONS` |
+| 战场 | 半径 52m，6 图 12 关 + 塔，每图 1 处地标 + 每关布局变体 | `ARENA_RADIUS=52`；mapsize 探针 5 图连通率 98.8–99.8% |
+| 内容量 | 8 兵种、18 种局内强化、12 武器、5 角色、12 BOSS + 塔主 | `ENEMY_DEFS` / `BOOST_POOL` / `ARSENAL` / `ROLES` / `MISSIONS`（按源表计数复测） |
 | 成长 | 局外武器养成 + 天赋 + 角色 + 自动选择流派 | `ss-autopick-v1`；自动模式探针连升 4 级 0 暂停 |
 | 渲染 | draw calls 57–90，triangles 40–58k（无头 SwiftShader） | `ss.perf()` |
-| 代码 | `game.ts` 2987 行、`world.ts` 1271、`screens.ts` 978 | `wc -l` |
+| 代码 | `game.ts` 2681 行、`world.ts` 1320、`screens.ts` 1040 | `wc -l` |
 | 测试 | 167 项纯函数单测；CI = Test + Deploy + CodeQL | vitest / GitHub Actions |
 | 已知短板 | ① 地图变大但波次人数没跟；② 强化池同质化（重弹头/攻击强化都是纯伤害）；③ 局内商店价值低；④ 设置面板选项少（无 FOV/准星/伤害数字/低动态）；⑤ `game.ts` 过大；⑥ 存档无版本迁移 | 见下各阶段 |
 
