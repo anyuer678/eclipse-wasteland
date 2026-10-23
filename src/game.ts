@@ -30,6 +30,7 @@ import { separateCrowd } from './play/crowdStep';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
+import { MOODS } from './play/ambience';
 import { ENV_MODELS, ENV_TINT } from './render/envConfig';
 
 function boot(): void {
@@ -840,14 +841,7 @@ function boot(): void {
       if (spot) activeBoss.root.position.set(spot.x, spot.y, spot.z);
     }
     projectiles.clear();
-    // 背景音乐按地图换情绪（火山低沉 / 冰原清冷）
-    const MOODS: Record<string, [number, number[]]> = {
-      facility: [55, [0, 3, 5, 7, 10]],
-      quarry: [49, [0, 3, 5, 7, 10]],
-      lab: [65.41, [0, 3, 5, 7, 10]],
-      volcano: [43.65, [0, 1, 5, 7, 8]],
-      ice: [82.41, [0, 2, 4, 7, 9]],
-    };
+    // 背景音乐按地图换情绪（火山低沉 / 冰原清冷 / 裂谷燥热）
     const mood = MOODS[flow.mission.mapId];
     if (mood) sfx.setMood(mood[0], mood[1]);
     if (activeBoss) world.scene.add(activeBoss.root);
