@@ -16,7 +16,7 @@ import { Radar } from './shell/radar';
 import { createSettingsPanel, loadSettings } from './shell/settings';
 import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
-import type { WeaponDef, FireContext } from './arsenal';
+import type { FireContext } from './arsenal';
 import { Enemy, NavField, Spawner, separationDelta, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
@@ -25,26 +25,8 @@ import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTa
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
-import type { SkillLine } from './shell';
-
-/** 由武器配表生成技能面板文案（数值技能面板） */
-function skillLinesFor(def: WeaponDef): SkillLine[] {  const m = def.mech;
-  const lines: SkillLine[] = [];
-  if (m.kind === 'energy') {
-    lines.push({ key: 'E', label: '过载射击', value: `消耗 ${m.cost} 能量，伤害倍率 ${m.multiplier.toFixed(1)}` });
-    lines.push({ key: '左键', label: '充能', value: `每发 +${def.energyGain} 能量` });
-  } else if (m.kind === 'overload') {
-    lines.push({ key: 'E', label: '过载形态', value: `耗能 ${m.energyPerSec}/s，伤害提升` });
-  } else if (m.kind === 'lockon') {
-    lines.push({ key: 'E', label: '电弧索敌', value: `范围 ${m.range}m，伤害倍率 ${m.damageFactor.toFixed(1)} · 冷却 ${m.cooldown.toFixed(1)}s` });
-  } else if (m.kind === 'slow') {
-    lines.push({ key: '命中', label: '霜缓', value: `减速 ${Math.round((1 - m.factor) * 100)}% · ${m.seconds}s` });
-  } else if (m.kind === 'charge') {
-    lines.push({ key: '左键', label: '蓄力射击', value: `蓄满伤害×${m.maxMult.toFixed(1)}` });
-  }
-  lines.push({ key: '', label: '', value: `射速 ${def.rpm} · 弹匣 ${def.mag} · 暴击×${def.critMult.toFixed(1)}` });
-  return lines;
-}
+import { skillLinesFor } from './play/weaponBrief';
+import { ENV_MODELS, ENV_TINT } from './render/envConfig';
 
 function boot(): void {
   const mount = document.getElementById('app');
@@ -676,40 +658,6 @@ function boot(): void {
 
   // ---------- 开源环境素材（Kenney CC0 nature-kit） ----------
   /** 按地图类型放置的环境模型清单 */
-  const ENV_MODELS: Record<string, { name: string; count: number; scale: [number, number]; y: number }[]> = {
-    facility: [
-      { name: 'env/env_rockSmall', count: 7, scale: [1.6, 3], y: 0 },
-      { name: 'env/env_log', count: 5, scale: [1.8, 3], y: 0.25 },
-      { name: 'env/env_bush', count: 9, scale: [0.35, 0.62], y: 0.02 }, // 地表草丛（小、不抢眼）
-    ],
-    quarry: [
-      { name: 'env/env_rockA', count: 7, scale: [2.2, 4.2], y: 0 },
-      { name: 'env/env_rockB', count: 6, scale: [2.2, 4.2], y: 0 },
-      { name: 'env/env_rockTall', count: 4, scale: [2.2, 3.6], y: 0 },
-      { name: 'env/env_log', count: 3, scale: [1.8, 3.2], y: 0.25 },
-      { name: 'env/env_bush', count: 9, scale: [0.35, 0.6], y: 0.02 },
-    ],
-    lab: [
-      { name: 'env/env_treePine', count: 6, scale: [2.0, 3.2], y: 0 },
-      { name: 'env/env_treeDefault', count: 5, scale: [1.9, 2.9], y: 0 },
-      { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
-      { name: 'env/env_bush', count: 10, scale: [0.35, 0.6], y: 0.02 },
-    ],
-    canyon: [
-      { name: 'env/env_rockA', count: 8, scale: [2.4, 4.4], y: 0 },
-      { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
-      { name: 'env/env_bush', count: 8, scale: [0.35, 0.6], y: 0.02 },
-    ],
-  };
-  /** 开源环境素材的地图化配色（压掉 Kenney 原色的荧光感） */
-  const ENV_TINT: Record<string, number> = {
-    facility: 0x5f7a45,
-    quarry: 0x7a6a48,
-    lab: 0x4d7a5c,
-    volcano: 0x5a3a2a,
-    ice: 0x6d8296,
-    canyon: 0x8a6a48,
-  };
   let envRoot: THREE.Group | null = null;
   const mountEnv = (): void => {
     if (envRoot) {

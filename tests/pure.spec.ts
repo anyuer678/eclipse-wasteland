@@ -204,15 +204,15 @@ describe('growth/talent tables', () => {
 })
 
 describe('campaign/missions', () => {
-  it('normal missions tier by 2 up to Lv21, tower endless', async () => {
+  it('normal missions tier by 2 up to Lv23, tower endless', async () => {
     const { MISSIONS } = await import('../src/campaign/missions')
     const normal = MISSIONS.filter((m) => !m.tower)
-    expect(normal).toHaveLength(11)
+    expect(normal).toHaveLength(12)
     for (let i = 1; i < normal.length; i++) {
       expect((normal[i].monsterLevel ?? 1) - (normal[i - 1].monsterLevel ?? 1)).toBe(2)
     }
     expect(normal[0].monsterLevel).toBe(1)
-    expect(normal[normal.length - 1].monsterLevel).toBe(21)
+    expect(normal[normal.length - 1].monsterLevel).toBe(23)
     const tower = MISSIONS.find((m) => m.tower)
     expect(tower).toBeTruthy()
     expect(tower!.monsterLevel).toBe(20)
