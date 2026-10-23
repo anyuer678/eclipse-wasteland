@@ -27,6 +27,8 @@ import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
 import { skillLinesFor } from './play/weaponBrief';
 import { separateCrowd } from './play/crowdStep';
+import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
+import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { ENV_MODELS, ENV_TINT } from './render/envConfig';
 
 function boot(): void {
@@ -1045,7 +1047,7 @@ function boot(): void {
    * 小怪水平碰撞：圆 vs 障碍 AABB。两次迭代，避免被相邻两个箱体夹住。
    * 站在障碍顶面（平台）时跳过，否则会被从平台上推下去。
    */
-  const resolveEnemyObstacles = (pos: THREE.Vector3, radius: number): void => {
+  const resolveEnemyObstacles = (pos: { x: number; y: number; z: number }, radius: number): void => {
     const groundHere = player.terrainHeight(pos.x, pos.z);
     for (let pass = 0; pass < 2; pass++) {
       let moved = false;
@@ -1080,7 +1082,7 @@ function boot(): void {
   };
 
   /** 限制在竞技场圆内（玩家 ARENA_RADIUS-0.5；敌人到 ARENA_RADIUS 给远程留空间） */
-  const clampArena = (pos: THREE.Vector3): void => {
+  const clampArena = (pos: { x: number; y: number; z: number }): void => {
     const r = Math.hypot(pos.x, pos.z);
     const maxR = ARENA_RADIUS;
     if (r > maxR) {
@@ -1088,6 +1090,13 @@ function boot(): void {
       pos.x *= k;
       pos.z *= k;
     }
+  };
+  /** 敌人物理上下文（player.position 是 Vector3，结构化类型兼容 Vec3Like） */
+  const enemyPhysicsCtx: EnemyPhysicsCtx = {
+    player: player.position,
+    terrainHeight: (x, z) => player.terrainHeight(x, z),
+    clampArena,
+    resolveObstacles: resolveEnemyObstacles,
   };
 
   // 音频上下文要在用户手势后创建/恢复（浏览器自动播放策略）
@@ -2209,37 +2218,12 @@ function boot(): void {
       }
 
       // 移动物理：障碍推回 → 体积分离 → 玩家体积 → 再次障碍 → 贴地/下落
-      for (const e of crowd) {
-        if (!e.alive) continue;
-        clampArena(e.root.position);
-        e.refuseClimb(player.terrainHeight(e.root.position.x, e.root.position.z));
-        resolveEnemyObstacles(e.root.position, e.def.radius + 0.06);
-      }
+      resolveCrowdObstacles(crowd, enemyPhysicsCtx);
       const sep = { x: 0, z: 0 };
       // 两次松弛：密集怪群里单次分离会因相互抵消而残留重叠。
       // 空间哈希只检查同格/邻格，避免同屏 40+ 时的 O(n²) 两两扫描。
       separateCrowd(crowd, enemyHash, sep);
-      for (const e of crowd) {
-        if (!e.alive) continue;
-        const ep = e.root.position;
-        // 不许钻进玩家身体（近战仍能贴到 0.7~0.9m 出手）
-        const dx = ep.x - player.position.x;
-        const dz = ep.z - player.position.z;
-        const d = Math.hypot(dx, dz);
-        const minD = 0.3 + e.def.radius;
-        if (d < minD && Math.abs(ep.y - player.position.y) < 1.4) {
-          if (d > 1e-4) {
-            ep.x = player.position.x + (dx / d) * minD;
-            ep.z = player.position.z + (dz / d) * minD;
-          } else {
-            ep.x = player.position.x + minD;
-          }
-        }
-        clampArena(ep);
-        resolveEnemyObstacles(ep, e.def.radius + 0.06);
-        e.refuseClimb(player.terrainHeight(ep.x, ep.z));
-        e.applyGroundMotion(player.terrainHeight(ep.x, ep.z), dt);
-      }
+      settleCrowd(crowd, dt, enemyPhysicsCtx);
 
       // 状态特效：燃烧火花 / 减速蓝霜 / 晕眩星火（10Hz，避免粒子风暴）
       statusFxAcc -= dt;
