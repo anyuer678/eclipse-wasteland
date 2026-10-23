@@ -236,7 +236,13 @@ export class Shell {
     this.armoryScreen.screen.classList.add('hidden');
   }
 
-  showPause(): void {
+  showPause(info?: { level: number; picks: number; preset: string | null }): void {
+    const line = this.pause.querySelector('#ss-pause-info') as HTMLElement | null;
+    if (line) {
+      line.textContent = info
+        ? `等级 ${info.level} · 强化 ${info.picks} 项${info.preset ? ` · 自动:${info.preset}` : ''}`
+        : '';
+    }
     this.pause.classList.remove('hidden');
     this.hud.root.style.display = 'none';
   }

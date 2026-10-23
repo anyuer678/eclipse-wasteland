@@ -195,6 +195,10 @@ export function createPauseScreen(cb: { onResume: () => void; onExit: () => void
   const screen = el('div', 'ss-screen hidden');
   screen.appendChild(el('div', 'ss-title', '暂停'));
   screen.appendChild(el('div', 'ss-subtitle', '作战中断'));
+  const info = el('div', '', '');
+  info.id = 'ss-pause-info';
+  info.style.cssText = 'font-family:var(--mono);font-size:12.5px;letter-spacing:0.1em;color:var(--ink-dim);margin-bottom:16px;';
+  screen.appendChild(info);
   screen.appendChild(button('primary', '继续作战', () => cb.onResume()));
   screen.appendChild(button('', '返回任务简报', () => cb.onExit()));
   return screen;
@@ -793,6 +797,9 @@ export function createCombatShop(cb: { onBuy: (id: string) => void; onClose: () 
   screen.appendChild(title);
   const sub = el('div', 'ss-subtitle', 'Tab 关闭 · 金币购买临时补给');
   screen.appendChild(sub);
+  const goldEl = el('div', '', '');
+  goldEl.style.cssText = 'font-family:var(--mono);font-size:14px;letter-spacing:0.12em;color:var(--amber);margin-top:-12px;';
+  screen.appendChild(goldEl);
   const cards = el('div', '', '');
   cards.style.cssText = 'display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:20px;max-width:900px;';
   screen.appendChild(cards);
@@ -800,6 +807,7 @@ export function createCombatShop(cb: { onBuy: (id: string) => void; onClose: () 
   let goldNow = 0;
   const show = (gold: number): void => {
     goldNow = gold;
+    goldEl.textContent = `当前金币 ${gold}`;
     cards.innerHTML = '';
     for (const g of GOODS) {
       const card = el('div', 'ss-card', '');

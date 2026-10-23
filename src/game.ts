@@ -1963,7 +1963,7 @@ function boot(): void {
         escPaused = true;
         paused = true;
         unlockMouse();
-        shell.showPause();
+        shell.showPause({ level: runState.level, picks: runPickCount, preset: autoPickLabel() });
       }
       keyState.esc = snap.key('Escape');
 
