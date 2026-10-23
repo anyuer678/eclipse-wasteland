@@ -60,6 +60,8 @@ export class MissionFlow {
     this.kills = 0;
     this.totalTime = 0;
     this.boss = null;
+    // intro 阶段 HUD/压制也按难度偏移显示，避免困难难度开局仍写 Lv.1
+    this.monsterLevel = Math.max(1, (this.mission.monsterLevel ?? 1) + this.levelOffset);
     this.emitPhase();
   }
 
