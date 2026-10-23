@@ -209,6 +209,23 @@ export const MISSIONS: MissionDef[] = [
     rewards: { material: '核心晶体', amount: 48 },
   },
   {
+    id: 'm12-canyon',
+    name: '裂谷栈桥',
+    monsterLevel: 23,
+    mapId: 'canyon',
+    introSeconds: 5,
+    waves: [
+      { chasers: 24, boomers: 6, spitters: 7, guards: 4, berserkers: 4, casters: 3, turrets: 1 },
+      { chasers: 26, boomers: 7, spitters: 8, guards: 5, berserkers: 4, casters: 3, turrets: 1, healers: 1 },
+    ],
+    boss: {
+      id: 'canyonlord', name: '峡谷领主', hp: 3100, color: 0xd98a3a, skillInterval: 1.8,
+      resistance: { physical: 1, fire: 1, ice: 1, energy: 1 },
+      bossType: 'beast', phaseThresholds: [0.65, 0.3],
+    },
+    rewards: { material: '核心晶体', amount: 50 },
+  },
+  {
     id: 'tower',
     name: '试炼之塔',
     monsterLevel: 20,

@@ -695,6 +695,11 @@ function boot(): void {
       { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
       { name: 'env/env_bush', count: 10, scale: [0.35, 0.6], y: 0.02 },
     ],
+    canyon: [
+      { name: 'env/env_rockA', count: 8, scale: [2.4, 4.4], y: 0 },
+      { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
+      { name: 'env/env_bush', count: 8, scale: [0.35, 0.6], y: 0.02 },
+    ],
   };
   /** 开源环境素材的地图化配色（压掉 Kenney 原色的荧光感） */
   const ENV_TINT: Record<string, number> = {
@@ -703,6 +708,7 @@ function boot(): void {
     lab: 0x4d7a5c,
     volcano: 0x5a3a2a,
     ice: 0x6d8296,
+    canyon: 0x8a6a48,
   };
   let envRoot: THREE.Group | null = null;
   const mountEnv = (): void => {

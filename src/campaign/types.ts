@@ -38,7 +38,7 @@ export interface MissionDef {
   id: string;
   name: string;
   /** 地图布局：废弃设施 / 采石场 / 实验室 */
-  mapId: 'facility' | 'quarry' | 'lab' | 'volcano' | 'ice';
+  mapId: 'facility' | 'quarry' | 'lab' | 'volcano' | 'ice' | 'canyon';
   /** 进入副本前准备时间（秒） */
   introSeconds: number;
   waves: WaveSpec[];

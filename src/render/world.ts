@@ -287,6 +287,11 @@ const PALETTES: Record<string, Palette> = {
     ground: 0x93aec4, groundDark: 0x6b849a, rock: 0x8a9bab, accent: 0x62c8ff,
     sunAz: 3.5, sunEl: 0.4, haze: 0.55,
   },
+  canyon: {
+    skyTop: 0x3d4d78, skyHorizon: 0xd8b08a, fog: 0xd2b493, sun: 0xffd9a8,
+    ground: 0x8a6a45, groundDark: 0x5a4128, rock: 0x8f7a5e, accent: 0xffa04a,
+    sunAz: 2.1, sunEl: 0.5, haze: 0.45,
+  },
 };
 
 /** 把一批几何按材质合并成极少的 draw call */
@@ -585,7 +590,7 @@ export class World {
    * 关卡地图：地形 + 天空 + 光照 + 障碍布局。
    * 返回障碍物根节点（切换关卡时移除）；平台/斜坡/箱/毒池数据挂在 userData。
    */
-  buildMap(mapId: 'facility' | 'quarry' | 'lab' | 'volcano' | 'ice', variant = 0): THREE.Group {
+  buildMap(mapId: 'facility' | 'quarry' | 'lab' | 'volcano' | 'ice' | 'canyon', variant = 0): THREE.Group {
     const root = new THREE.Group();
     // 同一张图的不同关卡用不同种子：掩体/装饰排布随关卡变化
     const rng = mulberry32(mapId.length * 1337 + mapId.charCodeAt(0) + variant * 7919);
@@ -874,6 +879,28 @@ export class World {
       addRamp(-4.8, -9, 6, 2.8, 0, 1.3, 'x');
       addPlatform(4, 8, 2.4, 2.4, 1.2);
       addCrate(-10, -4); addCrate(10, 4); addCrate(2.8, -10);
+    } else if (mapId === 'canyon') {
+      // 峡谷走廊：两侧断续岩壁 + 三座跨谷吊桥
+      for (const side of [-1, 1]) {
+        for (const seg of [[-16, 10], [0, 8], [16, 10]] as const) {
+          addBox(1.6, 3.0, seg[1], side * 6.2, seg[0], matStone);
+        }
+      }
+      // 吊桥：平台 + 南北引坡（敌人可上下）
+      for (const bz of [-12, 0, 12]) {
+        addPlatform(0, bz, 3.6, 4.4, 1.15);
+        addRamp(0, bz - 3.6, 3.2, 3.2, 0, 1.15, 'z');
+        addRamp(0, bz + 3.6, 3.2, 3.2, 1.15, 0, 'z');
+      }
+      // 两侧高地（玩家可跳上，敌人绕行）
+      addPlatform(-14, 10, 3.0, 3.0, 1.4);
+      addPlatform(14, -10, 3.0, 3.0, 1.4);
+      addCrate(-9, 6); addCrate(9, -6); addCrate(-3, -18); addCrate(3, 18);
+      // 石柱环
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 0.3;
+        addPillar(Math.cos(a) * 17, Math.sin(a) * 17, 2.6);
+      }
     } else {
       // 实验室 / 火山 / 冰原 共用骨架：网格矮墙 + 设备柜 + 中央舱体
       // 墙长必须短于交叉间距（7m），否则四方墙会在出生点围出封闭房间，小怪无路可进
@@ -1015,6 +1042,14 @@ export class World {
         bag.shape(new THREE.ConeGeometry(0.34, h, 5), iceMat2, bx, heightfield(bx, bz) + h / 2, bz);
       }
       addCrate(lx + 1.6, lz + 2.8);
+      spawnAnchors.push({ x: lx, z: lz });
+    } else if (mapId === 'canyon') {
+      // 观景栈台：高台 + 引坡 + 双石柱
+      const [lx, lz] = flatPolar(Math.PI * 1.45, 24, 8, 7);
+      addPlatform(lx, lz, 4.6, 3.4, 1.5);
+      addRamp(lx - 4.2, lz, 3.6, 3.2, 0, 1.5, 'x');
+      addPillar(lx + 2.8, lz + 2.2, 3.4);
+      addCrate(lx - 1.5, lz - 2.6);
       spawnAnchors.push({ x: lx, z: lz });
     }
 
