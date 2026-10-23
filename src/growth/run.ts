@@ -49,7 +49,7 @@ export const BOOST_POOL: RunBoost[] = [
   { id: 'regen', name: '再生', desc: '每秒回复 2 生命', value: 2 },
   { id: 'armor', name: '铁壁', desc: '减伤 +18%', value: 0.18 },
   { id: 'split', name: '分裂弹', desc: '命中分裂 2 发（40% 伤害）', value: 0.4 },
-  { id: 'pierce', name: '穿透强化', desc: '伤害 +26%', value: 0.26 },
+  { id: 'pierce', name: '重弹头', desc: '伤害 +26%', value: 0.26 },
   { id: 'vamp', name: '嗜血', desc: '伤害的 4% 回复生命', value: 0.04 },
   { id: 'energy', name: '能量涌动', desc: '能量回复 +2/s', value: 2 },
   { id: 'hp', name: '生命强化', desc: '最大生命 +20', value: 20 },
@@ -125,7 +125,6 @@ export function runBonuses(run: RunState): {
   regenPerSec: number;
   armorBonus: number;
   split: number;
-  pierceMult: number;
   vamp: number;
   energyRegen: number;
   maxHpBonus: number;
@@ -133,7 +132,6 @@ export function runBonuses(run: RunState): {
   magMult: number;
   reloadMult: number;
   frost: number;
-  luckyCrit: number;
   luckyGold: number;
   thorns: number;
 } {
@@ -147,7 +145,6 @@ export function runBonuses(run: RunState): {
     regenPerSec: n('regen') * 2,
     armorBonus: Math.min(0.6, n('armor') * 0.18),
     split: n('split') * 0.4,
-    pierceMult: 1,
     vamp: n('vamp') * 0.04,
     energyRegen: n('energy') * 2,
     maxHpBonus: n('hp') * 20,
@@ -155,7 +152,6 @@ export function runBonuses(run: RunState): {
     magMult: 1 + n('mag') * 0.5,
     reloadMult: 1 + n('reload'),
     frost: n('frost') * 0.2,
-    luckyCrit: n('lucky') * 0.06,
     luckyGold: n('lucky') * 0.2,
     thorns: n('thorns') * 5,
   };
