@@ -48,6 +48,8 @@ export interface HudView {
   /** 伤害数字飘字 */
   damageNumber(x: number, y: number, dmg: number, crit?: boolean): void;
   setSpread(p: number): void;
+  /** 准星样式：十字 / 圆点 / 圆环 */
+  setCrosshairStyle(style: 'cross' | 'dot' | 'ring'): void;
 }
 
 const CROSSHAIR_GAP = 5;
@@ -90,6 +92,8 @@ export function createHud(): HudView {
     p.style.height = `${h}px`;
     crosshair.appendChild(p);
   }
+  const ringPiece = el('div', 'ch-ring', '');
+  crosshair.appendChild(ringPiece);
 
   // 技能数值面板
   const skills = el('div', '', '');
@@ -252,6 +256,15 @@ export function createHud(): HudView {
         if (i < 2) piece.style.left = `${i === 0 ? -20 - gap : 8 + gap}px`;
         else piece.style.top = `${i === 2 ? -20 - gap : 8 + gap}px`;
       }
+    },
+    setCrosshairStyle(style) {
+      for (let i = 0; i < 4; i++) {
+        const piece = crosshair.children[i] as HTMLElement | undefined;
+        if (piece) piece.style.display = style === 'cross' ? '' : 'none';
+      }
+      const dot = crosshair.querySelector('.ch-dot') as HTMLElement | null;
+      if (dot) dot.style.display = '';
+      ringPiece.style.display = style === 'ring' ? 'block' : 'none';
     },
   };
 }

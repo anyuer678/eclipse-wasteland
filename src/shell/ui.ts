@@ -275,7 +275,13 @@ export const THEME = `
   /* 准星：墨色 + 白描边（亮暗场景都可读） */
   #ss-crosshair { position: fixed; left: 50%; top: 50%; z-index: 16; pointer-events: none; }
   #ss-crosshair .ch-piece, #ss-crosshair .ch-dot {
+    position: absolute;
     background: var(--ink); box-shadow: 0 0 0 1px rgba(255,255,255,0.85);
+  }
+  #ss-crosshair .ch-ring {
+    position: absolute; left: -10px; top: -10px; width: 20px; height: 20px;
+    border: 1px solid var(--ink); border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.85); display: none;
   }
   #ss-crosshair.hit .ch-piece, #ss-crosshair.hit .ch-dot {
     background: var(--cinnabar); box-shadow: 0 0 0 1px rgba(255,255,255,0.9);

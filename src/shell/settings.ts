@@ -18,12 +18,25 @@ export interface SettingsState {
   radar: boolean;
   /** 背景音乐开关 */
   music: boolean;
+  /** 背景音乐音量 0..1（独立于主音量） */
+  musicVolume: number;
+  /** 视野角度（60–100，默认 60） */
+  fov: number;
+  /** 准星样式 */
+  crosshair: 'cross' | 'dot' | 'ring';
+  /** 伤害跳字开关 */
+  damageNumbers: boolean;
+  /** 低动态：震屏/顿帧/FOV 冲击减半 */
+  lowMotion: boolean;
 }
 
 const KEY = 'ss-settings-v1';
 
 export function loadSettings(): SettingsState {
-  const base: SettingsState = { volume: 0.5, muted: false, sens: 1, quality: 'auto', radar: true, music: true };
+  const base: SettingsState = {
+    volume: 0.5, muted: false, sens: 1, quality: 'auto', radar: true, music: true,
+    musicVolume: 0.5, fov: 60, crosshair: 'cross', damageNumbers: true, lowMotion: false,
+  };
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) return { ...base, ...(JSON.parse(raw) as Partial<SettingsState>) };
@@ -56,7 +69,7 @@ export function createSettingsPanel(
 ): SettingsPanel {
   const el = document.createElement('div');
   el.style.cssText =
-    'position:fixed;left:16px;top:70px;width:236px;z-index:60;display:none;pointer-events:auto;' +
+    'position:fixed;left:16px;top:70px;width:236px;z-index:60;display:none;pointer-events:auto;max-height:calc(100vh - 90px);overflow-y:auto;' +
     "background:rgba(255,255,255,0.94);border:1px solid #d9d7cf;border-left:2px solid #3d6b8f;padding:12px 14px;font-family:var(--mono,monospace);color:#22252c;box-shadow:0 2px 10px rgba(34,37,44,0.15);";
   document.body.appendChild(el);
 
@@ -148,6 +161,74 @@ export function createSettingsPanel(
   radarBox.style.cssText = 'accent-color:#5b8ec4;';
   rd.body.appendChild(radarBox);
 
+  // 视野 FOV
+  const fov = row('视野 FOV');
+  const fovSlider = document.createElement('input');
+  fovSlider.type = 'range';
+  fovSlider.min = '60';
+  fovSlider.max = '100';
+  fovSlider.style.cssText = 'width:100%;accent-color:#5b8ec4;';
+  fov.body.appendChild(fovSlider);
+  const fovVal = document.createElement('span');
+  fovVal.style.cssText = 'font-size:10px;color:#7d8698;';
+  fov.body.appendChild(fovVal);
+
+  // 准星样式
+  const ch = row('准星样式');
+  const chBtns: Record<string, HTMLButtonElement> = {};
+  for (const [id, label] of [['cross', '十字'], ['dot', '圆点'], ['ring', '圆环']] as const) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.style.cssText =
+      'background:none;border:1px solid #262e3a;color:#7d8698;padding:4px 10px;margin-right:6px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:0.1em;';
+    b.addEventListener('click', () => {
+      state.crosshair = id;
+      apply(state);
+      saveSettings(state);
+      refresh();
+    });
+    ch.body.appendChild(b);
+    chBtns[id] = b;
+  }
+
+  // 伤害数字
+  const dmg = row('伤害数字');
+  const dmgBox = document.createElement('input');
+  dmgBox.type = 'checkbox';
+  dmgBox.style.cssText = 'accent-color:#5b8ec4;';
+  dmg.body.appendChild(dmgBox);
+  dmgBox.addEventListener('change', () => {
+    state.damageNumbers = dmgBox.checked;
+    apply(state);
+    saveSettings(state);
+    refresh();
+  });
+
+  // 低动态
+  const lm = row('低动态（震屏/顿帧减半）');
+  const lmBox = document.createElement('input');
+  lmBox.type = 'checkbox';
+  lmBox.style.cssText = 'accent-color:#5b8ec4;';
+  lm.body.appendChild(lmBox);
+  lmBox.addEventListener('change', () => {
+    state.lowMotion = lmBox.checked;
+    apply(state);
+    saveSettings(state);
+    refresh();
+  });
+
+  // 音乐音量（独立于主音量）
+  const mv = row('音乐音量');
+  const mvSlider = document.createElement('input');
+  mvSlider.type = 'range';
+  mvSlider.min = '0';
+  mvSlider.max = '100';
+  mvSlider.style.cssText = 'width:100%;accent-color:#5b8ec4;';
+  mv.body.appendChild(mvSlider);
+  const mvVal = document.createElement('span');
+  mvVal.style.cssText = 'font-size:10px;color:#7d8698;';
+  mv.body.appendChild(mvVal);
+
   // 关闭
   const close = document.createElement('button');
   close.textContent = '关闭 (O)';
@@ -170,6 +251,16 @@ export function createSettingsPanel(
     }
     radarBox.checked = state.radar;
     musicBox.checked = state.music;
+    fovSlider.value = String(Math.round(state.fov));
+    fovVal.textContent = `${Math.round(state.fov)}°`;
+    for (const id of Object.keys(chBtns)) {
+      chBtns[id].style.color = state.crosshair === id ? '#8fb4d8' : '#7d8698';
+      chBtns[id].style.borderColor = state.crosshair === id ? '#5b8ec4' : '#262e3a';
+    }
+    dmgBox.checked = state.damageNumbers;
+    lmBox.checked = state.lowMotion;
+    mvSlider.value = String(Math.round(state.musicVolume * 100));
+    mvVal.textContent = `${Math.round(state.musicVolume * 100)}%`;
   }
 
   volSlider.addEventListener('input', () => {
@@ -192,6 +283,18 @@ export function createSettingsPanel(
   });
   radarBox.addEventListener('change', () => {
     state.radar = radarBox.checked;
+    apply(state);
+    saveSettings(state);
+    refresh();
+  });
+  fovSlider.addEventListener('input', () => {
+    state.fov = Number(fovSlider.value);
+    apply(state);
+    saveSettings(state);
+    refresh();
+  });
+  mvSlider.addEventListener('input', () => {
+    state.musicVolume = Number(mvSlider.value) / 100;
     apply(state);
     saveSettings(state);
     refresh();

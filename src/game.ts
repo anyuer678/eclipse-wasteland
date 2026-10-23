@@ -775,15 +775,25 @@ function boot(): void {
   sfx.setVolume(settings.volume);
   sfx.setMuted(settings.muted);
   sfx.setMusic(settings.music);
+  sfx.setMusicVolume(settings.musicVolume);
+  world.camera.fov = settings.fov;
+  world.camera.updateProjectionMatrix();
   world.setQuality(settings.quality === 'auto' ? 'medium' : settings.quality, settings.quality === 'auto');
   const settingsPanel = createSettingsPanel(settings, (s2) => {
     sfx.setVolume(s2.volume);
     sfx.setMuted(s2.muted);
     sfx.setMusic(s2.music);
+    sfx.setMusicVolume(s2.musicVolume);
     world.setQuality(s2.quality === 'auto' ? 'medium' : s2.quality, s2.quality === 'auto');
     radar.el.style.display = s2.radar ? 'block' : 'none';
+    if (world.camera.fov !== s2.fov) {
+      world.camera.fov = s2.fov;
+      world.camera.updateProjectionMatrix();
+    }
+    shell.hud.setCrosshairStyle(s2.crosshair);
   });
   radar.el.style.display = settings.radar ? 'block' : 'none';
+  shell.hud.setCrosshairStyle(settings.crosshair);
   let settingsWasOpen = false;
 
   // 打击停顿（hit-stop）：连杀/BOSS 死亡瞬间冻结逻辑几十毫秒，渲染继续，
@@ -800,6 +810,11 @@ function boot(): void {
   let fovKick = 0;
   const baseFov = 60;
   const addShake = (amp: number, dur: number): void => {
+    // 低动态：震屏强度/时长减半，避免晕动
+    if (settings.lowMotion) {
+      amp *= 0.45;
+      dur *= 0.6;
+    }
     shakeAmp = Math.max(shakeAmp, amp);
     shakeT = Math.max(shakeT, dur);
     shakeDur = Math.max(shakeDur, dur);
@@ -1140,7 +1155,7 @@ function boot(): void {
     tracer,
     onShot: (): void => {
       sfx.shot(arsenal.current.def.archetype);
-      fovKick = Math.min(fovKick + 0.9, 3.5);
+      fovKick = Math.min(fovKick + (settings.lowMotion ? 0.35 : 0.9), 3.5);
       // 镜头后坐力：按枪型给不同的上抬，指数回落
       const kick: Record<string, number> = { rifle: 0.011, pistol: 0.008, smg: 0.006, shotgun: 0.028, sniper: 0.04 };
       recoil = Math.min(recoil + (kick[arsenal.current.def.archetype] ?? 0.012), 0.07);
@@ -1314,7 +1329,7 @@ function boot(): void {
         shell.hud.hitConfirm();
         sfx.hit();
         // 复用本发的实际暴击判定；不要再掷一次，否则跳字颜色/字号会与伤害不符
-        addDamagePopup(pos, `-${Math.round(dmg)}`, isCrit ? '#ffd24a' : '#ffb0a0', isCrit ? 27 : 20, popupKey);
+        if (settings.damageNumbers) addDamagePopup(pos, `-${Math.round(dmg)}`, isCrit ? '#ffd24a' : '#ffb0a0', isCrit ? 27 : 20, popupKey);
         // 命中火花（小而淡，避免遮挡视野）
         spawnParticles(pos, isCrit ? 0xffd24a : 0xffaa66, isCrit ? 3 : 2, 2);
         // 吸血：词缀吸血 + 局内嗜血
@@ -1788,7 +1803,7 @@ function boot(): void {
       fixedTicks += 1;
       // hit-stop：冻结逻辑（渲染继续，画面整体停住），比慢动作更有顿挫
       if (hitStopT > 0) {
-        hitStopT -= dt;
+        hitStopT -= dt * (settings.lowMotion ? 2.5 : 1);
         return;
       }
       const snap = input.snapshot();
@@ -2503,7 +2518,16 @@ function boot(): void {
         enemies: spawner.all().length,
       };
     },
-    /** 画质档位切换（low/medium/high，auto=true 恢复自动升降档） */
+    /** 设置快照（探针用：确认 FOV/准星/伤害数字/低动态/音乐音量已生效） */
+    settingsInfo(): { fov: number; crosshair: string; damageNumbers: boolean; lowMotion: boolean; musicVolume: number } {
+      return {
+        fov: +world.camera.fov.toFixed(1),
+        crosshair: settings.crosshair,
+        damageNumbers: settings.damageNumbers,
+        lowMotion: settings.lowMotion,
+        musicVolume: +settings.musicVolume.toFixed(2),
+      };
+    },
     setQuality(level: 'low' | 'medium' | 'high', auto = false): string {
       world.setQuality(level, auto);
       return world.quality;

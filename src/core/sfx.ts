@@ -72,12 +72,14 @@ export class Sfx {
   private scheduleBar(): void {
     const root = this.moodRoot * (this.musicStep % 4 === 3 ? 1.19 : 1); // 每 4 小节升一度制造走向
     this.musicStep += 1;
-    this.tone('triangle', root, root * 0.995, 2.4, 0.075);
-    this.tone('sine', root * 1.5, root * 1.5, 2.4, 0.038);
+    const mv = this.musicVolume;
+    if (mv <= 0.001) return;
+    this.tone('triangle', root, root * 0.995, 2.4, 0.075 * mv);
+    this.tone('sine', root * 1.5, root * 1.5, 2.4, 0.038 * mv);
     for (let i = 0; i < 3; i++) {
       if (Math.random() < 0.32) continue;
       const f = root * 4 * Math.pow(2, this.moodScale[Math.floor(Math.random() * this.moodScale.length)] / 12);
-      this.tone('triangle', f, f * 0.995, 0.55, 0.03, i * 0.62 + Math.random() * 0.25);
+      this.tone('triangle', f, f * 0.995, 0.55, 0.03 * mv, i * 0.62 + Math.random() * 0.25);
     }
   }
 
@@ -116,6 +118,12 @@ export class Sfx {
   setVolume(v: number): void {
     this.volume = Math.max(0, Math.min(1, v));
     if (this.master && !this.muted) this.master.gain.value = this.volume;
+  }
+
+  /** 背景音乐音量 0..1（独立于主音量；只影响音乐/环境声的合成振幅） */
+  private musicVolume = 0.5;
+  setMusicVolume(v: number): void {
+    this.musicVolume = Math.max(0, Math.min(1, v));
   }
 
   private ok(key: string, minGapMs: number): boolean {
