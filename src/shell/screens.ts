@@ -895,9 +895,17 @@ export function createLevelUpScreen(cb: { onPick: (id: string) => void }): { scr
   return { screen, show };
 }
 
+/** 本局成长摘要（结算展示；自动选择开启时附带流派与自动领取数） */
+export interface RunSummary {
+  level: number;
+  picks: number;
+  autoPicks: number;
+  preset: string | null;
+}
+
 export function createResultScreen(cb: ScreenCallbacks): {
   screen: HTMLElement;
-  show: (result: FlowResult, weapon: WeaponDef) => void;
+  show: (result: FlowResult, weapon: WeaponDef, summary?: RunSummary) => void;
   hide: () => void;
 } {
   const screen = el('div', 'ss-screen hidden');
@@ -913,9 +921,13 @@ export function createResultScreen(cb: ScreenCallbacks): {
 
   return {
     screen,
-    show(result, _weapon) {
+    show(result, _weapon, summary) {
       screen.classList.remove('hidden');
       actions.innerHTML = '';
+      const growthRow = summary
+        ? `<div class="row"><span>成长</span><b>Lv.${summary.level} · 强化 ${summary.picks} 项${summary.autoPicks > 0 ? `（自动 ${summary.autoPicks}）` : ''}</b></div>` +
+          (summary.preset ? `<div class="row"><span>流派</span><b>${summary.preset} · 自动选择</b></div>` : '')
+        : '';
       if (result.phase === 'clear') {
         title.textContent = '任务完成';
         title.style.color = 'var(--ok)';
@@ -924,6 +936,7 @@ export function createResultScreen(cb: ScreenCallbacks): {
           <div class="row"><span>波次</span><b>${result.waveIndex + 1} / ${result.totalWaves}</b></div>
           <div class="row"><span>击杀</span><b>${result.kills}</b></div>
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>
+          ${growthRow}
           <div class="row"><span>掉落</span><b>${result.rewardMaterial} ×${result.rewardAmount}</b></div>
         `;
         actions.appendChild(button('primary', '返回任务简报', () => cb.onBackToMenu()));
@@ -936,6 +949,7 @@ export function createResultScreen(cb: ScreenCallbacks): {
           <div class="row"><span>${result.mission.tower ? '到达层数' : '到达波次'}</span><b>${result.waveIndex + 1}</b></div>
           <div class="row"><span>击杀</span><b>${result.kills}</b></div>
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>
+          ${growthRow}
         `;
         actions.appendChild(button('', '返回任务简报', () => cb.onBackToMenu()));
         actions.appendChild(button('primary', '重整旗鼓', () => cb.onStartMission(result.mission.id)));

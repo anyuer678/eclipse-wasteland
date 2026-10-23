@@ -523,6 +523,8 @@ function boot(): void {
 
   function beginMission(): void {
     spawnAnchorSeq = 0;
+    runPickCount = 0;
+    runAutoPickCount = 0;
     paused = false;
     escPaused = false;
     inMenu = false;
@@ -972,7 +974,12 @@ function boot(): void {
       inventory.addGold(Math.round(20 * (1 + floor * 0.2) * diffReward));
       refreshGrowth();
     }
-    shell.showResult(result);
+    shell.showResult(result, {
+      level: runState.level,
+      picks: runPickCount,
+      autoPicks: runAutoPickCount,
+      preset: autoPickLabel(),
+    });
   };
 
   /** 射线-球体求交，返回最近正距离或 null（零分配：命中点写入 hitScratch） */
@@ -1484,6 +1491,9 @@ function boot(): void {
   let runB = runBonuses(runState);
   /** 待选的升级次数（一次经验结算可能跨多级，必须逐级给牌） */
   let pendingLevelUps = 0;
+  /** 本局成长统计（结算展示）：总领取数与自动领取数 */
+  let runPickCount = 0;
+  let runAutoPickCount = 0;
   const refreshRun = (): void => {
     runB = runBonuses(runState);
     // 局内「穿透弹」：主命中后继续穿透的目标数与衰减
@@ -1494,8 +1504,10 @@ function boot(): void {
   };
 
   /** 应用一次强化选择（手动/自动共用）：记层数、刷新增益、扣一次待选、弹提示 */
-  function applyBoostPick(id: string): void {
+  function applyBoostPick(id: string, auto = false): void {
     const b = applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
+    runPickCount += 1;
+    if (auto) runAutoPickCount += 1;
     refreshRun();
     pendingLevelUps = Math.max(0, pendingLevelUps - 1);
     addDamagePopup(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), `获得 · ${b.name} ×${runState.boosts[id as keyof typeof runState.boosts]}`, '#e8c377');
@@ -1511,7 +1523,7 @@ function boot(): void {
         const id = pickBoost(rollChoices(runState).map((b) => b.id), preset);
         if (!id) break;
         sfx.levelUp();
-        applyBoostPick(id);
+        applyBoostPick(id, true);
       }
       if (pendingLevelUps <= 0) return;
     }

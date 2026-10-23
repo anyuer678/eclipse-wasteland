@@ -8,6 +8,7 @@ import { createHud } from './hud';
 import type { HudView } from './hud';
 export type { SkillLine } from './hud';
 import { createMenuScreen, createSelectScreen, createResultScreen, createArmoryPanel, createPauseScreen, createArmoryScreen, createShopScreen, createTalentScreen, createForgeScreen, createRoleScreen, createAchievementScreen, createStatsScreen, createLevelUpScreen, createDailyScreen, createCombatShop, weaponOf } from './screens';
+import type { RunSummary } from './screens';
 import { createAutoPickScreen } from './autopickScreen';
 import type { AchievementState } from '../growth';
 import { ROLES } from '../play/roles';
@@ -49,7 +50,7 @@ export class Shell {
   private menu: { screen: HTMLElement; addGridCard: (ico: string, name: string, desc: string, num: string, fn: () => void) => void };
   private select: HTMLElement;
   private pause: HTMLElement;
-  private result: { screen: HTMLElement; show: (r: FlowResult, w: ReturnType<typeof weaponOf>) => void };
+  private result: { screen: HTMLElement; show: (r: FlowResult, w: ReturnType<typeof weaponOf>, summary?: RunSummary) => void };
   private armory: { root: HTMLElement; refresh: (w: ReturnType<typeof weaponOf>) => void };
   private armoryScreen: { screen: HTMLElement; refresh: () => void };
   private shopScreen: { screen: HTMLElement; refresh: () => void };
@@ -277,8 +278,8 @@ export class Shell {
     this.hud.root.style.display = 'block';
   }
 
-  showResult(result: FlowResult): void {
-    this.result.show(result, weaponOf('pulse-rifle'));
+  showResult(result: FlowResult, summary?: RunSummary): void {
+    this.result.show(result, weaponOf('pulse-rifle'), summary);
     this.armory.refresh(weaponOf('pulse-rifle'));
   }
 
