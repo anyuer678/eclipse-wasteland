@@ -21,11 +21,12 @@ import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards } from './campaign';
-import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
+import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
 import { skillLinesFor } from './play/weaponBrief';
+import { hudFrame } from './play/hudFrame';
 import { separateCrowd } from './play/crowdStep';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
@@ -2368,10 +2369,10 @@ function boot(): void {
         }
       }
 
-      // HUD 更新
+      // HUD 更新（帧数据由 play/hudFrame 组装）
       if (flow.phase === 'intro' || flow.phase === 'wave' || flow.phase === 'boss') {
         const g = inventory.getWeapon(arsenal.current.def.id);
-        shell.hud.update({
+        shell.hud.update(hudFrame({
           hp,
           maxHp,
           energy: arsenal.current.state.energy,
@@ -2391,35 +2392,19 @@ function boot(): void {
           autoPick: autoPickLabel(),
           monsterLevel: flow.monsterLevel,
           playerLevel: runState.level,
-          skillLines: skillLinesFor(arsenal.current.def)
-            .concat({
-              key: '局',
-              label: `等级 ${runState.level}`,
-              value: `经验 ${runState.exp}/${expNeeded(runState.level)} · ${BOOST_POOL.filter((b) => (runState.boosts[b.id] ?? 0) > 0).map((b) => `${b.name}×${runState.boosts[b.id]}`).join(' ') || '无强化'}`,
-            })
-            .concat({
-              key: 'X',
-              label: findRole(selectedRoleId).name,
-              value: roleCooldown > 0 ? `冷却 ${Math.ceil(roleCooldown)}s` : '就绪（大招）',
-            })
-            .concat({
-              key: 'F',
-              label: '冲刺',
-              value: dashCooldown > 0 ? `冷却 ${dashCooldown.toFixed(1)}s` : '就绪',
-            })
-            .concat({
-              key: 'G',
-              label: '护盾',
-              value: shieldCooldown > 0 ? `冷却 ${shieldCooldown.toFixed(1)}s` : shieldTimer > 0 ? `生效 ${shieldTimer.toFixed(1)}s` : '就绪',
-            })
-            .concat(
-              killStreak > 0
-                ? [{ key: '连杀', label: `${killStreak} 连杀`, value: `伤害+${Math.min(killStreak, 6) * 5}%` }]
-                : []
-            ),
+          runLevel: runState.level,
+          runExp: runState.exp,
+          boosts: runState.boosts,
+          weaponLines: skillLinesFor(arsenal.current.def),
+          roleName: findRole(selectedRoleId).name,
+          roleCooldown,
+          dashCooldown,
+          shieldCooldown,
+          shieldTimer,
+          killStreak,
           slots: arsenal.defs.map((w) => ({ name: w.name, rarity: w.rarity })),
           slotIndex: arsenal.index,
-        });
+        }));
         shell.hud.setSpread(snap.fire ? 0.5 : 0);
         if (activeBoss && activeBoss.alive) {
           shell.hud.boss(activeBoss.spec.name, Math.max(0, (activeBoss.hp / activeBoss.maxHp) * 100));
