@@ -21,7 +21,7 @@ import { Enemy, NavField, Spawner, separationDelta } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow, pickSpawnAnchor } from './campaign';
-import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost } from './growth';
+import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
@@ -1311,9 +1311,9 @@ function boot(): void {
           if (extra.slow !== undefined) e.applySlow(extra.slow, 1.6);
           // 烈焰风暴：命中施加灼�?DOT
           if (arsenal.current.def.mech.kind === 'beam') e.applyBurn(2.2, 5);
-          // 精英猎手：对精英额外伤害；狂暴：伤害 ×1.5
+          // 精英猎手：对精英额外伤害；狂暴：伤害 ×1.5；元素联动：冰缓暴击 / 灼烧易伤
           const furyMult = furyTimer > 0 ? 1.5 : 1;
-          const finalDmg = (e.elite ? dmg * runB.eliteDmg : dmg) * furyMult;
+          const finalDmg = (e.elite ? dmg * runB.eliteDmg : dmg) * furyMult * elementSynergyMult(isCrit, e.slowTimer > 0, e.burnTimer > 0);
           // 寒霜弹：命中减速
           if (runB.frost > 0) e.applySlow(1 - runB.frost, 1.5);
           const dead = e.takeDamage(finalDmg, elem);
@@ -2665,6 +2665,8 @@ function boot(): void {
       alive: boolean;
       stunned: boolean;
       elite: boolean;
+      slow: boolean;
+      burn: boolean;
     }[] {
       return spawner.all().map((e) => ({
         kind: e.def.kind,
@@ -2677,6 +2679,8 @@ function boot(): void {
         alive: e.alive,
         stunned: e.isStunned(),
         elite: !!e.elite,
+        slow: e.slowTimer > 0,
+        burn: e.burnTimer > 0,
       }));
     },
     playerHp(): number {

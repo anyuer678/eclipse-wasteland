@@ -81,8 +81,7 @@ export function suppressionTaken(diff: number): number {
   return diff >= 0 ? Math.max(0.6, 1 - diff * 0.05) : Math.min(2, 1 - diff * 0.08);
 }
 
-/** 击杀获得经验（精英 ×2，经验随怪物等级增长——保证升级节奏跟得上怪物等级），返回是否升级 */
-export function addKillExp(run: RunState, elite: boolean, monsterLevel = 1, expMult = 1): boolean {
+/** 击杀获得经验（精英 ×2，经验随怪物等级增长——保证升级节奏跟得上怪物等级），返回是否升级 */export function addKillExp(run: RunState, elite: boolean, monsterLevel = 1, expMult = 1): boolean {
   run.exp += Math.round(((elite ? 2 : 1) + Math.floor(monsterLevel * 0.8)) * expMult);
   let leveled = false;
   while (run.exp >= expNeeded(run.level)) {
@@ -113,6 +112,14 @@ export function applyChoice(run: RunState, id: BoostId): RunBoost {
   const b = BOOST_POOL.find((x) => x.id === id)!;
   run.boosts[id] = (run.boosts[id] ?? 0) + 1;
   return b;
+}
+
+/** 元素联动：冰缓目标暴击 +15%；灼烧目标受伤 +8%（两者可叠乘） */
+export function elementSynergyMult(isCrit: boolean, slowed: boolean, burning: boolean): number {
+  let m = 1;
+  if (isCrit && slowed) m *= 1.15;
+  if (burning) m *= 1.08;
+  return m;
 }
 
 /** 局内加成汇总 */

@@ -7,7 +7,7 @@ export { ACHIEVEMENTS, loadAchievements, addProgress, grantReward } from './achi
 export type { AchievementDef, AchievementState } from './achievements';
 export { baseStats, applyBuffs, applyBuff, tickBuffs, BUFF_DURATION, fourStats, powerScore } from './stats';
 export type { PlayerStats, BuffState, BuffKind } from './stats';
-export { newRun, expNeeded, addKillExp, rollChoices, applyChoice, runBonuses, BOOST_POOL, suppressionDealt, suppressionTaken } from './run';
+export { newRun, expNeeded, addKillExp, rollChoices, applyChoice, runBonuses, BOOST_POOL, suppressionDealt, suppressionTaken, elementSynergyMult } from './run';
 export type { RunState, RunBoost, BoostId } from './run';
 export { defaultAutoPick, sanitizeAutoPick, loadAutoPick, getAutoPick, saveAutoPick, activePreset, autoPickLabel, pickBoost, ALL_BOOST_IDS } from './autopick';
 export type { AutoPickConfig, AutoPickPreset } from './autopick';

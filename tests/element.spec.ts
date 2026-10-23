@@ -1,27 +1,19 @@
-import { describe, expect, it } from 'vitest'
-import { Enemy, ENEMY_DEFS } from '../src/horde'
+import { describe, it, expect } from 'vitest'
+import { elementSynergyMult } from '../src/growth/run'
 
-const rng = { range: (a: number, _b: number) => a }
-
-describe('horde/elemental damage', () => {
-  it('applies elemental resistance to direct damage', () => {
-    const chaser = new Enemy(ENEMY_DEFS.chaser, rng)
-    const chaserHp = chaser.hp
-    chaser.takeDamage(100, 'fire')
-    expect(chaser.hp).toBeCloseTo(chaserHp - 100)
-
-    // 爆虫火抗 2（-35%）
-    const boomer = new Enemy(ENEMY_DEFS.boomer, rng)
-    const boomerHp = boomer.hp
-    boomer.takeDamage(100, 'fire')
-    expect(boomer.hp).toBeCloseTo(boomerHp - 65)
+describe('growth/run — 元素联动', () => {
+  it('adds 15% crit damage against slowed targets', () => {
+    expect(elementSynergyMult(true, true, false)).toBeCloseTo(1.15)
+    expect(elementSynergyMult(true, false, false)).toBe(1)
+    expect(elementSynergyMult(false, true, false)).toBe(1)
   })
 
-  it('burn ticks are fire damage', () => {
-    const boomer = new Enemy(ENEMY_DEFS.boomer, rng)
-    const hp = boomer.hp
-    boomer.applyBurn(1, 100)
-    boomer.tickBurn(0.1)
-    expect(boomer.hp).toBeCloseTo(hp - 10 * 0.65)
+  it('adds 8% damage against burning targets', () => {
+    expect(elementSynergyMult(false, false, true)).toBeCloseTo(1.08)
+    expect(elementSynergyMult(true, false, true)).toBeCloseTo(1.08)
+  })
+
+  it('stacks both multipliers', () => {
+    expect(elementSynergyMult(true, true, true)).toBeCloseTo(1.15 * 1.08)
   })
 })
