@@ -924,10 +924,12 @@ function boot(): void {
       luckyGold: runB.luckyGold,
       goldBonus: bonuses.gold,
     };
+    let settleRewardText: string | undefined;
     if (result.phase === 'clear') {
       const r = clearRewards(settleInput);
       inventory.addMaterial(r.material, r.materialAmount);
       inventory.addGold(r.gold);
+      settleRewardText = `${r.material} ×${r.materialAmount} · 金币 ${r.gold}`;
       if (r.talentGain > 0) inventory.addTalentPoints(r.talentGain);
       addDailyProgress(dailyState, 'clears'); // 每日任务：通关
       achAdd('clears', 1);
@@ -938,6 +940,7 @@ function boot(): void {
       const r = towerFailureRewards(settleInput);
       inventory.addMaterial(r.material, r.materialAmount);
       inventory.addGold(r.gold);
+      settleRewardText = `${r.material} ×${r.materialAmount} · 金币 ${r.gold}`;
       refreshGrowth();
     }
     shell.showResult(result, {
@@ -947,6 +950,7 @@ function boot(): void {
       preset: autoPickLabel(),
       towerBest,
       difficulty,
+      rewardText: settleRewardText,
     });
   };
 

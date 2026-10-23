@@ -932,6 +932,8 @@ export interface RunSummary {
   towerBest?: number;
   /** 本局难度（结算展示） */
   difficulty?: number;
+  /** 实发奖励文案（难度倍率/塔失败缩放后；不传则回退 result 基础值） */
+  rewardText?: string;
 }
 
 export function createResultScreen(cb: ScreenCallbacks): {
@@ -967,6 +969,8 @@ export function createResultScreen(cb: ScreenCallbacks): {
         summary?.difficulty !== undefined
           ? `<div class="row"><span>难度</span><b>${difficultyLabel(summary.difficulty)}</b></div>`
           : '';
+      const clearRewardRow = `<div class="row"><span>掉落</span><b>${summary?.rewardText ?? `${result.rewardMaterial} ×${result.rewardAmount}`}</b></div>`;
+      const failRewardRow = summary?.rewardText ? `<div class="row"><span>掉落</span><b>${summary.rewardText}</b></div>` : '';
       if (result.phase === 'clear') {
         title.textContent = '任务完成';
         title.style.color = 'var(--ok)';
@@ -978,7 +982,7 @@ export function createResultScreen(cb: ScreenCallbacks): {
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>
           ${growthRow}
           ${towerRow}
-          <div class="row"><span>掉落</span><b>${result.rewardMaterial} ×${result.rewardAmount}</b></div>
+          ${clearRewardRow}
         `;
         actions.appendChild(button('primary', '返回任务简报', () => cb.onBackToMenu()));
         actions.appendChild(button('', '再次出击', () => cb.onStartMission(result.mission.id)));
@@ -993,6 +997,7 @@ export function createResultScreen(cb: ScreenCallbacks): {
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>
           ${growthRow}
           ${towerRow}
+          ${failRewardRow}
         `;
         actions.appendChild(button('', '返回任务简报', () => cb.onBackToMenu()));
         actions.appendChild(button('primary', '重整旗鼓', () => cb.onStartMission(result.mission.id)));
