@@ -48,6 +48,7 @@ import type { QueryDeps } from './debug/queries';
 import { buffState, combatState, runDump, uiState, weaponState } from './debug/stateQueries';
 import type { StateDeps } from './debug/stateQueries';
 import { ENV_MODELS, ENV_TINT } from './render/envConfig';
+import { buildChestMesh, buildOrbMesh, buildRoleRing, buildSummonMesh } from './render/lootModels';
 
 function boot(): void {
   const mount = document.getElementById('app');
@@ -245,10 +246,7 @@ function boot(): void {
 
   const spawnBuffOrb = (pos: THREE.Vector3): void => {
     const pick = rollOrbKind();
-    const g = new THREE.Group();
-    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), new THREE.MeshBasicMaterial({ color: pick.color }));
-    core.position.y = 0.9;
-    g.add(core);
+    const g = buildOrbMesh(pick.color);
     // 贴真实地面：平台/坡上的掉落物不能固定写 y=0
     g.position.set(pos.x, player.terrainHeight(pos.x, pos.z), pos.z);
     world.scene.add(g);
@@ -274,17 +272,7 @@ function boot(): void {
     if (Math.random() < 0.12) spawnBuffOrb(pos);
   };
   const spawnChest = (big: boolean): void => {
-    const g = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: big ? 0xd9a44a : 0x8a7a5a, roughness: 0.5, metalness: 0.4 });
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.5), mat);
-    box.position.y = 0.25;
-    g.add(box);
-    const lid = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.14, 0.5), mat);
-    lid.position.y = 0.57;
-    g.add(lid);
-    const glow = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
-    glow.position.y = 0.75;
-    g.add(glow);
+    const g = buildChestMesh(big);
     // 随机位置（远离玩家 4-10m）：优先走导航落点，保证不埋墙/平台，且贴真实地形；
     // 同时避开场上已有宝箱，避免补给层多箱重叠成一堆
     const occupied = chests.map((c) => ({ x: c.mesh.position.x, z: c.mesh.position.z, r: 0.5 }));
@@ -1535,7 +1523,7 @@ function boot(): void {
     } else if (role.kind === 'summon') {
       // 召唤机甲分身（程序化小机器人）
       if (summonGroup) world.scene.remove(summonGroup);
-      summonGroup = buildSummon(role.color);
+      summonGroup = buildSummonMesh(role.color);
       summonGroup.position.copy(player.position).add(new THREE.Vector3(0, 0.2, 0));
       summonDmg = 12 * roleMult;
       summonTimer = role.duration * roleMult;
@@ -1543,11 +1531,7 @@ function boot(): void {
     } else if (role.kind === 'inferno') {
       // 炼狱灼烧场（脚下环形）
       if (infernoMesh) world.scene.remove(infernoMesh);
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.2, 2.4, 32),
-        new THREE.MeshBasicMaterial({ color: role.color, transparent: true, opacity: 0.35, depthWrite: false })
-      );
-      ring.rotation.x = -Math.PI / 2;
+      const ring = buildRoleRing(role.color, 0.2, 2.4);
       ring.position.copy(player.position).add(new THREE.Vector3(0, 0.05, 0));
       world.scene.add(ring);
       infernoMesh = ring;
@@ -1556,11 +1540,7 @@ function boot(): void {
     } else if (role.kind === 'heal') {
       // 圣光治疗场（脚下绿环，5 秒回血）
       if (healMesh) world.scene.remove(healMesh);
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(0.2, 2.0, 32),
-        new THREE.MeshBasicMaterial({ color: role.color, transparent: true, opacity: 0.35, depthWrite: false })
-      );
-      ring.rotation.x = -Math.PI / 2;
+      const ring = buildRoleRing(role.color, 0.2, 2.0);
       ring.position.copy(player.position).add(new THREE.Vector3(0, 0.05, 0));
       world.scene.add(ring);
       healMesh = ring;
@@ -1570,22 +1550,6 @@ function boot(): void {
       furyTimer = role.duration * roleMult;
       tracer.fire(player.eye(), player.eye().clone().addScaledVector(fireCtx.direction, 2), role.color, 1.6);
     }
-  }
-
-  function buildSummon(color: number): THREE.Group {
-    const g = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.3), mat);
-    body.position.y = 0.55;
-    g.add(body);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), mat);
-    head.position.y = 0.95;
-    g.add(head);
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), new THREE.MeshBasicMaterial({ color: 0x66e0ff }));
-    eye.position.set(0, 0.95, 0.12);
-    g.add(eye);
-    g.userData.summon = true;
-    return g;
   }
 
   /** 右键近战：前�?2.5m 扇形内命中首个敌�?BOSS */
