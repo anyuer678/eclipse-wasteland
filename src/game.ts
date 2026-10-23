@@ -31,6 +31,7 @@ import { hudFrame } from './play/hudFrame';
 import { separateCrowd } from './play/crowdStep';
 import { clipToObstacles, pointOnObstacleSurface, rayAabbT, raySphere } from './play/raycast';
 import { castHitscan } from './play/hitscan';
+import { streakEvent } from './play/streak';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
@@ -1429,17 +1430,11 @@ function boot(): void {
     killStreak += 1;
     killStreakTimer = 2.5;
     if (killStreak >= 3) hitStopT = 0.07; // 连杀瞬间顿一拍
-    if (killStreak >= 3) {
-      const streakNames: Record<number, string> = {
-        3: '🔥 三连杀!', 5: '⚡ 五连杀!', 8: '💀 八连杀!',
-        10: '🌟 十连杀!!', 15: '👑 十五连杀!!!', 20: '🏆 无敌!!!',
-      };
-      const msg = streakNames[killStreak] || `🔥 ${killStreak}连杀!`;
-      const color = killStreak >= 10 ? '#ffd700' : killStreak >= 5 ? '#ff6644' : '#ff9944';
-      showAnnouncement(msg, color, 1200);
+    const ev = streakEvent(killStreak);
+    if (ev) {
+      showAnnouncement(ev.text, ev.color, 1200);
       sfx.streak(killStreak);
-      if (killStreak >= 5) setHp(hp + 5);
-      if (killStreak >= 10) setHp(hp + 10);
+      if (ev.heal > 0) setHp(hp + ev.heal);
     }
     return leveled;
   }
