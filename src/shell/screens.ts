@@ -177,6 +177,11 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
     const cta = button('', m.tower ? '挑战无尽' : '出击任务', () => cb.onStartMission(m.id));
     cta.style.cssText = 'min-width:0;width:100%;padding:8px 0;font-size:12px;';
     card.appendChild(cta);
+    // 整卡可点（与主菜单一致）；按钮自身的点击已由上面处理，避免重复开局
+    card.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+      cb.onStartMission(m.id);
+    });
     brief.appendChild(card);
   });
   screen.appendChild(brief);
