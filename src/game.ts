@@ -37,6 +37,7 @@ import { shotDamage } from './play/shotDamage';
 import { dashStep } from './play/dash';
 import { mitigatedDamage } from './play/damageTaken';
 import { emitStatusFx, tickOrbPickups, tickShortBuffs } from './play/fieldTicks';
+import { tickEnemies } from './play/enemyTick';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
 import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
@@ -1873,82 +1874,20 @@ function boot(): void {
 
       // 敌人 AI：导航流场给出绕障方向，视线决定能否出手（隐身时敌人不攻击）
       const crowd = spawner.all();
-      nav.updateTarget(player.position.x, player.position.z);
-      const navDir = { x: 0, z: 0 };
-      for (const e of crowd) {
-        e.updateFlash(dt);
-        e.tickElite(dt);
-        if (!e.alive) {
-          e.tickCorpse(dt); // 倒地动画（播完由 spawner.sweep 回收）
-          continue;
-        }
-        if (stealthTimer > 0) continue;
-        const died = e.tickBurn(dt);
-        if (died) {
-          if (registerEnemyKill(e)) break;
-          continue;
-        }
-        const ep = e.root.position;
-        const sees = nav.hasLineOfSight3D(ep.x, ep.y + 1.15, ep.z, player.position.x, player.position.y + 1.1, player.position.z);
-        navDir.x = 0;
-        navDir.z = 0;
-        nav.steer(ep.x, ep.z, ep.y, navDir);
-        const evt = e.update(dt, player.position, { navX: navDir.x, navZ: navDir.z, seesPlayer: sees });
-        if (evt) {
-          if (evt.melee !== undefined || evt.blast !== undefined) {
-            if (evt.blast !== undefined) {
-              e.die();
-              sfx.boom();
-              addShake(0.22, 0.45);
-              // 爆炸按真实半径 + 遮挡结算：跑出范围和隔墙都不掉血
-              const dx = player.position.x - e.root.position.x;
-              const dz = player.position.z - e.root.position.z;
-              const dy = player.position.y - e.root.position.y;
-              const radius = e.def.blastRadius > 0 ? e.def.blastRadius : 2.6;
-              const exposed = nav.hasLineOfSight3D(
-                e.root.position.x,
-                e.root.position.y + 0.8,
-                e.root.position.z,
-                player.position.x,
-                player.position.y + 1.0,
-                player.position.z
-              );
-              if (dx * dx + dz * dz <= radius * radius && Math.abs(dy) < 2.2 && exposed) {
-                if (applyDamageToPlayer(evt.blast)) shell.hud.hit();
-              }
-            } else {
-              if (applyDamageToPlayer(evt.melee ?? 0)) shell.hud.hit();
-            }
-          }
-          if (evt.spit) {
-            // 真弹丸：飞行时间可躲，命中后统一结算；弹道被掩体截断
-            sfx.spit();
-            const color = e.def.kind === 'turret' ? 0xd9c26a : 0x3fb96a;
-            projectiles.spawn(evt.spit.from, clipToObstacles(evt.spit.from, evt.spit.to, nav.obstacles, terrainRay), color, e.def.kind === 'turret' ? 16 : 13, evt.spit.damage);
-          }
-          if (evt.cast) {
-            // 弹幕法师三连弹：紫色弹丸
-            sfx.spit();
-            for (const c of evt.cast) {
-              projectiles.spawn(c.from, clipToObstacles(c.from, c.to, nav.obstacles, terrainRay), 0xcc88ff, 11, c.damage);
-            }
-          }
-          if (evt.heal) {
-            // 治疗者：治疗 7m 内友军（不含自己），绿色跳字提示
-            let healed = 0;
-            for (const ally of spawner.all()) {
-              if (!ally.alive || ally === e) continue;
-              if (ally.root.position.distanceTo(e.root.position) > 7) continue;
-              if (ally.hp >= ally.def.hp) continue;
-              ally.healBy(evt.heal);
-              healed += 1;
-            }
-            if (healed > 0) {
-              addDamagePopup(e.root.position.clone().add(new THREE.Vector3(0, 1.7, 0)), `治疗 ×${healed}`, '#7fd9a0', 16);
-            }
-          }
-        }
-      }
+      tickEnemies(crowd, dt, {
+        nav,
+        playerPos: player.position,
+        stealth: stealthTimer > 0,
+        all: () => spawner.all(),
+        onKill: (e) => registerEnemyKill(e),
+        sfx,
+        shake: addShake,
+        damagePlayer: applyDamageToPlayer,
+        hudHit: () => shell.hud.hit(),
+        spawnProjectile: (from, to, color, speed, damage) => projectiles.spawn(from, to, color, speed, damage),
+        clipProjectile: (from, to) => clipToObstacles(from, to, nav.obstacles, terrainRay),
+        popup: addDamagePopup,
+      });
 
       // 移动物理：障碍推回 → 体积分离 → 玩家体积 → 再次障碍 → 贴地/下落
       resolveCrowdObstacles(crowd, enemyPhysicsCtx);
