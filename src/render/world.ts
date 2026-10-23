@@ -352,6 +352,9 @@ class Merger {
 
 const UP = new THREE.Vector3(0, 1, 0);
 
+/** 竞技场可活动半径（玩家/敌人/导航/雷达共用） */
+export const ARENA_RADIUS = 52;
+
 /** 出生点（游戏内 player.position 初始值）。装饰物要避开这里，保证开局视野干净 */
 export const SPAWN_POINT = { x: 0, z: 6 };
 const SPAWN_CLEAR = 5.5;
@@ -582,9 +585,10 @@ export class World {
    * 关卡地图：地形 + 天空 + 光照 + 障碍布局。
    * 返回障碍物根节点（切换关卡时移除）；平台/斜坡/箱/毒池数据挂在 userData。
    */
-  buildMap(mapId: 'facility' | 'quarry' | 'lab' | 'volcano' | 'ice'): THREE.Group {
+  buildMap(mapId: 'facility' | 'quarry' | 'lab' | 'volcano' | 'ice', variant = 0): THREE.Group {
     const root = new THREE.Group();
-    const rng = mulberry32(mapId.length * 1337 + mapId.charCodeAt(0));
+    // 同一张图的不同关卡用不同种子：掩体/装饰排布随关卡变化
+    const rng = mulberry32(mapId.length * 1337 + mapId.charCodeAt(0) + variant * 7919);
     const pal = PALETTES[mapId] ?? PALETTES.facility;
     const platforms: { x: number; z: number; w: number; d: number; h: number }[] = [];
     const ramps: { x: number; z: number; w: number; d: number; h0: number; h1: number; along: 'x' | 'z' }[] = [];
@@ -594,7 +598,8 @@ export class World {
 
     // ---------- 天空 & 雾 ----------
     this.scene.background = new THREE.Color(pal.fog);
-    this.scene.fog = new THREE.Fog(pal.fog, 34, 118);
+    // 战场扩大到半径 52 后，雾距同步外推，避免中远距离地标全被雾吃掉
+    this.scene.fog = new THREE.Fog(pal.fog, 42, 150);
     const skyMat = new THREE.MeshBasicMaterial({
       map: skyTexture(pal),
       side: THREE.BackSide,
@@ -747,7 +752,6 @@ export class World {
     const addRamp = (x: number, z: number, w: number, d: number, h0: number, h1: number, along: 'x' | 'z'): void => {
       ramps.push({ x, z, w, d, h0, h1, along });
       const len = along === 'z' ? d : w;
-      const wid = along === 'z' ? w : d;
       const ang = Math.atan2(Math.abs(h1 - h0), len);
       const baseY = heightfield(x, z);
       const mid = baseY + (h0 + h1) / 2;
@@ -758,7 +762,7 @@ export class World {
         ),
         new THREE.Vector3(1, 1, 1)
       );
-      bag.add(new THREE.BoxGeometry(wid, 0.3, len), matStone, m);
+      bag.add(new THREE.BoxGeometry(w, 0.3, d), matStone, m);
     };
     /** 可破坏箱单独建 Mesh（击碎时要隐藏），共享几何与材质 */
     const crateGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -905,6 +909,167 @@ export class World {
       addCrate(-8, 4); addCrate(8, -4); addCrate(2.8, -9); addCrate(9, 6);
     }
 
+    // ---------- 固定地标（每图一处，方位固定）+ 每关布局变体 ----------
+    /** 与已有碰撞体保持间距（保守按外接矩形） */
+    const clearOf = (x: number, z: number, hw: number, hd: number, pad = 1.6): boolean => {
+      for (const o of obstacles) {
+        if (Math.abs(x - o.x) <= hw + o.hw + pad && Math.abs(z - o.z) <= hd + o.hd + pad) return false;
+      }
+      return true;
+    };
+    const polar = (a: number, r: number): [number, number] => [Math.cos(a) * r, Math.sin(a) * r];
+    /** 足迹范围内地形高差（平台/掩体落在陡坡会一侧悬空） */
+    const heightSpread = (x: number, z: number, w: number, d: number): number => {
+      const pts: [number, number][] = [[x, z], [x - w / 2, z - d / 2], [x + w / 2, z - d / 2], [x - w / 2, z + d / 2], [x + w / 2, z + d / 2]];
+      let mn = Infinity;
+      let mx = -Infinity;
+      for (const [px, pz] of pts) {
+        const h = heightfield(px, pz);
+        if (h < mn) mn = h;
+        if (h > mx) mx = h;
+      }
+      return mx - mn;
+    };
+    /** 固定地标落点：在给定方位附近找一块平地（找不到就用原方位） */
+    const flatPolar = (a0: number, r0: number, w: number, d: number): [number, number] => {
+      for (let k = 0; k < 12; k++) {
+        const a = a0 + (k === 0 ? 0 : (k % 2 === 1 ? 1 : -1) * Math.ceil(k / 2) * 0.32);
+        const r = r0 + ((k % 3) - 1) * 3;
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
+        if (Math.hypot(x, z) > ARENA_RADIUS - 7) continue;
+        if (nearSpawn(x, z, 7)) continue;
+        if (heightSpread(x, z, w, d) > 0.55) continue;
+        if (!clearOf(x, z, w / 2, d / 2, 1.4)) continue;
+        return [x, z];
+      }
+      return polar(a0, r0);
+    };
+
+    if (mapId === 'facility') {
+      // 塔吊门架：双柱 + 横梁 + 吊厢（塔身可作绕行掩体）
+      const [lx, lz] = flatPolar(Math.PI * 1.55, 23, 9, 6);
+      const gy = heightfield(lx, lz);
+      for (const s of [-1, 1]) {
+        bag.cyl(0.34, 0.42, 6.2, 8, lx + s * 3.4, gy + 3.1, lz, matMetal);
+        addObstacle(lx + s * 3.4, lz, 0.8, 0.8, gy + 6.2);
+      }
+      bag.box(7.8, 0.42, 0.5, lx, gy + 6.3, lz, matMetal);
+      bag.box(1.5, 0.8, 1.2, lx + 1.2, gy + 6.9, lz, matDark);
+      addPillar(lx - 2.2, lz + 2.6, 3.2);
+      addCrate(lx + 2.4, lz + 2.4);
+    } else if (mapId === 'quarry') {
+      // 阶梯矿台：下层平台 + 上层平台 + 外侧引坡
+      const [lx, lz] = flatPolar(Math.PI * 0.18, 24, 11, 9);
+      addPlatform(lx, lz, 4.4, 3.4, 1.0);
+      addPlatform(lx + 4.0, lz - 2.4, 3.0, 2.8, 1.7);
+      addRamp(lx - 4.0, lz, 3.4, 3.2, 0, 1.0, 'x');
+      addCrate(lx - 1.4, lz + 2.6);
+    } else if (mapId === 'lab') {
+      // 侧实验舱：环形基座 + 金属舱体 + 发光核心 + 横置管道
+      const [lx, lz] = flatPolar(Math.PI * 1.18, 23, 5, 5);
+      const gy = heightfield(lx, lz);
+      bag.cyl(1.9, 2.1, 0.3, 16, lx, gy + 0.15, lz, matStone);
+      bag.cyl(1.5, 1.6, 2.6, 16, lx, gy + 1.5, lz, matMetal);
+      bag.shape(new THREE.SphereGeometry(0.55, 12, 10), glowMat, lx, gy + 1.7, lz);
+      addObstacle(lx, lz, 4.2, 4.2, gy + 2.8);
+      bag.cyl(0.28, 0.28, 6, 8, lx + 3.2, heightfield(lx + 3.2, lz + 1) + 1.4, lz + 1, matMetal, 0, Math.PI / 2);
+    } else if (mapId === 'volcano') {
+      // 黑曜石塔群：三根高塔 + 熔岩基座光环
+      const [lx, lz] = flatPolar(Math.PI * 0.06, 24, 7, 7);
+      const gy = heightfield(lx, lz);
+      const towers: [number, number, number][] = [[0, 0, 6.4], [2.6, 1.2, 4.6], [-2.2, 1.6, 3.8]];
+      for (const [ox, oz, h] of towers) {
+        const bx = lx + ox;
+        const bz = lz + oz;
+        const by = heightfield(bx, bz);
+        bag.cyl(0.42, 0.78, h, 7, bx, by + h / 2, bz, matDark);
+        addObstacle(bx, bz, 1.5, 1.5, by + h);
+      }
+      const lava = new THREE.Mesh(
+        new THREE.RingGeometry(2.4, 3.6, 28),
+        new THREE.MeshBasicMaterial({ color: 0xff5410, transparent: true, opacity: 0.7, depthWrite: false })
+      );
+      lava.rotation.x = -Math.PI / 2;
+      lava.position.set(lx, gy + 0.05, lz);
+      root.add(lava);
+    } else if (mapId === 'ice') {
+      // 冰架高台：大平台 + 引坡 + 冰柱环
+      const [lx, lz] = flatPolar(Math.PI * 1.32, 24, 9, 8);
+      addPlatform(lx, lz, 4.6, 3.6, 1.2);
+      addRamp(lx - 4.2, lz, 3.6, 3.2, 0, 1.2, 'x');
+      const iceMat2 = solid(0xa8d4f0, { roughness: 0.15, metalness: 0.25 });
+      iceMat2.emissive = new THREE.Color(0x1d3f66);
+      iceMat2.emissiveIntensity = 0.35;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.4;
+        const bx = lx + Math.cos(a) * 4.2;
+        const bz = lz + Math.sin(a) * 4.2;
+        const h = 2.4 + (i % 3) * 0.9;
+        bag.shape(new THREE.ConeGeometry(0.34, h, 5), iceMat2, bx, heightfield(bx, bz) + h / 2, bz);
+      }
+      addCrate(lx + 1.6, lz + 2.8);
+    }
+
+    // 每关变体：外圈遭遇战组合（r 16–30），按关卡轮换方位与模板
+    const v = ((variant % 5) + 5) % 5;
+    const pickSpot = (a0: number, r: number, hw: number, hd: number): { x: number; z: number; a: number } | null => {
+      for (let k = 0; k < 4; k++) {
+        const a = a0 + k * 0.55;
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
+        if (Math.hypot(x, z) > ARENA_RADIUS - 6) continue;
+        if (nearSpawn(x, z, 7)) continue;
+        if (heightSpread(x, z, hw * 2, hd * 2) > 0.6) continue;
+        if (!clearOf(x, z, hw, hd, 1.8)) continue;
+        return { x, z, a };
+      }
+      return null;
+    };
+    const baseA = v * (Math.PI * 2 / 5) + Math.PI * 0.13;
+    if (v === 0) {
+      // 弧墙阵地
+      for (let i = 0; i < 2; i++) {
+        const spot = pickSpot(baseA + i * 0.5, 18 + i * 4.5, 2.6, 1.2);
+        if (spot) addBox(5.2, 1.15, 0.5, spot.x, spot.z, matStone, spot.a + Math.PI / 2);
+      }
+    } else if (v === 1) {
+      // 集装箱据点
+      const s1 = pickSpot(baseA, 19, 1.6, 1.6);
+      if (s1) addBox(2.4, 1.6, 1.6, s1.x, s1.z, matMetal, s1.a);
+      const s2 = pickSpot(baseA + 0.42, 24, 1.6, 1.6);
+      if (s2) addBox(1.9, 1.3, 1.5, s2.x, s2.z, matMetal, s2.a + 0.4);
+      const s3 = pickSpot(baseA + 0.24, 29, 1.2, 1.2);
+      if (s3) addCrate(s3.x, s3.z);
+    } else if (v === 2) {
+      // 观察平台 + 引坡
+      const spot = pickSpot(baseA, 21, 2.2, 2.0);
+      if (spot) {
+        addPlatform(spot.x, spot.z, 2.8, 2.4, 0.9);
+        const rx = spot.x - 3.6;
+        if (clearOf(rx, spot.z, 1.6, 1.6, 0.6)) addRamp(rx, spot.z, 3.2, 2.8, 0, 0.9, 'x');
+      }
+    } else if (v === 3) {
+      // 石墩阵
+      for (let i = 0; i < 4; i++) {
+        const a = baseA + i * 0.34;
+        const x = Math.cos(a) * (17 + i * 2.6);
+        const z = Math.sin(a) * (17 + i * 2.6);
+        if (nearSpawn(x, z, 6.5) || !clearOf(x, z, 0.8, 0.8, 1.2)) continue;
+        addBox(1.3, 1.5, 1.3, x, z, matStone, a);
+      }
+    } else {
+      // 掩体长墙 + 补给箱 + 立柱
+      const spot = pickSpot(baseA, 20, 3.2, 1.4);
+      if (spot) addBox(6.2, 1.15, 0.55, spot.x, spot.z, matStone, spot.a + Math.PI / 2);
+      const c1 = pickSpot(baseA + 0.5, 25, 1.2, 1.2);
+      if (c1) addCrate(c1.x, c1.z);
+      const c2 = pickSpot(baseA - 0.28, 27, 1.2, 1.2);
+      if (c2) addCrate(c2.x, c2.z);
+      const p = pickSpot(baseA + 0.15, 17, 0.6, 0.6);
+      if (p) addPillar(p.x, p.z, 3.0);
+    }
+
     // ---------- 地图专属装饰 ----------
     if (mapId === 'volcano') {
       const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5410, fog: true });
@@ -962,7 +1127,7 @@ export class World {
     rimGeo.rotateX(-Math.PI / 2);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + 0.5;
-      const d = 10 + rng() * 8;
+      const d = 12 + rng() * 20;
       const px = Math.cos(a) * d;
       const pz = Math.sin(a) * d;
       const pr = 2 + rng() * 1.2;
@@ -1056,10 +1221,10 @@ export class World {
 function makeHeightfield(seed: number): (x: number, z: number) => number {
   const rnd = mulberry32(seed);
   const dunes = { f1: 0.21 + rnd() * 0.08, f2: 0.13 + rnd() * 0.05, p: rnd() * Math.PI * 2 };
-  // 中景丘陵：分布在场地外圈，避免压住竞技场
-  const hills = Array.from({ length: 10 }, () => {
+  // 中景丘陵：分布在场地外圈，避免压住竞技场（半径 52 后丘陵外扩到 18–52）
+  const hills = Array.from({ length: 14 }, () => {
     const a = rnd() * Math.PI * 2;
-    const d = 16 + rnd() * 20;
+    const d = 18 + rnd() * 34;
     return { x: Math.cos(a) * d, z: Math.sin(a) * d, r: 7 + rnd() * 8, h: 1.6 + rnd() * 4.2 };
   });
   const p1 = rnd() * Math.PI * 2;
@@ -1070,8 +1235,8 @@ function makeHeightfield(seed: number): (x: number, z: number) => number {
   };
   return (x: number, z: number): number => {
     const r = Math.hypot(x, z);
-    // 1) 场内沙丘（范围内 100%，r>16 淡出）
-    const arenaMask = 1 - smooth(10, 17, r);
+    // 1) 场内沙丘（中心平坦，r>12 后淡入起伏）
+    const arenaMask = 1 - smooth(12, 24, r);
     const dune =
       (Math.sin(x * dunes.f1 + dunes.p) * Math.cos(z * dunes.f2) * 0.44 +
         Math.sin((x + z) * 0.095 + dunes.p) * 0.2 +
@@ -1087,13 +1252,13 @@ function makeHeightfield(seed: number): (x: number, z: number) => number {
       if (d2 < r2) h += hill.h * (1 - Math.sqrt(d2) / hill.r) * 0.9;
     }
     // 2.5) 侵蚀细节：只在场地外叠加（场内保持可走，不破坏掩体贴合）
-    const rough = smooth(13, 26, r);
+    const rough = smooth(14, 30, r);
     h += (Math.sin(x * 0.87 + z * 0.61) * Math.cos(x * 0.53 - z * 0.79) * 0.42 +
       Math.sin(x * 1.9 - z * 1.5) * 0.12) * rough;
     // 3) 外圈山脊：山脊线随方位角起伏 + 内外侧都平滑收口
     const ang = Math.atan2(z, x);
     const ridge = 9 + 6 * Math.sin(ang * 2.7 + p1) + 4.5 * Math.sin(ang * 5.3 + p2) + 2.5 * Math.sin(ang * 11 + p1 * 2);
-    const rise = smooth(34, 50, r);
+    const rise = smooth(50, 66, r);
     const fall = 1 - smooth(62, 82, r);
     h += Math.max(0, ridge) * rise * fall;
     // 出生点 + 高台斜坡走廊压平（避免掩体/斜坡与地面出现缝隙）。

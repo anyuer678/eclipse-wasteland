@@ -584,7 +584,7 @@ export class NavField {
       const dist = minR + random() * Math.max(0, maxR - minR);
       const x = cx + Math.cos(angle) * dist;
       const z = cz + Math.sin(angle) * dist;
-      if (Math.hypot(x, z) > 34) continue;
+      if (Math.hypot(x, z) > this.walkRadius - 4) continue;
       if (!this.isWalkable(x, z)) continue;
       const i = this.indexOf(x, z);
       if (i < 0 || this.walk[i] !== 1) continue;

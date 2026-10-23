@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { EventBus, FixedLoop, Rng, ServiceRegistry, clamp } from './core';
 import { sfx } from './core/sfx';
-import { World, SPAWN_POINT, nearSpawn } from './render';
+import { World, SPAWN_POINT, nearSpawn, ARENA_RADIUS } from './render';
 import { Fx } from './render/fx';
 import { createAssetLib } from './render/assets';
 import { Input } from './play/input';
@@ -162,7 +162,7 @@ function boot(): void {
   };
 
   const player = new PlayerController({
-    speed: 5.2, jumpSpeed: 6.6, gravity: 16, eyeHeight: 1.6, boundRadius: 38,
+    speed: 5.2, jumpSpeed: 6.6, gravity: 16, eyeHeight: 1.6, boundRadius: ARENA_RADIUS - 0.5,
     terrainHeight: terrainHeightAt,
     // 障碍碰撞：按地图碰撞体把角色沿最小穿透方向推回。
     // 侧壁判定要兼顾平台顶面与斜坡收口：只看 p.y 会被重力每帧几毫米的下坠误判成"撞墙"，
@@ -297,8 +297,8 @@ function boot(): void {
     } else {
       const a = Math.random() * Math.PI * 2;
       const d = 4 + Math.random() * 6;
-      const x = clamp(player.position.x + Math.cos(a) * d, -38, 38);
-      const z = clamp(player.position.z + Math.sin(a) * d, -38, 38);
+      const x = clamp(player.position.x + Math.cos(a) * d, -(ARENA_RADIUS - 1), ARENA_RADIUS - 1);
+      const z = clamp(player.position.z + Math.sin(a) * d, -(ARENA_RADIUS - 1), ARENA_RADIUS - 1);
       g.position.set(x, player.terrainHeight(x, z), z);
     }
     world.scene.add(g);
@@ -585,7 +585,7 @@ function boot(): void {
       // 释放地图自建几何/材质（共享纹理与全局材质自动跳过）
       World.disposeMap(mapRoot);
     }
-    mapRoot = world.buildMap(flow.mission.mapId);
+    mapRoot = world.buildMap(flow.mission.mapId, Math.max(0, MISSIONS.findIndex((m) => m.id === flow.mission.id)));
     // 可破坏箱（从地图配置重建；mesh 引用用于击碎后隐藏）
     crates.length = 0;
     const crateGroup = mapRoot.userData.crateGroup as THREE.Group | undefined;
@@ -610,8 +610,8 @@ function boot(): void {
         () => placementRng.next(),
         opts?.center?.x ?? player.position.x,
         opts?.center?.z ?? player.position.z,
-        opts?.placeMin ?? 13,
-        opts?.placeMax ?? 22,
+        opts?.placeMin ?? 14,
+        opts?.placeMax ?? 26,
         placed,
         kind === 'boomer' ? 2.2 : 1.5
       )
@@ -631,8 +631,8 @@ function boot(): void {
   /** 当前地图碰撞体 → 小怪/BOSS 两套导航网格（木箱击碎后也必须重烘） */
   function buildNavsForMap(): void {
     const obs = (mapRoot?.userData.obstacles ?? []) as NavObstacle[];
-    nav.build(obs, player.terrainHeight, { agentRadius: 0.62, stepHeight: 0.4, walkRadius: 38.5 });
-    bossNav.build(obs, player.terrainHeight, { agentRadius: 1.3, stepHeight: 0.5, walkRadius: 38.5 });
+    nav.build(obs, player.terrainHeight, { agentRadius: 0.62, stepHeight: 0.4, walkRadius: ARENA_RADIUS, minX: -ARENA_RADIUS - 1, maxX: ARENA_RADIUS + 1, minZ: -ARENA_RADIUS - 1, maxZ: ARENA_RADIUS + 1 });
+    bossNav.build(obs, player.terrainHeight, { agentRadius: 1.3, stepHeight: 0.5, walkRadius: ARENA_RADIUS, minX: -ARENA_RADIUS - 1, maxX: ARENA_RADIUS + 1, minZ: -ARENA_RADIUS - 1, maxZ: ARENA_RADIUS + 1 });
   }
 
   /** 木箱被击碎：从地图障碍中移除并重烘导航，打开被堵住的路线 */
@@ -696,11 +696,11 @@ function boot(): void {
         const big = spec.scale[1] > 1.6;
         for (let i = 0; i < spec.count; i++) {
           const a = Math.random() * Math.PI * 2;
-          const d = big ? 15 + Math.random() * 14 : 3.5 + Math.random() * 12;
+          const d = big ? 18 + Math.random() * 26 : 4 + Math.random() * 20;
           const x = Math.cos(a) * d;
           const z = Math.sin(a) * d;
           if (nearSpawn(x, z)) continue; // 出生点附近留白，避免开局被灌木/石头糊脸
-          if (big && Math.hypot(x, z) < 14) continue;
+          if (big && Math.hypot(x, z) < 17) continue;
           placements.push({
             x,
             // 贴合地形高度（旧实现固定 y=0，坡地上的装饰会浮空）
@@ -740,7 +740,7 @@ function boot(): void {
   /** 雷达小地图（上 1/3 之外的右上角，每 2 帧画一次） */
   /** 敌人远程弹丸（真飞行物，可躲） */
   const projectiles = new ProjectilePool(world.scene, fx);
-  const radar = new Radar(148, 34);
+  const radar = new Radar(148, 44);
   let radarFrame = 0;
 
   // 设置（O 键开关；音量/灵敏度/画质/雷达 即时生效并持久化）
@@ -1071,10 +1071,10 @@ function boot(): void {
     }
   };
 
-  /** 限制在竞技场圆内（玩家 38；敌人略大一点给远程留空间） */
+  /** 限制在竞技场圆内（玩家 ARENA_RADIUS-0.5；敌人到 ARENA_RADIUS 给远程留空间） */
   const clampArena = (pos: THREE.Vector3): void => {
     const r = Math.hypot(pos.x, pos.z);
-    const maxR = 38.5;
+    const maxR = ARENA_RADIUS;
     if (r > maxR) {
       const k = maxR / r;
       pos.x *= k;
@@ -2026,7 +2026,7 @@ function boot(): void {
           const nx = player.position.x + dx * step;
           const nz = player.position.z + dz * step;
           // 与 PlayerController 的活动半径一致（旧的 ±13 方形是遗留的中央竞技场限制）
-          if (Math.hypot(nx, nz) > 38) break;
+          if (Math.hypot(nx, nz) > ARENA_RADIUS - 0.5) break;
           const ng = terrainHeightAt(nx, nz);
           if (ng - player.position.y > 0.55) break; // 高台阶：冲刺不能上
           probe.x = nx;
