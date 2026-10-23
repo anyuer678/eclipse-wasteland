@@ -595,6 +595,8 @@ export class World {
     type WorldObstacle = { x: number; z: number; hw: number; hd: number; top: number; crate?: boolean };
     const crates: { x: number; z: number; obstacle: WorldObstacle }[] = [];
     const pools: { x: number; z: number; r: number }[] = [];
+    /** 区域刷怪锚点：地标/外圈点位，供 game 侧分簇刷怪 */
+    const spawnAnchors: { x: number; z: number }[] = [];
 
     // ---------- 天空 & 雾 ----------
     this.scene.background = new THREE.Color(pal.fog);
@@ -958,6 +960,7 @@ export class World {
       bag.box(1.5, 0.8, 1.2, lx + 1.2, gy + 6.9, lz, matDark);
       addPillar(lx - 2.2, lz + 2.6, 3.2);
       addCrate(lx + 2.4, lz + 2.4);
+      spawnAnchors.push({ x: lx, z: lz });
     } else if (mapId === 'quarry') {
       // 阶梯矿台：下层平台 + 上层平台 + 外侧引坡
       const [lx, lz] = flatPolar(Math.PI * 0.18, 24, 11, 9);
@@ -965,6 +968,7 @@ export class World {
       addPlatform(lx + 4.0, lz - 2.4, 3.0, 2.8, 1.7);
       addRamp(lx - 4.0, lz, 3.4, 3.2, 0, 1.0, 'x');
       addCrate(lx - 1.4, lz + 2.6);
+      spawnAnchors.push({ x: lx, z: lz });
     } else if (mapId === 'lab') {
       // 侧实验舱：环形基座 + 金属舱体 + 发光核心 + 横置管道
       const [lx, lz] = flatPolar(Math.PI * 1.18, 23, 5, 5);
@@ -974,6 +978,7 @@ export class World {
       bag.shape(new THREE.SphereGeometry(0.55, 12, 10), glowMat, lx, gy + 1.7, lz);
       addObstacle(lx, lz, 4.2, 4.2, gy + 2.8);
       bag.cyl(0.28, 0.28, 6, 8, lx + 3.2, heightfield(lx + 3.2, lz + 1) + 1.4, lz + 1, matMetal, 0, Math.PI / 2);
+      spawnAnchors.push({ x: lx, z: lz });
     } else if (mapId === 'volcano') {
       // 黑曜石塔群：三根高塔 + 熔岩基座光环
       const [lx, lz] = flatPolar(Math.PI * 0.06, 24, 7, 7);
@@ -993,6 +998,7 @@ export class World {
       lava.rotation.x = -Math.PI / 2;
       lava.position.set(lx, gy + 0.05, lz);
       root.add(lava);
+      spawnAnchors.push({ x: lx, z: lz });
     } else if (mapId === 'ice') {
       // 冰架高台：大平台 + 引坡 + 冰柱环
       const [lx, lz] = flatPolar(Math.PI * 1.32, 24, 9, 8);
@@ -1009,6 +1015,7 @@ export class World {
         bag.shape(new THREE.ConeGeometry(0.34, h, 5), iceMat2, bx, heightfield(bx, bz) + h / 2, bz);
       }
       addCrate(lx + 1.6, lz + 2.8);
+      spawnAnchors.push({ x: lx, z: lz });
     }
 
     // 每关变体：外圈遭遇战组合（r 16–30），按关卡轮换方位与模板
@@ -1027,6 +1034,12 @@ export class World {
       return null;
     };
     const baseA = v * (Math.PI * 2 / 5) + Math.PI * 0.13;
+    // 区域刷怪的额外落点：按变体方位外圈三点（只要可站立，不依赖具体结构）
+    for (let i = 0; i < 3; i++) {
+      const a = baseA + (i * Math.PI * 2) / 3 + 1.05;
+      const r = 19 + i * 6;
+      spawnAnchors.push({ x: Math.cos(a) * r, z: Math.sin(a) * r });
+    }
     if (v === 0) {
       // 弧墙阵地
       for (let i = 0; i < 2; i++) {
@@ -1152,6 +1165,7 @@ export class World {
     root.userData.ramps = ramps;
     root.userData.crates = crates;
     root.userData.poisonPools = pools;
+    root.userData.spawnAnchors = spawnAnchors;
     root.userData.crateGroup = crateGroup;
 
     this.add(root);

@@ -157,11 +157,15 @@ export class MissionFlow {
       const lvl = (this.mission.monsterLevel ?? 1) + Math.floor(floor * 1.5) + this.levelOffset;
       const hpMult = this.difficulty * (1 + 0.32 * (lvl - 1));
       const dmgMult = this.difficulty * (1 + 0.2 * (lvl - 1));
-      // 精英层（每 3 层）：精英概率翻倍
+      // 精英层（每 3 层）：保底 2 只精英 + 概率翻倍
       let eliteChance = Math.min(0.05 + floor * 0.02 + lvl * 0.004, 0.4);
       if (floor % 3 === 0) eliteChance = Math.min(0.55, eliteChance * 2);
       this.monsterLevel = Math.max(1, lvl);
-      this.spawner.spawnWave(scaleWaveSpec(spec, this.waveScale), { hpMult, dmgMult, eliteChance, level: this.monsterLevel });
+      this.spawner.spawnWave(scaleWaveSpec(spec, this.waveScale), {
+        hpMult, dmgMult, eliteChance,
+        eliteGuaranteed: floor % 3 === 0 ? 2 : 0,
+        level: this.monsterLevel,
+      });
       return;
     }
     const lvl = (this.mission.monsterLevel ?? 1) + this.waveIndex + this.levelOffset;
@@ -171,6 +175,8 @@ export class MissionFlow {
       hpMult: this.difficulty * (1 + 0.32 * (lvl - 1)),
       dmgMult: this.difficulty * (1 + 0.2 * (lvl - 1)),
       eliteChance: Math.min(0.4, 0.04 + lvl * 0.005),
+      // 第 2 波起每波保底 1 只精英，保证大地图推进有节奏锚点
+      eliteGuaranteed: this.waveIndex >= 1 ? 1 : 0,
       level: this.monsterLevel,
     });
   }

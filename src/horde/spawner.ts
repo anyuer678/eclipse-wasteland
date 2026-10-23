@@ -26,6 +26,8 @@ export interface WaveOptions {
   dmgMult?: number;
   /** 精英概率 0-1 */
   eliteChance?: number;
+  /** 本波前 N 只强制为精英（0/1/2），用于波次保底 */
+  eliteGuaranteed?: number;
   /** 怪物等级（等级压制 / 经验结算） */
   level?: number;
   /** 刷怪放置中心（默认由 game 侧决定，通常是玩家位置；BOSS 召唤传 BOSS 位置） */
@@ -42,7 +44,15 @@ export type SpawnPlacement = (
   total: number,
   placed: readonly { x: number; z: number; r: number }[],
   opts?: WaveOptions
-) => { x: number; z: number; y: number } | null;
+) => { x: number; y: number; z: number } | null;
+
+/** 第 i 只怪是否为精英：前 guaranteed 只必出，其余按概率；传入两次随机数便于单测 */
+export function eliteFor(i: number, guaranteed: number, chance: number, roll: number, affixRoll: number): EliteAffix | undefined {
+  const forced = i < Math.max(0, Math.floor(guaranteed));
+  if (!forced && !(chance > 0 && roll < chance)) return undefined;
+  const idx = Math.min(ELITE_AFFIXES.length - 1, Math.max(0, Math.floor(affixRoll * ELITE_AFFIXES.length)));
+  return ELITE_AFFIXES[idx].kind;
+}
 
 export class Spawner {
   private rng: Rng;
@@ -72,10 +82,13 @@ export class Spawner {
     const placed: { x: number; z: number; r: number }[] = [];
     for (let i = 0; i < kinds.length; i++) {
       const kind = kinds[i];
-      let elite: EliteAffix | undefined;
-      if (opts?.eliteChance && this.rng.range(0, 1) < opts.eliteChance) {
-        elite = ELITE_AFFIXES[Math.floor(this.rng.range(0, ELITE_AFFIXES.length))].kind;
-      }
+      const elite = eliteFor(
+        i,
+        opts?.eliteGuaranteed ?? 0,
+        opts?.eliteChance ?? 0,
+        this.rng.range(0, 1),
+        this.rng.range(0, 1)
+      );
       const e = new Enemy(ENEMY_DEFS[kind], this.rng, { hpMult: opts?.hpMult, dmgMult: opts?.dmgMult, elite, level: opts?.level });
       const spot = this.placement?.(kind, i, kinds.length, placed, opts);
       if (spot) {
