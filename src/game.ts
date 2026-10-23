@@ -36,6 +36,7 @@ import { streakEvent } from './play/streak';
 import { shotDamage } from './play/shotDamage';
 import { dashStep } from './play/dash';
 import { mitigatedDamage } from './play/damageTaken';
+import { emitStatusFx, tickOrbPickups, tickShortBuffs } from './play/fieldTicks';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
 import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
@@ -1961,24 +1962,7 @@ function boot(): void {
       statusFxAcc -= dt;
       if (statusFxAcc <= 0) {
         statusFxAcc = 0.1;
-        for (const e of crowd) {
-          if (!e.alive) continue;
-          if (e.isBurning()) {
-            e.centerInto(centerScratch);
-            centerScratch.y += 0.6 + Math.random() * 0.5;
-            fx.emit(centerScratch, 0xff7a33, 1, 0.9, 0.8);
-          }
-          if (e.isSlowed()) {
-            e.centerInto(centerScratch);
-            centerScratch.y += 0.5 + Math.random() * 0.7;
-            fx.emit(centerScratch, 0x66c8ff, 1, 0.6, 0.7);
-          }
-          if (e.isStunned()) {
-            e.centerInto(centerScratch);
-            centerScratch.y += 1.35 + Math.random() * 0.25;
-            fx.emit(centerScratch, 0xffd24a, 2, 1.1, 0.6);
-          }
-        }
+        emitStatusFx(crowd, fx, centerScratch);
       }
 
       // 敌人弹丸推进与命中
@@ -2063,28 +2047,18 @@ function boot(): void {
       viewmodel?.update(dt, moving);
 
       // BUFF 球：拾取检测 + 旋转动画
-      for (let i = buffOrbs.length - 1; i >= 0; i--) {
-        const orb = buffOrbs[i];
-        orb.mesh.rotation.y += dt * 2.2;
-        orb.mesh.children[0]!.position.y = 0.9 + Math.sin(time * 3 + i) * 0.15;
-        if (
-          player.position.distanceToSquared(orb.mesh.position) < 2.6 &&
-          canPickupLoot(orb.mesh.position.x, orb.mesh.position.y, orb.mesh.position.z)
-        ) {
-          pickOrb(orb.kind);
-          world.scene.remove(orb.mesh);
-          sfx.pickup();
-          buffOrbs.splice(i, 1);
-        }
-      }
+      tickOrbPickups({
+        orbs: buffOrbs,
+        scene: world.scene,
+        playerPos: player.position,
+        dt,
+        time,
+        canPickup: canPickupLoot,
+        pick: pickOrb,
+        onPickup: () => sfx.pickup(),
+      });
       // 短期增益计时
-      for (const k of ['fireSpd', 'crit', 'move'] as const) {
-        if (shortBuffs[k] > 0) {
-          const before = shortBuffs[k];
-          shortBuffs[k] = Math.max(0, shortBuffs[k] - dt);
-          if (before > 0 && shortBuffs[k] <= 0) refreshGrowth(); // 到期恢复
-        }
-      }
+      if (tickShortBuffs(shortBuffs, dt)) refreshGrowth(); // 到期恢复
 
       // HUD 更新（帧数据由 play/hudFrame 组装）
       if (flow.phase === 'intro' || flow.phase === 'wave' || flow.phase === 'boss') {
