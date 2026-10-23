@@ -29,6 +29,7 @@ import { skillLinesFor } from './play/weaponBrief';
 import { hudFrame } from './play/hudFrame';
 import { separateCrowd } from './play/crowdStep';
 import { clipToObstacles, pointOnObstacleSurface, rayAabbT, raySphere } from './play/raycast';
+import { castHitscan } from './play/hitscan';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
@@ -960,7 +961,6 @@ function boot(): void {
 
   /** 每帧复用的临时向量（避免热路径 new Vector3） */
   const eyeScratch = new THREE.Vector3();
-  const hitScratch = new THREE.Vector3();
   const centerScratch = new THREE.Vector3();
   /** 敌人分离用空间哈希（复用，避免每帧分配） */
   const enemyHash = new SpatialHash(1.5);
@@ -1058,67 +1058,17 @@ function boot(): void {
       recoil = Math.min(recoil + (kick[arsenal.current.def.archetype] ?? 0.012), 0.07);
     },
     resolveHit(origin, dir) {
-      // 逻辑命中：射线对敌人/BOSS 球体检测（不依赖模型 mesh raycast，稳定可靠）
-      hitTerrainSurface = false;
-      let bestT = 60;
-      let hit = false;
-      // 先算最近的掩体交点：玩家射击是 hitscan，必须和敌人弹丸一样被墙截断
-      let wallT = Infinity;
-      for (const o of nav.obstacles) {
-        const t = rayAabbT(origin, dir, o.x - o.hw, o.x + o.hw, -1000, o.top, o.z - o.hd, o.z + o.hd, 60);
-        if (t !== null && t > 0.02 && t < wallT) wallT = t;
-      }
-      // 山坡/丘陵同样截断 hitscan（否则可以隔山点杀）
-      const terrainT = nav.terrainRayDistance(
-        origin.x,
-        origin.y,
-        origin.z,
-        origin.x + dir.x * 60,
-        origin.y + dir.y * 60,
-        origin.z + dir.z * 60
-      );
-      if (terrainT !== null && terrainT < wallT) wallT = terrainT;
-      // 可破坏箱优先（若命中箱子，先打箱子）
-      for (const c of crates) {
-        if (!c.alive) continue;
-        hitScratch.set(c.x, 0.7, c.z);
-        const t = raySphere(origin, dir, hitScratch, 1.0);
-        if (t !== null && t < bestT && t < wallT) {
-          bestT = t;
-          hit = true;
-        }
-      }
-      for (const e of spawner.all()) {
-        if (!e.alive) continue;
-        // 命中半径放宽到 1.1（容忍地形高度差，玩家平视可打高处敌人）
-        e.centerInto(centerScratch);
-        const t = raySphere(origin, dir, centerScratch, 1.1);
-        if (t !== null && t < bestT && t < wallT) {
-          bestT = t;
-          hit = true;
-        }
-      }
-      if (activeBoss && activeBoss.alive) {
-        activeBoss.centerInto(centerScratch);
-        const t = raySphere(origin, dir, centerScratch, 3.2);
-        if (t !== null && t < bestT && t < wallT) {
-          bestT = t;
-          hit = true;
-        }
-      }
-      if (hit) return hitScratch.copy(origin).addScaledVector(dir, bestT);
-      if (wallT < 60) {
-        hitTerrainSurface = terrainT !== null && terrainT <= wallT;
-        return hitScratch.copy(origin).addScaledVector(dir, wallT);
-      }
-      if (dir.y < -1e-4) {
-        const t = -origin.y / dir.y;
-        if (t > 0) {
-          hitTerrainSurface = true;
-          return hitScratch.copy(origin).addScaledVector(dir, t);
-        }
-      }
-      return hitScratch.copy(origin).addScaledVector(dir, 60);
+      const cast = castHitscan({
+        origin,
+        dir,
+        obstacles: nav.obstacles,
+        terrainRay,
+        crates,
+        enemies: spawner.all(),
+        boss: activeBoss && activeBoss.alive ? activeBoss : null,
+      });
+      hitTerrainSurface = cast.terrainSurface;
+      return cast.point;
     },
     onHitEnemy(pos, damage, extra) {
       // 升级选牌已暂停：同一发/后续弹丸不再继续结算
