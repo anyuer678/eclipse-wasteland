@@ -70,13 +70,14 @@ export function createSettingsPanel(
 ): SettingsPanel {
   const el = document.createElement('div');
   el.style.cssText =
-    'position:fixed;left:16px;top:70px;width:236px;z-index:60;display:none;pointer-events:auto;max-height:calc(100vh - 90px);overflow-y:auto;' +
+    'position:fixed;left:16px;top:70px;width:min(440px, calc(100vw - 32px));z-index:60;pointer-events:auto;max-height:calc(100vh - 90px);overflow-y:auto;' +
+    'grid-template-columns:repeat(2, minmax(0, 1fr));gap:0 16px;display:none;' +
     "background:rgba(255,255,255,0.94);border:1px solid #d9d7cf;border-left:2px solid #3d6b8f;padding:12px 14px;font-family:var(--mono,monospace);color:#22252c;box-shadow:0 2px 10px rgba(34,37,44,0.15);";
   document.body.appendChild(el);
 
   const title = document.createElement('div');
   title.textContent = '设 置';
-  title.style.cssText = 'font-size:12px;letter-spacing:0.3em;color:#7d8698;margin-bottom:10px;';
+  title.style.cssText = 'font-size:12px;letter-spacing:0.3em;color:#7d8698;margin-bottom:10px;grid-column:1/-1;';
   el.appendChild(title);
 
   const row = (label: string): { wrap: HTMLDivElement; body: HTMLDivElement } => {
@@ -243,7 +244,7 @@ export function createSettingsPanel(
   const close = document.createElement('button');
   close.textContent = '关闭 (O)';
   close.style.cssText =
-    'width:100%;background:none;border:1px solid #262e3a;color:#7d8698;padding:6px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:0.2em;';
+    'grid-column:1/-1;width:100%;background:none;border:1px solid #262e3a;color:#7d8698;padding:6px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:0.2em;';
   close.addEventListener('click', () => {
     el.style.display = 'none';
   });
@@ -315,7 +316,7 @@ export function createSettingsPanel(
   return {
     el,
     toggle: () => {
-      el.style.display = el.style.display === 'none' ? 'block' : 'none';
+      el.style.display = el.style.display === 'none' ? 'grid' : 'none';
       sfx.resume(); // 面板交互也是用户手势
     },
     hide: () => {
