@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { EventBus, FixedLoop, Rng, ServiceRegistry, clamp } from './core';
 import { sfx } from './core/sfx';
-import { World, SPAWN_POINT, nearSpawn, ARENA_RADIUS } from './render';
+import { World, SPAWN_POINT, ARENA_RADIUS } from './render';
 import { Fx } from './render/fx';
 import { createAssetLib } from './render/assets';
 import { Input } from './play/input';
@@ -47,7 +47,7 @@ import { chestsInfo, cratesInfo, enemyHealths, enemyMotion, navInfo, obstaclesDu
 import type { QueryDeps } from './debug/queries';
 import { buffState, combatState, runDump, uiState, weaponState } from './debug/stateQueries';
 import type { StateDeps } from './debug/stateQueries';
-import { ENV_MODELS, ENV_TINT } from './render/envConfig';
+import { mountEnvModels } from './render/envMount';
 import { buildChestMesh, buildOrbMesh, buildRoleRing, buildSummonMesh } from './render/lootModels';
 
 function boot(): void {
@@ -656,44 +656,21 @@ function boot(): void {
   // ---------- 开源环境素材（Kenney CC0 nature-kit） ----------
   /** 按地图类型放置的环境模型清单 */
   let envRoot: THREE.Group | null = null;
+  const envRef = { current: null as THREE.Group | null };
   const mountEnv = (): void => {
     if (envRoot) {
       envRoot.removeFromParent();
       envRoot = null;
+      envRef.current = null;
     }
-    const list = ENV_MODELS[flow.mission.mapId] ?? [];
-    if (list.length === 0) return;
-    const group = new THREE.Group();
-    envRoot = group;
-    mapRoot?.add(group);
-    const hf = (mapRoot?.userData.heightfield as ((x: number, z: number) => number) | undefined) ?? ((): number => 0);
-    for (const spec of list) {
-      assets.load(spec.name, (src) => {
-        // 关卡可能已切换：只在当前 envRoot 仍是本次挂载目标时落地
-        if (envRoot !== group) return;
-        const placements: { x: number; y: number; z: number; scale: number; rotY: number }[] = [];
-        // 大件（树木/巨石）只放场地外圈，避免插进掩体与平台；小草丛可以留在场内
-        const big = spec.scale[1] > 1.6;
-        for (let i = 0; i < spec.count; i++) {
-          const a = Math.random() * Math.PI * 2;
-          const d = big ? 18 + Math.random() * 26 : 4 + Math.random() * 20;
-          const x = Math.cos(a) * d;
-          const z = Math.sin(a) * d;
-          if (nearSpawn(x, z)) continue; // 出生点附近留白，避免开局被灌木/石头糊脸
-          if (big && Math.hypot(x, z) < 17) continue;
-          placements.push({
-            x,
-            // 贴合地形高度（旧实现固定 y=0，坡地上的装饰会浮空）
-            y: hf(x, z) + spec.y,
-            z,
-            scale: (spec.scale[0] + Math.random() * (spec.scale[1] - spec.scale[0])) * (big ? 0.8 : 1),
-            rotY: Math.random() * Math.PI * 2,
-          });
-        }
-        // 实例化：每个模型只占 1 个 draw call（旧实现每株草都是一个 Group）
-        world.addInstancedProps(group, src, placements, ENV_TINT[flow.mission.mapId] ?? 0x5a6a4a);
-      });
-    }
+    if (!mapRoot) return;
+    envRoot = mountEnvModels({
+      mapRoot,
+      mapId: flow.mission.mapId,
+      assets,
+      addProps: (parent, src, placements, tint) => world.addInstancedProps(parent, src, placements, tint),
+      ref: envRef,
+    });
   };
 
   /**
