@@ -20,7 +20,7 @@ import type { FireContext } from './arsenal';
 import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
-import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty, recordMissionClear } from './campaign';
+import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
@@ -909,42 +909,35 @@ function boot(): void {
     paused = true; // 死亡/通关后冻结战斗，等待界面操作
     inMenu = true;
     unlockMouse(); // 结算界面需要鼠标操作
-    // 难度奖励倍率（普通 ×1 / 困难 ×1.8 / 噩梦 ×3）× 局内幸运金币
-    const diffReward = (difficulty >= 2 ? 3 : difficulty >= 1.5 ? 1.8 : difficulty <= 0.8 ? 0.8 : 1) * (1 + runB.luckyGold);
     // 无尽塔：记录到达层数（失败也算），结算与选择页展示历史最佳
     const towerBest = result.mission.tower ? recordTowerBest(result.towerFloor) : undefined;
-    if (result.phase === 'clear' && result.mission.tower) {
-      // 塔模式失败结算：按层数给材料/金币（层数越高越丰厚）
-      const floor = result.towerFloor;
-      const mat = Math.round(result.rewardAmount * (1 + floor * 0.25) * diffReward);
-      const gold = Math.round(30 * (1 + floor * 0.3) * (1 + bonuses.gold) * diffReward);
-      inventory.addMaterial(result.rewardMaterial, mat);
-      inventory.addGold(gold);
+    const settleInput = {
+      tower: !!result.mission.tower,
+      towerFloor: result.towerFloor,
+      // flow 在失败时会把 result 的奖励置 0；塔失败仍要按关卡基础奖励×层数缩放，
+      // 所以这里直接读任务配表（通关时两者数值一致）
+      rewardMaterial: result.mission.rewards.material,
+      rewardAmount: result.mission.rewards.amount,
+      kills: result.kills,
+      missionLevel: result.mission.monsterLevel ?? 1,
+      difficulty,
+      luckyGold: runB.luckyGold,
+      goldBonus: bonuses.gold,
+    };
+    if (result.phase === 'clear') {
+      const r = clearRewards(settleInput);
+      inventory.addMaterial(r.material, r.materialAmount);
+      inventory.addGold(r.gold);
+      if (r.talentGain > 0) inventory.addTalentPoints(r.talentGain);
       addDailyProgress(dailyState, 'clears'); // 每日任务：通关
-      const talentGain = Math.floor(result.kills / 15);
-      if (talentGain > 0) inventory.addTalentPoints(talentGain);
       achAdd('clears', 1);
       if (autoPickLabel()) achAdd('autoClears', 1);
-      refreshGrowth();
-    } else if (result.phase === 'clear') {
-      inventory.addMaterial(result.rewardMaterial, Math.round(result.rewardAmount * diffReward));
-      // 金币掉落（天赋"搜刮"加成；基数随关卡怪物等级成长，与材料奖励同步）
-      const missionLv = result.mission.monsterLevel ?? 1;
-      const goldReward = Math.round((30 + missionLv * 5) * (1 + bonuses.gold) * diffReward);
-      inventory.addGold(goldReward);
-      const talentGain = Math.floor(result.kills / 15);
-      if (talentGain > 0) inventory.addTalentPoints(talentGain);
-      achAdd('clears', 1);
-      if (autoPickLabel()) achAdd('autoClears', 1);
-      addDailyProgress(dailyState, 'clears'); // 每日任务：通关
-      recordMissionClear(result.mission.id, localStorage);
+      if (!result.mission.tower) recordMissionClear(result.mission.id, localStorage);
       refreshGrowth();
     } else if (result.phase === 'failed' && result.mission.tower) {
-      // 塔模式：失败也按层数结算部分奖励（材料固定为合金碎片，避免空 key）
-      const floor = Math.max(1, result.towerFloor);
-      const mat = Math.max(2, Math.round(result.rewardAmount * (1 + floor * 0.2) * diffReward));
-      inventory.addMaterial('合金碎片', mat);
-      inventory.addGold(Math.round(20 * (1 + floor * 0.2) * diffReward));
+      const r = towerFailureRewards(settleInput);
+      inventory.addMaterial(r.material, r.materialAmount);
+      inventory.addGold(r.gold);
       refreshGrowth();
     }
     shell.showResult(result, {

@@ -7,6 +7,8 @@ export { scaleWaveSpec, WAVE_DENSITY_SCALE, WAVE_ALIVE_CAP } from './waves';
 export { normalizeDifficulty, loadDifficulty, saveDifficulty, difficultyLabel, DIFFICULTY_KEY, DIFFICULTY_OPTIONS } from './difficulty';
 export { loadMissionClears, recordMissionClear, sanitizeClears, MISSION_CLEARS_KEY } from './missionProgress';
 export type { ClearStorage } from './missionProgress';
+export { clearRewards, towerFailureRewards, difficultyRewardMult } from './rewards';
+export type { SettleInput, RewardOut } from './rewards';
 export { pickSpawnAnchor } from './spawnZones';
 export type { SpawnAnchor } from './spawnZones';
 export type { BossSpec, Element, FlowPhase, MissionDef, WaveSpec } from './types';

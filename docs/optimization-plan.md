@@ -59,7 +59,7 @@
 
 | # | 内容 | 验收 |
 | --- | --- | --- |
-| 4.1 🚧 | `game.ts` 拆分：战斗结算 / 敌人循环 / UI 桥接，目标 <1500 行 | 阶段 1：面板文案/环境配置 → `play/weaponBrief.ts`、`render/envConfig.ts`；阶段 2：分离/敌人物理 → `play/crowdStep.ts`、`play/enemyPhysics.ts`；阶段 3a：场景/敌人只读查询 → `debug/queries.ts`；阶段 3b：状态查询（`uiState/weaponState/combatState/runDump/buffState`）→ `debug/stateQueries.ts`（共 6 项映射单测）。game.ts 约 2976 行（峰值 3081）；后续：渲染/HUD 桥接与结算分块 |
+| 4.1 🚧 | `game.ts` 拆分：战斗结算 / 敌人循环 / UI 桥接，目标 <1500 行 | 阶段 1：面板文案/环境配置 → `play/weaponBrief.ts`、`render/envConfig.ts`；阶段 2：分离/敌人物理 → `play/crowdStep.ts`、`play/enemyPhysics.ts`；阶段 3a：场景/敌人只读查询 → `debug/queries.ts`；阶段 3b：状态查询 → `debug/stateQueries.ts`；结算奖励数学 → `campaign/rewards.ts`（4 项单测，并修复塔失败奖励不随层数缩放）。game.ts 约 2979 行（峰值 3081，已拆 8 个模块）；后续：渲染/HUD 桥接 |
 | 4.2 ✅ | 敌人分离用空间哈希（同屏 >40 才启用） | 已完成（对所有规模启用 1.5m 均匀网格）：67 只压力场景哈希对 532、真实重叠对 138、**漏检 0**；400 点基准哈希快于暴力；30 只 diag 重叠 0、60 只 0 浮空/0 埋地 |
 | 4.3 ✅ | 存档版本号 + 迁移（v2） | 已完成：`growth/save.ts` 纯函数（缺失/越界/坏类型兜底、loadout 去重限 5）；旧档首次加载自动备份到 `-backup` 并写回 v2；单测 4 项；浏览器实测旧档 gold/材料/武器等级保留 |
 
@@ -85,6 +85,7 @@
 | # | 内容 | 验收 |
 | --- | --- | --- |
 | 7.1 ✅ | 记录并展示历史最高层数 | `ss-tower-best-v1`；选择页塔卡与塔结算均显示「最高 N 层」；`nextBest` 纯函数 + 2 项单测；探针：预置 1 层 → 打到第 3 层失败后存储为 3、结算显示「最高层数 3 层」 |
+| 7.2 ✅ | 塔失败奖励按层数缩放 | 原 `flow.emitResult` 在失败时把 `rewardAmount` 置 0，塔失败材料永远是保底 2；结算改用任务配表基础奖励（4 项奖励单测）；探针：第 3 层失败材料 2→16 |
 
 ### P8 新地图配置完整性（2026-10-23 追加）
 
