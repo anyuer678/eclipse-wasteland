@@ -11,7 +11,7 @@
 | 成长 | 局外武器养成 + 天赋 + 角色 + 自动选择流派 | `ss-autopick-v1`；自动模式探针连升 4 级 0 暂停 |
 | 渲染 | draw calls 57–90，triangles 40–58k（无头 SwiftShader） | `ss.perf()` |
 | 代码 | `game.ts` 2987 行、`world.ts` 1271、`screens.ts` 978 | `wc -l` |
-| 测试 | 142 项纯函数单测；CI = Test + Deploy + CodeQL | vitest / GitHub Actions |
+| 测试 | 146 项纯函数单测；CI = Test + Deploy + CodeQL | vitest / GitHub Actions |
 | 已知短板 | ① 地图变大但波次人数没跟；② 强化池同质化（重弹头/攻击强化都是纯伤害）；③ 局内商店价值低；④ 设置面板选项少（无 FOV/准星/伤害数字/低动态）；⑤ `game.ts` 过大；⑥ 存档无版本迁移 | 见下各阶段 |
 
 ## 二、原则与门槛
@@ -59,7 +59,7 @@
 
 | # | 内容 | 验收 |
 | --- | --- | --- |
-| 4.1 🚧 | `game.ts` 拆分：战斗结算 / 敌人循环 / UI 桥接，目标 <1500 行 | 阶段 1：面板文案/环境配置 → `play/weaponBrief.ts`、`render/envConfig.ts`；阶段 2：分离/敌人物理 → `play/crowdStep.ts`、`play/enemyPhysics.ts`；阶段 3a：场景/敌人只读查询 → `debug/queries.ts`；阶段 3b：状态查询 → `debug/stateQueries.ts`；阶段 3c：HUD 帧数据 → `play/hudFrame.ts`；阶段 3d：射线/AABB 遮挡 → `play/raycast.ts`；阶段 3e：hitscan 命中判定 → `play/hitscan.ts`；阶段 3f：塔层即时奖励与结算奖励数学 → `campaign/rewards.ts`（并修复塔失败奖励不随层数缩放）；阶段 3g：雷达实体映射 → `shell/radarFeed.ts`；阶段 3h：连杀播报与回血 → `play/streak.ts`；阶段 3i：单发伤害乘数链 → `play/shotDamage.ts`。game.ts 约 2826 行（峰值 3081，已拆 14 个模块）；后续：启动编排/战斗结算进一步拆块 |
+| 4.1 🚧 | `game.ts` 拆分：战斗结算 / 敌人循环 / UI 桥接，目标 <1500 行 | 阶段 1：面板文案/环境配置 → `play/weaponBrief.ts`、`render/envConfig.ts`；阶段 2：分离/敌人物理 → `play/crowdStep.ts`、`play/enemyPhysics.ts`；阶段 3a：场景/敌人只读查询 → `debug/queries.ts`；阶段 3b：状态查询 → `debug/stateQueries.ts`；阶段 3c：HUD 帧数据 → `play/hudFrame.ts`；阶段 3d：射线/AABB 遮挡 → `play/raycast.ts`；阶段 3e：hitscan 命中判定 → `play/hitscan.ts`；阶段 3f：塔层即时奖励与结算奖励数学 → `campaign/rewards.ts`（并修复塔失败奖励不随层数缩放）；阶段 3g：雷达实体映射 → `shell/radarFeed.ts`；阶段 3h：连杀播报与回血 → `play/streak.ts`；阶段 3i：单发伤害乘数链 → `play/shotDamage.ts`；阶段 3j：冲刺步进碰撞 → `play/dash.ts`。game.ts 约 2803 行（峰值 3081，已拆 15 个模块）；后续：启动编排/战斗结算进一步拆块 |
 | 4.2 ✅ | 敌人分离用空间哈希（同屏 >40 才启用） | 已完成（对所有规模启用 1.5m 均匀网格）：67 只压力场景哈希对 532、真实重叠对 138、**漏检 0**；400 点基准哈希快于暴力；30 只 diag 重叠 0、60 只 0 浮空/0 埋地 |
 | 4.3 ✅ | 存档版本号 + 迁移（v2） | 已完成：`growth/save.ts` 纯函数（缺失/越界/坏类型兜底、loadout 去重限 5）；旧档首次加载自动备份到 `-backup` 并写回 v2；单测 4 项；浏览器实测旧档 gold/材料/武器等级保留 |
 

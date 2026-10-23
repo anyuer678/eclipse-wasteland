@@ -33,6 +33,7 @@ import { clipToObstacles, pointOnObstacleSurface, rayAabbT, raySphere } from './
 import { castHitscan } from './play/hitscan';
 import { streakEvent } from './play/streak';
 import { shotDamage } from './play/shotDamage';
+import { dashStep } from './play/dash';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
@@ -1914,34 +1915,10 @@ function boot(): void {
         }
       }
 
-      // F 冲刺：向面朝方向突进。
-      // 旧实现直接 position += 6m，会穿墙/穿平台；改为 0.25m 步进的碰撞与台阶检查。
+      // F 冲刺：向面朝方向突进（步进碰撞，避免穿墙/穿平台）
       if (snap.key('KeyF') && !keyState.dash && dashCooldown <= 0) {
         dashCooldown = 4;
-        const dx = -Math.sin(player.yaw);
-        const dz = -Math.cos(player.yaw);
-        const steps = 24;
-        const step = 6 / steps;
-        const probe = { x: 0, y: 0, z: 0 };
-        for (let i = 0; i < steps; i++) {
-          const nx = player.position.x + dx * step;
-          const nz = player.position.z + dz * step;
-          // 与 PlayerController 的活动半径一致（旧的 ±13 方形是遗留的中央竞技场限制）
-          if (Math.hypot(nx, nz) > ARENA_RADIUS - 0.5) break;
-          const ng = terrainHeightAt(nx, nz);
-          if (ng - player.position.y > 0.55) break; // 高台阶：冲刺不能上
-          probe.x = nx;
-          probe.y = player.position.y;
-          probe.z = nz;
-          player.collide(probe);
-          const movedX = probe.x - player.position.x;
-          const movedZ = probe.z - player.position.z;
-          if (movedX * dx + movedZ * dz < step * 0.25) break; // 撞墙
-          player.position.x = probe.x;
-          player.position.z = probe.z;
-          const gHere = terrainHeightAt(player.position.x, player.position.z);
-          if (gHere > player.position.y && gHere - player.position.y <= 0.55) player.position.y = gHere;
-        }
+        dashStep(player, player.yaw, { arenaRadius: ARENA_RADIUS, terrainHeightAt });
         tracer.fire(player.eye(), player.eye().clone().addScaledVector(fireCtx.direction, 3), 0x9fc9e8, 1.4);
       }
       keyState.dash = snap.key('KeyF');
