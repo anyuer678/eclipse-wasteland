@@ -68,7 +68,7 @@ export class Shell {
   private combatShop: { screen: HTMLElement; show: (gold: number) => void };
   /** 每日任务状态（共享引用） */
   dailyState: { date: string; progress: Record<string, number>; claimed: string[] } = { date: '', progress: {}, claimed: [] };
-  achievementState: AchievementState = { counters: { kills: 0, clears: 0, upgrades: 0, ascensions: 0 }, claimed: [] };
+  achievementState: AchievementState = { counters: { kills: 0, clears: 0, upgrades: 0, ascensions: 0, autoPicks: 0, autoClears: 0 }, claimed: [] };
   talentState: TalentState = { talents: {} };
 
   constructor(inventory: Inventory, cb: ShellCallbacks) {

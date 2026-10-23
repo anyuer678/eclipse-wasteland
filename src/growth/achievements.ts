@@ -4,7 +4,7 @@
  * 达成条件自动判定并发放奖励（金币/材料）。持久化进度。
  */
 
-export type AchCond = 'kills' | 'clears' | 'upgrades' | 'ascensions';
+export type AchCond = 'kills' | 'clears' | 'upgrades' | 'ascensions' | 'autoPicks' | 'autoClears';
 
 export interface AchievementDef {
   id: string;
@@ -27,6 +27,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'u2', name: '军械大师', desc: '累计强化 50 次', cond: 'upgrades', target: 50, reward: { alloy: 80, core: 20 } },
   { id: 'a1', name: '机师', desc: '累计进阶 3 次', cond: 'ascensions', target: 3, reward: { core: 15 } },
   { id: 'a2', name: '战争之王', desc: '累计进阶 10 次', cond: 'ascensions', target: 10, reward: { core: 40, alloy: 100 } },
+  { id: 'p1', name: '自动指挥官', desc: '开启自动选择通关 5 次', cond: 'autoClears', target: 5, reward: { gold: 200, alloy: 30 } },
+  { id: 'p2', name: '流派大师', desc: '自动领取 60 项局内强化', cond: 'autoPicks', target: 60, reward: { core: 25, gold: 300 } },
 ];
 
 export interface AchievementState {
@@ -44,14 +46,21 @@ export function loadAchievements(): AchievementState {
     if (raw) {
       const p = JSON.parse(raw) as AchievementState;
       return {
-        counters: { kills: p.counters?.kills ?? 0, clears: p.counters?.clears ?? 0, upgrades: p.counters?.upgrades ?? 0, ascensions: p.counters?.ascensions ?? 0 },
+        counters: {
+          kills: p.counters?.kills ?? 0,
+          clears: p.counters?.clears ?? 0,
+          upgrades: p.counters?.upgrades ?? 0,
+          ascensions: p.counters?.ascensions ?? 0,
+          autoPicks: p.counters?.autoPicks ?? 0,
+          autoClears: p.counters?.autoClears ?? 0,
+        },
         claimed: Array.isArray(p.claimed) ? p.claimed : [],
       };
     }
   } catch {
     // ignore
   }
-  return { counters: { kills: 0, clears: 0, upgrades: 0, ascensions: 0 }, claimed: [] };
+  return { counters: { kills: 0, clears: 0, upgrades: 0, ascensions: 0, autoPicks: 0, autoClears: 0 }, claimed: [] };
 }
 
 function save(state: AchievementState): void {

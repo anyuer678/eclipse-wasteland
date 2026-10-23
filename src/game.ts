@@ -505,7 +505,7 @@ function boot(): void {
   shell.dailyState.progress = loadedDaily.progress;
   shell.dailyState.claimed = loadedDaily.claimed;
   const dailyState = shell.dailyState;
-  const achAdd = (cond: 'kills' | 'clears' | 'upgrades' | 'ascensions', amount: number): void => {
+  const achAdd = (cond: 'kills' | 'clears' | 'upgrades' | 'ascensions' | 'autoPicks' | 'autoClears', amount: number): void => {
     const newly = addProgress(shell.achievementState, cond, amount);
     for (const a of newly) grantReward(inventory, a);
   };
@@ -954,6 +954,7 @@ function boot(): void {
       const talentGain = Math.floor(result.kills / 15);
       if (talentGain > 0) inventory.addTalentPoints(talentGain);
       achAdd('clears', 1);
+      if (autoPickLabel()) achAdd('autoClears', 1);
       refreshGrowth();
     } else if (result.phase === 'clear') {
       inventory.addMaterial(result.rewardMaterial, Math.round(result.rewardAmount * diffReward));
@@ -964,6 +965,7 @@ function boot(): void {
       const talentGain = Math.floor(result.kills / 15);
       if (talentGain > 0) inventory.addTalentPoints(talentGain);
       achAdd('clears', 1);
+      if (autoPickLabel()) achAdd('autoClears', 1);
       addDailyProgress(dailyState, 'clears'); // 每日任务：通关
       refreshGrowth();
     } else if (result.phase === 'failed' && result.mission.tower) {
@@ -1509,7 +1511,10 @@ function boot(): void {
   function applyBoostPick(id: string, auto = false): void {
     const b = applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
     runPickCount += 1;
-    if (auto) runAutoPickCount += 1;
+    if (auto) {
+      runAutoPickCount += 1;
+      achAdd('autoPicks', 1);
+    }
     refreshRun();
     pendingLevelUps = Math.max(0, pendingLevelUps - 1);
     addDamagePopup(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), `获得 · ${b.name} ×${runState.boosts[id as keyof typeof runState.boosts]}`, '#e8c377');

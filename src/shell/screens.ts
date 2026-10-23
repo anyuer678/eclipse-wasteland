@@ -247,7 +247,7 @@ export function createAchievementScreen(
 ): { screen: HTMLElement; refresh: () => void } {
   const screen = el('div', 'ss-screen hidden');
   screen.appendChild(el('div', 'ss-title', '成就'));
-  screen.appendChild(el('div', 'ss-subtitle', '击杀 · 通关 · 锻造'));
+  screen.appendChild(el('div', 'ss-subtitle', '击杀 · 通关 · 锻造 · 自动选择'));
   const card = el('div', 'ss-card', '');
   card.style.minWidth = '560px';
   const list = el('div', '', '');
