@@ -34,6 +34,7 @@ import { castHitscan } from './play/hitscan';
 import { streakEvent } from './play/streak';
 import { shotDamage } from './play/shotDamage';
 import { dashStep } from './play/dash';
+import { mitigatedDamage } from './play/damageTaken';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
 import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
@@ -1463,8 +1464,7 @@ function boot(): void {
     const st = computeStats();
     const furyResist = furyTimer > 0 ? 0.3 : 0;
     // 总减伤（天赋韧性 + 局内铁壁 + 狂暴抗性）夹取到 85%，避免叠穿
-    const mitig = Math.min(0.85, st.armor + runB.armorBonus + furyResist);
-    const afterArmor = v * (1 - mitig) * (shieldTimer > 0 ? 0.3 : 1);
+    const afterArmor = mitigatedDamage(v, st.armor, runB.armorBonus, furyResist, shieldTimer > 0);
     setHp(hp - Math.max(0, afterArmor));
     if (runB.thorns > 0) {
       // 荆棘：反弹给最近的可见敌人（不能反弹给墙后的怪）
