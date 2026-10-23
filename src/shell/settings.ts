@@ -65,7 +65,8 @@ export interface SettingsPanel {
 
 export function createSettingsPanel(
   state: SettingsState,
-  apply: (s: SettingsState) => void
+  apply: (s: SettingsState) => void,
+  onShowTips?: () => void
 ): SettingsPanel {
   const el = document.createElement('div');
   el.style.cssText =
@@ -228,6 +229,15 @@ export function createSettingsPanel(
   const mvVal = document.createElement('span');
   mvVal.style.cssText = 'font-size:10px;color:#7d8698;';
   mv.body.appendChild(mvVal);
+
+  // 操作提示（可重看）
+  const tips = row('操作提示');
+  const tipsBtn = document.createElement('button');
+  tipsBtn.textContent = '查看提示';
+  tipsBtn.style.cssText =
+    'background:none;border:1px solid #262e3a;color:#7d8698;padding:4px 10px;cursor:pointer;font-family:inherit;font-size:11px;letter-spacing:0.1em;';
+  tipsBtn.addEventListener('click', () => onShowTips?.());
+  tips.body.appendChild(tipsBtn);
 
   // 关闭
   const close = document.createElement('button');

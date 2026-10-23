@@ -10,6 +10,8 @@ export type { SkillLine } from './hud';
 import { createMenuScreen, createSelectScreen, createResultScreen, createArmoryPanel, createPauseScreen, createArmoryScreen, createShopScreen, createTalentScreen, createForgeScreen, createRoleScreen, createAchievementScreen, createStatsScreen, createLevelUpScreen, createDailyScreen, createCombatShop, weaponOf } from './screens';
 import type { RunSummary } from './screens';
 import { createAutoPickScreen } from './autopickScreen';
+import { createTips } from './tips';
+import type { TipsView } from './tips';
 import type { AchievementState } from '../growth';
 import { ROLES } from '../play/roles';
 import type { TalentState } from '../growth';
@@ -62,6 +64,7 @@ export class Shell {
   private levelUpScreen: { screen: HTMLElement; show: (level: number, choices: { id: string; name: string; desc: string }[]) => void };
   private dailyScreen: { screen: HTMLElement; refresh: () => void };
   private autoPickScreen: { screen: HTMLElement; refresh: () => void };
+  private tips: TipsView;
   private combatShop: { screen: HTMLElement; show: (gold: number) => void };
   /** 每日任务状态（共享引用） */
   dailyState: { date: string; progress: Record<string, number>; claimed: string[] } = { date: '', progress: {}, claimed: [] };
@@ -125,6 +128,7 @@ export class Shell {
       onBack: () => this.showMenu(),
     });
     this.autoPickScreen = createAutoPickScreen({ onBack: () => this.showMenu() });
+    this.tips = createTips();
     this.combatShop = createCombatShop({
       onBuy: (id) => cb.onCombatBuy?.(id),
       onClose: () => cb.onCombatClose?.(),
@@ -242,7 +246,13 @@ export class Shell {
     this.hud.root.style.display = 'block';
   }
 
+  /** 操作提示：首局自动一次；设置里可强制重看 */
+  showTips(force = true): void {
+    this.tips.show(force);
+  }
+
   showMenu(): void {
+    this.tips.hide();
     this.menu.screen.classList.remove('hidden');
     this.select.classList.add('hidden');
     this.result.screen.classList.add('hidden');
@@ -276,6 +286,7 @@ export class Shell {
     this.pause.classList.add('hidden');
     this.autoPickScreen.screen.classList.add('hidden');
     this.hud.root.style.display = 'block';
+    this.tips.show();
   }
 
   showResult(result: FlowResult, summary?: RunSummary): void {

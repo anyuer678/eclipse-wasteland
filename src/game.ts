@@ -793,7 +793,7 @@ function boot(): void {
       world.camera.updateProjectionMatrix();
     }
     shell.hud.setCrosshairStyle(s2.crosshair);
-  });
+  }, () => shell.showTips());
   radar.el.style.display = settings.radar ? 'block' : 'none';
   shell.hud.setCrosshairStyle(settings.crosshair);
   let settingsWasOpen = false;
