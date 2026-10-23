@@ -6,3 +6,4 @@ export { NavField } from './nav';
 export type { NavObstacle, NavPoint, NavBuildOptions } from './nav';
 export { stepVertical, separationDelta, overlapDepth } from './motion';
 export type { VerticalBody } from './motion';
+export { SpatialHash } from './spatialHash';

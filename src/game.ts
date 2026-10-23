@@ -17,7 +17,7 @@ import { createSettingsPanel, loadSettings } from './shell/settings';
 import { PlayerController } from './play/controller';
 import { TracerPool, Viewmodel, RARITY_COLORS } from './arsenal';
 import type { WeaponDef, FireContext } from './arsenal';
-import { Enemy, NavField, Spawner, separationDelta } from './horde';
+import { Enemy, NavField, Spawner, separationDelta, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow, pickSpawnAnchor } from './campaign';
@@ -999,6 +999,8 @@ function boot(): void {
   const eyeScratch = new THREE.Vector3();
   const hitScratch = new THREE.Vector3();
   const centerScratch = new THREE.Vector3();
+  /** 敌人分离用空间哈希（复用，避免每帧分配） */
+  const enemyHash = new SpatialHash(1.5);
   const clipDir = new THREE.Vector3();
 
   /**
@@ -2239,31 +2241,37 @@ function boot(): void {
         resolveEnemyObstacles(e.root.position, e.def.radius + 0.06);
       }
       const sep = { x: 0, z: 0 };
-      // 两次松弛：密集怪群里单次分离会因相互抵消而残留重叠
+      // 两次松弛：密集怪群里单次分离会因相互抵消而残留重叠。
+      // 空间哈希只检查同格/邻格，避免同屏 40+ 时的 O(n²) 两两扫描。
       for (let iter = 0; iter < 2; iter++) {
+        enemyHash.clear();
         for (let i = 0; i < crowd.length; i++) {
           const a = crowd[i];
-          if (!a.alive) continue;
-          for (let j = i + 1; j < crowd.length; j++) {
-            const b = crowd[j];
-            if (!b.alive) continue;
-            if (Math.abs(a.root.position.y - b.root.position.y) > 1.4) continue;
-            if (separationDelta(
-              a.root.position.x,
-              a.root.position.z,
-              a.def.radius + 0.06,
-              b.root.position.x,
-              b.root.position.z,
-              b.def.radius + 0.06,
-              sep,
-              ((i * 7 + j) * 2.399) % (Math.PI * 2),
-              0.6
-            )) {
-              a.root.position.x += sep.x;
-              a.root.position.z += sep.z;
-              b.root.position.x -= sep.x;
-              b.root.position.z -= sep.z;
-            }
+          if (a.alive) enemyHash.insert(i, a.root.position.x, a.root.position.z);
+        }
+        const pairs = enemyHash.pairs();
+        for (let p = 0; p < pairs.length; p += 2) {
+          const i = pairs[p];
+          const j = pairs[p + 1];
+          const a = crowd[i];
+          const b = crowd[j];
+          if (!a.alive || !b.alive) continue;
+          if (Math.abs(a.root.position.y - b.root.position.y) > 1.4) continue;
+          if (separationDelta(
+            a.root.position.x,
+            a.root.position.z,
+            a.def.radius + 0.06,
+            b.root.position.x,
+            b.root.position.z,
+            b.def.radius + 0.06,
+            sep,
+            ((i * 7 + j) * 2.399) % (Math.PI * 2),
+            0.6
+          )) {
+            a.root.position.x += sep.x;
+            a.root.position.z += sep.z;
+            b.root.position.x -= sep.x;
+            b.root.position.z -= sep.z;
           }
         }
       }
@@ -2839,6 +2847,28 @@ function boot(): void {
         rawDx: rawOk ? +raw.x.toFixed(2) : 0,
         rawDz: rawOk ? +raw.z.toFixed(2) : 0,
       };
+    },
+    /** 分离审计：当前场上敌人里，空间哈希是否覆盖了所有真实重叠对 */
+    separationAudit(): { crowd: number; hashPairs: number; brutePairs: number; missing: number } {
+      const crowd = spawner.all().filter((e) => e.alive);
+      const hash = new SpatialHash(1.5);
+      const pos = crowd.map((e) => e.root.position);
+      pos.forEach((p, i) => hash.insert(i, p.x, p.z));
+      const pairs = hash.pairs();
+      const hashSet = new Set<string>();
+      for (let k = 0; k < pairs.length; k += 2) hashSet.add(`${pairs[k]},${pairs[k + 1]}`);
+      let brute = 0;
+      let missing = 0;
+      for (let i = 0; i < crowd.length; i++) {
+        for (let j = i + 1; j < crowd.length; j++) {
+          const need = crowd[i].def.radius + crowd[j].def.radius + 0.12;
+          if (Math.hypot(pos[i].x - pos[j].x, pos[i].z - pos[j].z) < need) {
+            brute += 1;
+            if (!hashSet.has(`${i},${j}`)) missing += 1;
+          }
+        }
+      }
+      return { crowd: crowd.length, hashPairs: pairs.length / 2, brutePairs: brute, missing };
     },
     enemyDump(): { childTypes: string[]; modelApplied: boolean; barOk: boolean; modelVisible: boolean }[] {
       return spawner.all().map((e) => ({
