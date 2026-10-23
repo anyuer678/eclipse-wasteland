@@ -34,6 +34,8 @@ import { castHitscan } from './play/hitscan';
 import { streakEvent } from './play/streak';
 import { shotDamage } from './play/shotDamage';
 import { dashStep } from './play/dash';
+import { POISON_DPS, inPoisonPool } from './play/hazards';
+import type { PoisonPool } from './play/hazards';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
@@ -2249,27 +2251,21 @@ function boot(): void {
       hitFlash = Math.max(0, hitFlash - dt);
       hurtInvuln = Math.max(0, hurtInvuln - dt);
       // 毒池陷阱：玩家/敌人踩入持续掉毒伤
-      const pools = (mapRoot?.userData.poisonPools ?? []) as { x: number; z: number; r: number }[];
+      const pools = (mapRoot?.userData.poisonPools ?? []) as PoisonPool[];
       if (pools.length > 0 && !inMenu && flow.phase !== 'clear' && flow.phase !== 'failed') {
         const hf = (mapRoot?.userData.heightfield as ((x: number, z: number) => number) | undefined) ?? (() => 0);
         for (const pool of pools) {
-          // 以池子所在地面为基准：高地上的池照样生效，平台上的玩家/敌人不会被隔空毒到
           const poolGround = hf(pool.x, pool.z);
-          const dx = player.position.x - pool.x;
-          const dz = player.position.z - pool.z;
-          if (dx * dx + dz * dz < pool.r * pool.r && Math.abs(player.position.y - poolGround) < 0.7) {
-            setHp(hp - 8 * dt);
+          if (inPoisonPool(player.position, pool, poolGround)) {
+            setHp(hp - POISON_DPS * dt);
             if (Math.random() < 0.08) spawnParticles(player.position.clone().add(new THREE.Vector3(0, 0.8, 0)), 0x3a8a4a, 1, 0.5);
           }
           // 敌人同样受毒池影响
           for (const e of spawner.all()) {
             if (!e.alive) continue;
-            const ex = e.root.position.x - pool.x;
-            const ez = e.root.position.z - pool.z;
-            if (ex * ex + ez * ez < pool.r * pool.r && Math.abs(e.root.position.y - poolGround) < 0.7) {
-              const dead = e.takeDamage(8 * dt);
-              if (dead && registerEnemyKill(e)) break;
-            }
+            if (!inPoisonPool(e.root.position, pool, poolGround)) continue;
+            const dead = e.takeDamage(POISON_DPS * dt);
+            if (dead && registerEnemyKill(e)) break;
           }
         }
       }
