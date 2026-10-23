@@ -32,6 +32,7 @@ import { separateCrowd } from './play/crowdStep';
 import { clipToObstacles, pointOnObstacleSurface, rayAabbT, raySphere } from './play/raycast';
 import { castHitscan } from './play/hitscan';
 import { streakEvent } from './play/streak';
+import { shotDamage } from './play/shotDamage';
 import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
@@ -1105,13 +1106,20 @@ function boot(): void {
       const st = computeStats();
       const curG = inventory.getWeapon(arsenal.current.def.id);
       const critBonus = affixCritMult(curG) + (shortBuffs.crit > 0 ? 0.2 : 0) + runB.critBonus;
-      const streakMult = 1 + Math.min(killStreak, 6) * 0.05;
-      const isCrit = Math.random() < st.critRate + critBonus;
-      const critMult = isCrit ? arsenal.current.def.critMult + runB.critDmgBonus : 1;
-      let dmg = damage * supDealt * streakMult * (stealthTimer > 0 ? 2 * (1 + inventory.roleLevel(selectedRoleId) * 0.15) : 1) * st.attackMult * critMult * runB.dmgMult;
-      if (!Number.isFinite(dmg) || dmg <= 0) dmg = damage; // NaN 防护
-      // 高地优势：玩家比命中点低 0.4m 以上 → +20% 伤害（旧实现每次命中扫全部敌人找高度）
-      if (player.position.y > pos.y - 0.6) dmg *= 1.2;
+      const shot = shotDamage({
+        base: damage,
+        suppression: supDealt,
+        killStreak,
+        stealthMult: stealthTimer > 0 ? 2 * (1 + inventory.roleLevel(selectedRoleId) * 0.15) : 1,
+        attackMult: st.attackMult,
+        critChance: st.critRate + critBonus,
+        critMult: arsenal.current.def.critMult + runB.critDmgBonus,
+        runDamageMult: runB.dmgMult,
+        // 高地优势：玩家比命中点低 0.4m 以上 → +20% 伤害
+        highGround: player.position.y > pos.y - 0.6,
+      });
+      const isCrit = shot.isCrit;
+      const dmg = shot.damage;
       if (activeBoss && activeBoss.alive) {
         activeBoss.centerInto(centerScratch);
         const bdx = centerScratch.x - pos.x;
