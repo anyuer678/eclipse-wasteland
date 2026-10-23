@@ -20,7 +20,7 @@ import type { FireContext } from './arsenal';
 import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
-import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards } from './campaign';
+import { MISSIONS, MissionFlow, pickSpawnAnchor, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards, towerFloorClearRewards } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
@@ -901,12 +901,9 @@ function boot(): void {
     // 塔模式：BOSS 击杀 → 掉大宝箱 + 即时奖励
     if (_mission.tower && prevPhase === 'boss' && phase === 'wave') {
       spawnChest(true);
-      const floor = flow.waveIndex;
-      const diffR = difficulty >= 2 ? 3 : difficulty >= 1.5 ? 1.8 : difficulty <= 0.8 ? 0.8 : 1;
-      const gold = Math.round(20 * (1 + floor * 0.15) * diffR * (1 + runB.luckyGold));
-      const mat = Math.round(2 + floor * 0.5);
-      inventory.addGold(gold);
-      inventory.addMaterial('\u5408\u91d1\u788e\u7247', mat);
+      const r = towerFloorClearRewards(flow.waveIndex, difficulty, runB.luckyGold);
+      inventory.addGold(r.gold);
+      inventory.addMaterial(r.material, r.materialAmount);
     }
     prevPhase = phase;
   };

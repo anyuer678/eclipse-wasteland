@@ -64,3 +64,20 @@ export function towerFailureRewards(i: SettleInput): RewardOut {
     talentGain: 0,
   };
 }
+
+/**
+ * 塔模式每层击破 BOSS 的即时奖励（floor 为 0 起的当前层索引）。
+ * 材料仍按层数线性增长、不吃难度倍率，保持既有掉落节奏。
+ */
+export function towerFloorClearRewards(
+  floor: number,
+  difficulty: number,
+  luckyGold: number
+): { material: string; materialAmount: number; gold: number } {
+  const d = difficultyRewardMult(difficulty, luckyGold);
+  return {
+    material: '合金碎片',
+    materialAmount: Math.round(2 + floor * 0.5),
+    gold: Math.round(20 * (1 + floor * 0.15) * d),
+  };
+}

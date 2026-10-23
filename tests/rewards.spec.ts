@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { clearRewards, difficultyRewardMult, towerFailureRewards } from '../src/campaign/rewards'
+import { clearRewards, difficultyRewardMult, towerFailureRewards, towerFloorClearRewards } from '../src/campaign/rewards'
 import type { SettleInput } from '../src/campaign/rewards'
 
 const input = (over: Partial<SettleInput> = {}): SettleInput => ({
@@ -43,5 +43,12 @@ describe('campaign/rewards', () => {
     expect(r.materialAmount).toBe(2)
     expect(r.gold).toBe(Math.round(20 * 1.2))
     expect(r.talentGain).toBe(0)
+  })
+
+  it('computes per-floor tower clear rewards with difficulty and lucky gold', () => {
+    const r = towerFloorClearRewards(3, 2, 0.2)
+    expect(r.material).toBe('合金碎片')
+    expect(r.materialAmount).toBe(Math.round(2 + 3 * 0.5))
+    expect(r.gold).toBe(Math.round(20 * (1 + 3 * 0.15) * 3 * 1.2))
   })
 })
