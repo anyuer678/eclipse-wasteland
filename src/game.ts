@@ -21,7 +21,7 @@ import { Enemy, NavField, Spawner, separationDelta } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow } from './campaign';
-import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken } from './growth';
+import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, expNeeded, BOOST_POOL, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, pickBoost } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
@@ -479,11 +479,7 @@ function boot(): void {
     // 面板「暴击伤害」与战力按当前手持武器结算，与战斗一致（简报「暴击×N」即实际倍率）
     onStatsQuery: () => ({ ...computeStats(), critMult: arsenal.current.def.critMult }),
     onPickBoost: (id) => {
-      const b = applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
-      refreshRun();
-      pendingLevelUps = Math.max(0, pendingLevelUps - 1);
-      // 选牌反馈
-      addDamagePopup(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), `获得 · ${b.name} ×${runState.boosts[id as keyof typeof runState.boosts]}`, '#e8c377');
+      applyBoostPick(id);
       if (pendingLevelUps > 0) {
         // 还有欠着的等级：继续弹下一张，不解除暂停
         showLevelUpChoices();
@@ -1452,9 +1448,28 @@ function boot(): void {
     applyMaxHpGrowth();
   };
 
-  /** 展示当前待选的升级牌；每一级都会单独给一次选择 */
+  /** 应用一次强化选择（手动/自动共用）：记层数、刷新增益、扣一次待选、弹提示 */
+  function applyBoostPick(id: string): void {
+    const b = applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
+    refreshRun();
+    pendingLevelUps = Math.max(0, pendingLevelUps - 1);
+    addDamagePopup(player.position.clone().add(new THREE.Vector3(0, 1.6, 0)), `获得 · ${b.name} ×${runState.boosts[id as keyof typeof runState.boosts]}`, '#e8c377');
+  }
+
+  /** 展示当前待选的升级牌；每一级都会单独给一次选择（开启自动选择时直接按流派领取） */
   function showLevelUpChoices(): void {
     if (pendingLevelUps <= 0) return;
+    const preset = activePreset();
+    if (preset) {
+      // 自动选择：不暂停、不弹牌；连升多级也逐级按优先级领完
+      while (pendingLevelUps > 0) {
+        const id = pickBoost(rollChoices(runState).map((b) => b.id), preset);
+        if (!id) break;
+        sfx.levelUp();
+        applyBoostPick(id);
+      }
+      if (pendingLevelUps <= 0) return;
+    }
     sfx.levelUp();
     paused = true;
     unlockMouse();

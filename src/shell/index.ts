@@ -8,6 +8,7 @@ import { createHud } from './hud';
 import type { HudView } from './hud';
 export type { SkillLine } from './hud';
 import { createMenuScreen, createSelectScreen, createResultScreen, createArmoryPanel, createPauseScreen, createArmoryScreen, createShopScreen, createTalentScreen, createForgeScreen, createRoleScreen, createAchievementScreen, createStatsScreen, createLevelUpScreen, createDailyScreen, createCombatShop, weaponOf } from './screens';
+import { createAutoPickScreen } from './autopickScreen';
 import type { AchievementState } from '../growth';
 import { ROLES } from '../play/roles';
 import type { TalentState } from '../growth';
@@ -59,6 +60,7 @@ export class Shell {
   private statsScreen: { screen: HTMLElement; refresh: () => void };
   private levelUpScreen: { screen: HTMLElement; show: (level: number, choices: { id: string; name: string; desc: string }[]) => void };
   private dailyScreen: { screen: HTMLElement; refresh: () => void };
+  private autoPickScreen: { screen: HTMLElement; refresh: () => void };
   private combatShop: { screen: HTMLElement; show: (gold: number) => void };
   /** 每日任务状态（共享引用） */
   dailyState: { date: string; progress: Record<string, number>; claimed: string[] } = { date: '', progress: {}, claimed: [] };
@@ -121,13 +123,14 @@ export class Shell {
       onClaim: (id) => cb.onClaimDaily?.(id),
       onBack: () => this.showMenu(),
     });
+    this.autoPickScreen = createAutoPickScreen({ onBack: () => this.showMenu() });
     this.combatShop = createCombatShop({
       onBuy: (id) => cb.onCombatBuy?.(id),
       onClose: () => cb.onCombatClose?.(),
     });
 
     this.hud = createHud();
-    document.body.append(this.menu.screen, this.select, this.result.screen, this.pause, this.armoryScreen.screen, this.shopScreen.screen, this.talentScreen.screen, this.forgeScreen.screen, this.roleScreen.screen, this.achScreen.screen, this.statsScreen.screen, this.levelUpScreen.screen, this.dailyScreen.screen, this.combatShop.screen);
+    document.body.append(this.menu.screen, this.select, this.result.screen, this.pause, this.armoryScreen.screen, this.shopScreen.screen, this.talentScreen.screen, this.forgeScreen.screen, this.roleScreen.screen, this.achScreen.screen, this.statsScreen.screen, this.levelUpScreen.screen, this.dailyScreen.screen, this.combatShop.screen, this.autoPickScreen.screen);
     // 主菜单系统网格（图标 · 名称 · 简述）
     const menuGrid = this.menu;
     const cards: [string, string, string, string, (() => void) | undefined][] = [
@@ -139,6 +142,7 @@ export class Shell {
       ['◈', '角色', '战术专精选择', '05', cb.onOpenRole ? () => cb.onOpenRole?.() : undefined],
       ['◉', '属性', '四围 · 战力 · 消耗品', '06', cb.onOpenStats ? () => cb.onOpenStats?.() : undefined],
       ['☆', '成就', '战功记录', '07', cb.onOpenAchievement ? () => cb.onOpenAchievement?.() : undefined],
+      ['⇄', '自动选择', '流派 · 优先级自动选', '08', () => this.showAutoPick()],
     ];
     for (const [ico, name, desc, num, fn] of cards) {
       if (fn) menuGrid.addGridCard(ico, name, desc, num, fn);
@@ -217,6 +221,12 @@ export class Shell {
     this.armoryScreen.screen.classList.remove('hidden');
   }
 
+  showAutoPick(): void {
+    this.menu.screen.classList.add('hidden');
+    this.autoPickScreen.refresh();
+    this.autoPickScreen.screen.classList.remove('hidden');
+  }
+
   hideArmory(): void {
     this.armoryScreen.screen.classList.add('hidden');
   }
@@ -245,6 +255,7 @@ export class Shell {
     this.levelUpScreen.screen.classList.add('hidden');
     this.dailyScreen.screen.classList.add('hidden');
     this.combatShop.screen.classList.add('hidden');
+    this.autoPickScreen.screen.classList.add('hidden');
     this.pause.classList.add('hidden');
     this.hud.root.style.display = 'none';
   }
@@ -262,6 +273,7 @@ export class Shell {
     this.select.classList.add('hidden');
     this.result.screen.classList.add('hidden');
     this.pause.classList.add('hidden');
+    this.autoPickScreen.screen.classList.add('hidden');
     this.hud.root.style.display = 'block';
   }
 
