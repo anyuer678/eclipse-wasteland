@@ -29,6 +29,8 @@ export interface FireContext {
   onHitEnemy?: (pos: THREE.Vector3, damage: number, extra: { slow?: number; lockTarget?: boolean }) => boolean;
   /** 穿透查询：沿方向收集射线上的敌人位置（含最近目标，按距离排序） */
   resolvePierce?: (origin: THREE.Vector3, dir: THREE.Vector3, max: number) => THREE.Vector3[];
+  /** 局内「穿透弹」强化：主命中后继续穿透的额外目标数与衰减 */
+  runPierce?: { targets: number; falloff: number };
   /** 查询锁敌目标（阶段 4 接入） */
   findTarget?: (origin: THREE.Vector3, maxRange: number) => THREE.Vector3 | null;
   /** 连锁闪电：命中点向附近敌人弹跳（chain 机制） */
@@ -243,6 +245,14 @@ export class Weapon {
         const extra: { slow?: number } = {};
         if (d.mech.kind === 'slow') extra.slow = (d.mech as { factor: number }).factor;
         const hitAny = ctx.onHitEnemy(hit, shotDmg, extra);
+        // 局内「穿透弹」：主命中后沿弹道继续穿透（武器自身 pierce 机制不叠加）
+        if (p === 0 && ctx.runPierce && ctx.runPierce.targets > 0 && d.mech.kind !== 'pierce' && d.mech.kind !== 'beam') {
+          const rest = ctx.resolvePierce?.(origin, ctx.direction, 1 + ctx.runPierce.targets) ?? [];
+          for (let i = 1; i < rest.length; i++) {
+            ctx.tracer.fire(origin, rest[i], d.color, lineIntensity * Math.max(0.35, 1 - i * 0.22));
+            ctx.onHitEnemy?.(rest[i], shotDmg * Math.pow(ctx.runPierce.falloff, i), {});
+          }
+        }
         // burst 机制（三连突击）：同一次开火连发多发
         if (d.mech.kind === 'burst') {
           const m = d.mech as { shots: number };

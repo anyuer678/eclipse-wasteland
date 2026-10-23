@@ -1136,6 +1136,7 @@ function boot(): void {
   const fireCtx: FireContext = {
     origin: new THREE.Vector3(),
     direction: new THREE.Vector3(),
+    runPierce: { targets: 0, falloff: 0.6 },
     tracer,
     onShot: (): void => {
       sfx.shot(arsenal.current.def.archetype);
@@ -1470,6 +1471,8 @@ function boot(): void {
   let pendingLevelUps = 0;
   const refreshRun = (): void => {
     runB = runBonuses(runState);
+    // 局内「穿透弹」：主命中后继续穿透的目标数与衰减
+    fireCtx.runPierce = { targets: runB.pierceStacks, falloff: runB.pierceFalloff };
     refreshGrowth();
     applySpeedMult();
     applyMaxHpGrowth();
@@ -2603,6 +2606,13 @@ function boot(): void {
         e.place(x, z, player.terrainHeight(x, z));
       }
       syncBossModel();
+    },
+    /** 调试：把指定序号的敌人放到世界坐标（穿透/排队类命中探针用） */
+    placeEnemy(index: number, x: number, z: number): boolean {
+      const e = spawner.all()[index];
+      if (!e) return false;
+      e.place(x, z, player.terrainHeight(x, z));
+      return true;
     },
     heal(): void {
       setHp(maxHp);

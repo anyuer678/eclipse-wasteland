@@ -49,7 +49,7 @@ export const BOOST_POOL: RunBoost[] = [
   { id: 'regen', name: '再生', desc: '每秒回复 2 生命', value: 2 },
   { id: 'armor', name: '铁壁', desc: '减伤 +18%', value: 0.18 },
   { id: 'split', name: '分裂弹', desc: '命中分裂 2 发（40% 伤害）', value: 0.4 },
-  { id: 'pierce', name: '重弹头', desc: '伤害 +26%', value: 0.26 },
+  { id: 'pierce', name: '穿透弹', desc: '命中穿透 1 个额外目标（60% 伤害，最多 2 个）', value: 0.6 },
   { id: 'vamp', name: '嗜血', desc: '伤害的 4% 回复生命', value: 0.04 },
   { id: 'energy', name: '能量涌动', desc: '能量回复 +2/s', value: 2 },
   { id: 'hp', name: '生命强化', desc: '最大生命 +20', value: 20 },
@@ -134,10 +134,13 @@ export function runBonuses(run: RunState): {
   frost: number;
   luckyGold: number;
   thorns: number;
+  /** 穿透弹额外目标数（0–2）与伤害衰减 */
+  pierceStacks: number;
+  pierceFalloff: number;
 } {
   const n = (id: BoostId): number => run.boosts[id] ?? 0;
   return {
-    dmgMult: 1 + n('dmg') * 0.22 + n('pierce') * 0.26,
+    dmgMult: 1 + n('dmg') * 0.22,
     spdMult: 1 + n('spd') * 0.16,
     critBonus: n('crit') * 0.12 + n('lucky') * 0.06,
     critDmgBonus: n('critDmg') * 0.4,
@@ -154,5 +157,7 @@ export function runBonuses(run: RunState): {
     frost: n('frost') * 0.2,
     luckyGold: n('lucky') * 0.2,
     thorns: n('thorns') * 5,
+    pierceStacks: Math.min(2, n('pierce')),
+    pierceFalloff: 0.6,
   };
 }
