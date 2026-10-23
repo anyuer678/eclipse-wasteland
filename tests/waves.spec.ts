@@ -4,7 +4,7 @@ import { scaleWaveSpec } from '../src/campaign/waves'
 describe('campaign/waves', () => {
   it('scales every kind and rounds to the nearest enemy', () => {
     const out = scaleWaveSpec({ chasers: 5, boomers: 2, spitters: 1, guards: 1, berserkers: 3, casters: 2 }, 1.3)
-    expect(out).toEqual({ chasers: 7, boomers: 3, spitters: 1, guards: 1, berserkers: 4, casters: 3 })
+    expect(out).toEqual({ chasers: 7, boomers: 3, spitters: 1, guards: 1, berserkers: 4, casters: 3, healers: 0, turrets: 0 })
   })
 
   it('keeps missing optional kinds at zero', () => {

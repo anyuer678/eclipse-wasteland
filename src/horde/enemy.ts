@@ -12,7 +12,7 @@ import { createHealthBar, getEnemyTemplate } from './enemyModel';
 import { stepVertical } from './motion';
 import type { VerticalBody } from './motion';
 
-export type EnemyKind = 'chaser' | 'boomer' | 'spitter' | 'guard' | 'berserker' | 'caster';
+export type EnemyKind = 'chaser' | 'boomer' | 'spitter' | 'guard' | 'berserker' | 'caster' | 'healer' | 'turret';
 
 /** 精英词缀（试炼之塔 / 高波次敌人） */
 export type EliteAffix = 'frantic' | 'armored' | 'regenerating';
@@ -50,6 +50,8 @@ export const ENEMY_DEFS: Record<EnemyKind, EnemyDef> = {
   guard: { kind: 'guard', hp: 120, speed: 1.3, damage: 6, color: 0x4a6a9a, radius: 0.6, range: 0, blastRadius: 0, resist: 0.35, elementResist: { physical: 2, fire: 0, ice: 0, energy: 1 } },
   berserker: { kind: 'berserker', hp: 30, speed: 3.8, damage: 7, color: 0xb33a8a, radius: 0.42, range: 0, blastRadius: 0, elementResist: { physical: 0, fire: 1, ice: 0, energy: 0 } },
   caster: { kind: 'caster', hp: 50, speed: 2.1, damage: 7, color: 0x8a4ad9, radius: 0.45, range: 16, blastRadius: 0, elementResist: { physical: 0, fire: 0, ice: 0, energy: 2 } },
+  healer: { kind: 'healer', hp: 70, speed: 2.0, damage: 0, color: 0x4ad98a, radius: 0.5, range: 12, blastRadius: 0, elementResist: { physical: 0, fire: 1, ice: 0, energy: 0 } },
+  turret: { kind: 'turret', hp: 160, speed: 0, damage: 13, color: 0x9a8f7a, radius: 0.7, range: 18, blastRadius: 0, resist: 0.2, elementResist: { physical: 1, fire: 0, ice: 0, energy: 1 } },
 };
 
 /** 模块级临时向量（避免每帧每敌人 new） */
@@ -83,6 +85,8 @@ export class Enemy {
   /** 自爆计时（boomer 接近后引爆） */
   private fuseTimer = -1;
   private spitCooldown = 0;
+  /** 治疗者：下一次群体治疗倒计时 */
+  private healTimer = 4.5;
   /** 近战攻击冷却（防止多只同时每帧扣血秒杀） */
   private attackCooldown = 0;
   /** 灼烧 DOT（烈焰风暴命中施加） */
@@ -179,7 +183,7 @@ export class Enemy {
     this.root.userData.enemy = this;
   }
 
-  /** 厚甲减伤 / 再生回复（每帧调用） */
+  /** 护甲/再生（每帧调用） */
   tickElite(dt: number): void {
     if (!this.elite) return;
     if (this.elite.kind === 'regenerating' && this.alive) {
@@ -189,8 +193,16 @@ export class Enemy {
     }
   }
 
+  /** 被友军治疗：恢复生命并同步血条（治疗者 AI 触发） */
+  healBy(amount: number): void {
+    if (!this.alive || amount <= 0) return;
+    this.hp = Math.min(this.def.hp, this.hp + amount);
+    this.bar.setHp(this.hp / this.def.hp);
+    this.barSprite.visible = this.hp < this.def.hp;
+  }
+
   /** 更新 AI，返回本帧是否对玩家造成伤害事件 */
-  update(dt: number, playerPos: THREE.Vector3, ctx: EnemyStepContext): { melee?: number; blast?: number; spit?: { from: THREE.Vector3; to: THREE.Vector3; damage: number }; cast?: { from: THREE.Vector3; to: THREE.Vector3; damage: number }[] } | null {
+  update(dt: number, playerPos: THREE.Vector3, ctx: EnemyStepContext): { melee?: number; blast?: number; spit?: { from: THREE.Vector3; to: THREE.Vector3; damage: number }; cast?: { from: THREE.Vector3; to: THREE.Vector3; damage: number }[]; heal?: number } | null {
     if (!this.alive) return null;
     const d = this.def;
     const sees = ctx.seesPlayer;
@@ -233,7 +245,7 @@ export class Enemy {
     // 朝向：看得见玩家盯玩家，绕障时看行进方向，避免倒着滑步
     if (sees || dist < 2 || navLen < 0.01) this.root.lookAt(playerPos.x, this.root.position.y, playerPos.z);
     else this.root.lookAt(this.root.position.x + navX, this.root.position.y, this.root.position.z + navZ);
-    this.animate(dt, dist);
+    this.animate(dt, d.speed === 0 ? 0 : dist);
 
     const moveAlongPath = (multiplier: number): void => {
       if (navLen < 0.01) return;
@@ -297,6 +309,36 @@ export class Enemy {
       }
       if (dist < 5) moveAway(1);
       else if (!sees || dist > d.range - 2) moveAlongPath(1);
+    } else if (d.kind === 'healer') {
+      // 治疗者：不攻击玩家，保持中距离并周期治疗周围友军
+      this.healTimer -= dt;
+      if (this.healTimer <= 0) {
+        this.healTimer = 4.5;
+        this.lunge();
+        return { heal: 12 };
+      }
+      if (dist < 7) moveAway(0.8);
+      else if (dist > 12 || !sees) moveAlongPath(0.8);
+    } else if (d.kind === 'turret') {
+      // 重装炮台：固定不动，长前摇重炮
+      this.spitCooldown -= dt;
+      if (this.spitWindup > 0) {
+        this.spitWindup -= dt;
+        if (this.spitWindup <= 0) {
+          if (dist <= d.range + 2 && sees) {
+            this.spitCooldown = 3.2;
+            const from = this.root.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+            const to = playerPos.clone().add(new THREE.Vector3(0, 1.2, 0));
+            return { spit: { from, to, damage: d.damage } };
+          }
+          return null;
+        }
+        return null;
+      }
+      if (dist <= d.range && sees && this.spitCooldown <= 0) {
+        this.spitWindup = 0.55;
+        this.lunge();
+      }
     } else if (d.kind === 'boomer') {
       if (this.fuseTimer >= 0) {
         this.fuseTimer -= dt;

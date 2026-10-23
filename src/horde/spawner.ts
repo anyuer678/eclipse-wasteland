@@ -17,6 +17,8 @@ export interface WaveSpec {
   guards?: number;
   berserkers?: number;
   casters?: number;
+  healers?: number;
+  turrets?: number;
 }
 
 export interface WaveOptions {
@@ -78,6 +80,8 @@ export class Spawner {
       ...Array<EnemyKind>(spec.guards ?? 0).fill('guard'),
       ...Array<EnemyKind>(spec.berserkers ?? 0).fill('berserker'),
       ...Array<EnemyKind>(spec.casters ?? 0).fill('caster'),
+      ...Array<EnemyKind>(spec.healers ?? 0).fill('healer'),
+      ...Array<EnemyKind>(spec.turrets ?? 0).fill('turret'),
     ];
     const placed: { x: number; z: number; r: number }[] = [];
     for (let i = 0; i < kinds.length; i++) {

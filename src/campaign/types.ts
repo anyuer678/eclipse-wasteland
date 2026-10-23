@@ -10,6 +10,8 @@ export interface WaveSpec {
   guards?: number;
   berserkers?: number;
   casters?: number;
+  healers?: number;
+  turrets?: number;
 }
 
 /** 元素类型 */

@@ -162,7 +162,7 @@ export const MISSIONS: MissionDef[] = [
     waves: [
       { chasers: 18, boomers: 4, spitters: 5, guards: 3, berserkers: 2, casters: 1 },
       { chasers: 20, boomers: 5, spitters: 6, guards: 3, berserkers: 3, casters: 2 },
-      { chasers: 22, boomers: 6, spitters: 6, guards: 4, berserkers: 3, casters: 2 },
+      { chasers: 22, boomers: 6, spitters: 6, guards: 4, berserkers: 3, casters: 2, turrets: 1 },
     ],
     boss: {
       id: 'magmalord', name: '熔心领主', hp: 2470, color: 0xff6600, skillInterval: 1.9,
@@ -179,8 +179,8 @@ export const MISSIONS: MissionDef[] = [
     introSeconds: 5,
     waves: [
       { chasers: 20, boomers: 4, spitters: 6, guards: 3, berserkers: 2, casters: 2 },
-      { chasers: 22, boomers: 5, spitters: 6, guards: 4, berserkers: 3, casters: 2 },
-      { chasers: 24, boomers: 6, spitters: 7, guards: 4, berserkers: 4, casters: 3 },
+      { chasers: 22, boomers: 5, spitters: 6, guards: 4, berserkers: 3, casters: 2, turrets: 1 },
+      { chasers: 24, boomers: 6, spitters: 7, guards: 4, berserkers: 4, casters: 3, healers: 1 },
     ],
     boss: {
       id: 'frostqueen', name: '冰封女王', hp: 2710, color: 0xaaddff, skillInterval: 1.8,
@@ -197,8 +197,9 @@ export const MISSIONS: MissionDef[] = [
     introSeconds: 5,
     waves: [
       { chasers: 22, boomers: 5, spitters: 6, guards: 4, berserkers: 3, casters: 2 },
-      { chasers: 24, boomers: 6, spitters: 7, guards: 4, berserkers: 4, casters: 3 },
-      { chasers: 26, boomers: 7, spitters: 7, guards: 5, berserkers: 4, casters: 3 },
+      { chasers: 22, boomers: 5, spitters: 6, guards: 4, berserkers: 3, casters: 2, turrets: 1 },
+      { chasers: 24, boomers: 6, spitters: 7, guards: 4, berserkers: 4, casters: 3, turrets: 2, healers: 1 },
+      { chasers: 26, boomers: 7, spitters: 7, guards: 5, berserkers: 4, casters: 3, turrets: 2, healers: 2 },
     ],
     boss: {
       id: 'unit0', name: '零号机', hp: 2950, color: 0xcccccc, skillInterval: 1.7,

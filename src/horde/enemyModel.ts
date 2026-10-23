@@ -354,6 +354,37 @@ function enemyMaterial(roughness = 0.62, metalness = 0.12): THREE.MeshStandardMa
   return mat;
 }
 
+function buildHealer(color: number): EnemyTemplate {
+  const b = new Builder();
+  const p = palette(color);
+  // 长袍 + 躯干 + 兜帽
+  b.taper(0.3, 0.44, 0.34, 0, 0.17, 0, p.dark);
+  b.taper(0.24, 0.32, 0.34, 0, 0.5, 0, p.base);
+  b.taper(0.2, 0.26, 0.28, 0, 0.8, 0, p.base, 0.02);
+  b.cone(0.19, 0.3, 7, 0, 1.1, 0, p.plate, 0.06);
+  b.sphere(0.16, 0, 1.02, 0, p.light);
+  // 浮空治疗球 + 光环
+  b.sphere(0.12, 0.36, 0.92, 0.02, p.glow);
+  b.taper(0.2, 0.2, 0.04, 0, 1.28, 0, p.plate);
+  for (const s of [-1, 1]) b.taper(0.08, 0.06, 0.26, s * 0.2, 0.84, -0.02, p.plate, 0.22, 0, s * 0.2);
+  leg(b, -0.09, p.base, p.dark, 0.01);
+  leg(b, 0.09, p.base, p.dark, 0.01);
+  return { geometry: b.build(), material: enemyMaterial(), height: 1.4 };
+}
+
+function buildTurret(color: number): EnemyTemplate {
+  const b = new Builder();
+  const p = palette(color);
+  // 基座 + 转塔 + 炮管罩 + 炮管
+  b.cyl(0.58, 0.74, 0.5, 8, 0, 0.25, 0, p.dark);
+  b.cyl(0.44, 0.5, 0.72, 8, 0, 0.86, 0, p.base);
+  b.box(0.56, 0.24, 1.0, 0, 1.05, -0.28, p.plate, 0.18);
+  b.cyl(0.08, 0.1, 1.0, 6, 0, 1.08, -0.78, p.dark, -Math.PI / 2, 0, 0);
+  b.sphere(0.12, 0, 1.26, -0.06, p.glow);
+  for (const s of [-1, 1]) b.box(0.18, 0.42, 0.18, s * 0.52, 0.4, 0.22, p.plate);
+  return { geometry: b.build(), material: enemyMaterial(0.6, 0.4), height: 1.35 };
+}
+
 const builders: Record<EnemyKind, (color: number) => EnemyTemplate> = {
   chaser: buildChaser,
   boomer: buildBoomer,
@@ -361,6 +392,8 @@ const builders: Record<EnemyKind, (color: number) => EnemyTemplate> = {
   guard: buildGuard,
   berserker: buildBerserker,
   caster: buildCaster,
+  healer: buildHealer,
+  turret: buildTurret,
 };
 
 const cache = new Map<EnemyKind, EnemyTemplate>();

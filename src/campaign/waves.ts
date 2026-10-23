@@ -19,5 +19,7 @@ export function scaleWaveSpec(spec: WaveSpec, k = WAVE_DENSITY_SCALE, cap = WAVE
     guards: n(spec.guards),
     berserkers: n(spec.berserkers),
     casters: n(spec.casters),
+    healers: n(spec.healers),
+    turrets: n(spec.turrets),
   };
 }

@@ -153,6 +153,9 @@ export class MissionFlow {
         guards: floor >= 4 ? Math.min(Math.floor(floor / 4), 4) : 0,
         berserkers: floor >= 6 ? Math.min(Math.floor(floor / 3), 6) : 0,
         casters: floor >= 3 ? Math.min(Math.floor(floor / 2), 5) : 0,
+        // 高楼层加入支援兵种：炮台（4 层起）与治疗者（5 层起）
+        turrets: floor >= 4 ? Math.min(2, 1 + Math.floor((floor - 4) / 6)) : 0,
+        healers: floor >= 5 ? Math.min(2, 1 + Math.floor((floor - 5) / 5)) : 0,
       };
       const lvl = (this.mission.monsterLevel ?? 1) + Math.floor(floor * 1.5) + this.levelOffset;
       const hpMult = this.difficulty * (1 + 0.32 * (lvl - 1));

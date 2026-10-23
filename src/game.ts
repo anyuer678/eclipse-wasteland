@@ -2221,13 +2221,28 @@ function boot(): void {
           if (evt.spit) {
             // 真弹丸：飞行时间可躲，命中后统一结算；弹道被掩体截断
             sfx.spit();
-            projectiles.spawn(evt.spit.from, clipToObstacles(evt.spit.from, evt.spit.to), 0x3fb96a, 13, evt.spit.damage);
+            const color = e.def.kind === 'turret' ? 0xd9c26a : 0x3fb96a;
+            projectiles.spawn(evt.spit.from, clipToObstacles(evt.spit.from, evt.spit.to), color, e.def.kind === 'turret' ? 16 : 13, evt.spit.damage);
           }
           if (evt.cast) {
             // 弹幕法师三连弹：紫色弹丸
             sfx.spit();
             for (const c of evt.cast) {
               projectiles.spawn(c.from, clipToObstacles(c.from, c.to), 0xcc88ff, 11, c.damage);
+            }
+          }
+          if (evt.heal) {
+            // 治疗者：治疗 7m 内友军（不含自己），绿色跳字提示
+            let healed = 0;
+            for (const ally of spawner.all()) {
+              if (!ally.alive || ally === e) continue;
+              if (ally.root.position.distanceTo(e.root.position) > 7) continue;
+              if (ally.hp >= ally.def.hp) continue;
+              ally.healBy(evt.heal);
+              healed += 1;
+            }
+            if (healed > 0) {
+              addDamagePopup(e.root.position.clone().add(new THREE.Vector3(0, 1.7, 0)), `治疗 ×${healed}`, '#7fd9a0', 16);
             }
           }
         }
@@ -2623,6 +2638,8 @@ function boot(): void {
           guards: counts.guard ?? 0,
           berserkers: counts.berserker ?? 0,
           casters: counts.caster ?? 0,
+          healers: counts.healer ?? 0,
+          turrets: counts.turret ?? 0,
         },
         { hpMult }
       );
@@ -2657,6 +2674,12 @@ function boot(): void {
       if (!e) return false;
       e.place(x, z, player.terrainHeight(x, z));
       return true;
+    },
+    /** 调试：对指定敌人造成伤害（治疗/减伤类探针用） */
+    damageEnemy(index: number, amount: number): boolean {
+      const e = spawner.all()[index];
+      if (!e || !e.alive) return false;
+      return e.takeDamage(amount);
     },
     heal(): void {
       setHp(maxHp);
