@@ -33,6 +33,8 @@ import { combatGood } from './play/combatShop';
 import { MOODS } from './play/ambience';
 import { chestsInfo, cratesInfo, enemyHealths, enemyMotion, navInfo, obstaclesDump, playerPos, poolsInfo } from './debug/queries';
 import type { QueryDeps } from './debug/queries';
+import { buffState, combatState, runDump, uiState, weaponState } from './debug/stateQueries';
+import type { StateDeps } from './debug/stateQueries';
 import { ENV_MODELS, ENV_TINT } from './render/envConfig';
 
 function boot(): void {
@@ -2472,6 +2474,52 @@ function boot(): void {
     crates: () => crates,
     nav: () => nav,
   };
+  /** 调试状态查询依赖：全部用 getter，保证读到的是实时值 */
+  const stateDeps: StateDeps = {
+    paused: () => paused,
+    shopOpen: () => shopOpen,
+    settingsVisible: () => settingsPanel.visible(),
+    menu: () => inMenu,
+    phase: () => flow.phase,
+    wave: () => flow.waveIndex,
+    enemiesRemaining: () => spawner.remaining(),
+    ticks: () => fixedTicks,
+    lockTries: () => pointerLockTries,
+    unlockCalls: () => pointerUnlockCalls,
+    pointerLocked: () => !!document.pointerLockElement,
+    hp: () => Math.round(hp),
+    maxHp: () => Math.round(maxHp),
+    weapon: () => {
+      const w = arsenal.current;
+      const g = inventory.getWeapon(w.def.id);
+      return {
+        id: w.def.id,
+        name: w.def.name,
+        index: arsenal.index,
+        count: arsenal.weapons.length,
+        viewmodelId: viewmodelWeaponId,
+        kills: g.kills,
+        growthDamage: w.growthDamage,
+        magMult: w.magMult,
+        magCap: w.magCap(),
+        ammo: w.state.ammo,
+      };
+    },
+    shortBuffs: () => shortBuffs,
+    buffs: () => buffs,
+    shield: () => shieldTimer,
+    shieldCooldown: () => shieldCooldown,
+    fury: () => furyTimer,
+    stealth: () => stealthTimer,
+    roleCooldown: () => roleCooldown,
+    meleeCooldown: () => meleeCooldown,
+    dashCooldown: () => dashCooldown,
+    summonActive: () => !!summonGroup,
+    infernoActive: () => !!infernoMesh,
+    healActive: () => !!healMesh,
+    killStreak: () => killStreak,
+    run: () => runState,
+  };
   dbg.__ss = {
     /** 性能快照：FPS / 绘制调用 / 三角形 / 资源数 / 场上次级对象数 */
     perf(): Record<string, number> {
@@ -2639,77 +2687,15 @@ function boot(): void {
       return Math.round(hp);
     },
     /** 调试：UI/暂停状态（验证面板开关与输入分支） */
-    uiState(): { paused: boolean; shopOpen: boolean; settings: boolean; menu: boolean; phase: string; wave: number; enemies: number; ticks: number; lockTries: number; unlockCalls: number; pointerLocked: boolean } {
-      return {
-        paused,
-        shopOpen,
-        settings: settingsPanel.visible(),
-        menu: inMenu,
-        phase: flow.phase,
-        wave: flow.waveIndex,
-        enemies: spawner.remaining(),
-        ticks: fixedTicks,
-        lockTries: pointerLockTries,
-        unlockCalls: pointerUnlockCalls,
-        pointerLocked: !!document.pointerLockElement,
-      };
-    },
+    uiState: () => uiState(stateDeps),
     /** 调试：设置当前武器击杀数（不刷新倍率，用于熟练度里程碑回归） */
     setWeaponKills(n: number): void {
       inventory.getWeapon(arsenal.current.def.id).kills = Math.max(0, Math.floor(n));
     },
     /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
-    weaponState(): { id: string; name: string; index: number; count: number; viewmodelId: string; kills: number; growthDamage: number; magMult: number; magCap: number; ammo: number } {
-      const g = inventory.getWeapon(arsenal.current.def.id);
-      return {
-        id: arsenal.current.def.id,
-        name: arsenal.current.def.name,
-        index: arsenal.index,
-        count: arsenal.weapons.length,
-        viewmodelId: viewmodelWeaponId,
-        kills: g.kills,
-        growthDamage: +arsenal.current.growthDamage.toFixed(4),
-        magMult: arsenal.current.magMult,
-        magCap: arsenal.current.magCap(),
-        ammo: arsenal.current.state.ammo,
-      };
-    },
+    weaponState: () => weaponState(stateDeps),
     /** 调试：跨局战斗状态（验证重开清理） */
-    combatState(): {
-      killStreak: number;
-      shortBuffs: { fireSpd: number; crit: number; move: number };
-      buffs: { atk: number; shield: number; speed: number };
-      shield: number;
-      shieldCooldown: number;
-      fury: number;
-      stealth: number;
-      roleCooldown: number;
-      meleeCooldown: number;
-      dashCooldown: number;
-      summon: boolean;
-      inferno: boolean;
-      heal: boolean;
-      maxHp: number;
-      hp: number;
-    } {
-      return {
-        killStreak,
-        shortBuffs: { ...shortBuffs },
-        buffs: { ...buffs },
-        shield: +shieldTimer.toFixed(2),
-        shieldCooldown: +shieldCooldown.toFixed(2),
-        fury: +furyTimer.toFixed(2),
-        stealth: +stealthTimer.toFixed(2),
-        roleCooldown: +roleCooldown.toFixed(2),
-        meleeCooldown: +meleeCooldown.toFixed(2),
-        dashCooldown: +dashCooldown.toFixed(2),
-        summon: !!summonGroup,
-        inferno: !!infernoMesh,
-        heal: !!healMesh,
-        maxHp: Math.round(maxHp),
-        hp: Math.round(hp),
-      };
-    },
+    combatState: () => combatState(stateDeps),
     poolsInfo: () => poolsInfo(queryDeps),
     /** 调试：宝箱落点/奖励 */
     chestsInfo: () => chestsInfo(queryDeps),
@@ -2835,12 +2821,8 @@ function boot(): void {
         children: string[];
       };
     },
-    buffState(): { atk: number; shield: number; speed: number } {
-      return { ...buffs };
-    },
-    runDump(): { level: number; exp: number; boosts: Record<string, number> } {
-      return { level: runState.level, exp: runState.exp, boosts: { ...runState.boosts } };
-    },
+    buffState: () => buffState(stateDeps),
+    runDump: () => runDump(stateDeps),
     /** 调试：直接设置局内强化层数（验证 HUD/倍率刷新） */
     setBoost(id: string, stacks: number): boolean {
       if (!(id in runState.boosts)) return false;
