@@ -10,7 +10,7 @@ import { MISSIONS } from '../campaign';
 import { ARSENAL } from '../arsenal';
 import type { WeaponDef } from '../arsenal';
 import type { Inventory } from '../growth';
-import { genDailyTasks, damageMultiplier, mechMultiplier, MAX_ASCENSION, MAX_RUNE, MAX_ENCHANT, MAX_PINNACLE, ENCHANT_SPD_STEP, PINNACLE_DMG_STEP, PINNACLE_HP_STEP, tryAscend, tryRuneUpgrade, tryUpgrade, tryUpgradeN, tryUpgradeMax, tryEnchant, tryEnchantN, tryPinnacle, tryPinnacleN, critFromGrowth, affixSlots, AFFIX_POOL, ascensionEffectsFor, TALENT_NODES, talentLevel, ACHIEVEMENTS, fourStats, powerScore } from '../growth';
+import { genDailyTasks, damageMultiplier, mechMultiplier, MAX_ASCENSION, MAX_RUNE, MAX_ENCHANT, MAX_PINNACLE, ENCHANT_SPD_STEP, PINNACLE_DMG_STEP, PINNACLE_HP_STEP, tryAscend, tryRuneUpgrade, tryUpgrade, tryUpgradeN, tryUpgradeMax, tryEnchant, tryEnchantN, tryPinnacle, tryPinnacleN, critFromGrowth, affixSlots, AFFIX_POOL, ascensionEffectsFor, TALENT_NODES, talentLevel, ACHIEVEMENTS, fourStats, powerScore, loadTowerBest } from '../growth';
 import type { AchievementDef } from '../growth';
 import { ROLES } from '../play/roles';
 import { COMBAT_GOODS } from '../play/combatShop';
@@ -160,7 +160,7 @@ export function createSelectScreen(cb: ScreenCallbacks): HTMLElement {
     const meta = el('div', '', '');
     meta.style.cssText = 'font-size:11.5px;color:var(--ink-dim);line-height:1.8;font-family:var(--mono);';
     meta.innerHTML = m.tower
-      ? `无限层 · 每 5 层 BOSS<br>敌人逐层强化 · 精英词缀`
+      ? `无限层 · 每 5 层 BOSS<br>敌人逐层强化 · 精英词缀${loadTowerBest() > 0 ? ` · 最高 ${loadTowerBest()} 层` : ''}`
       : `波次 ${m.waves.length} · BOSS ${m.boss ? m.boss.name : '无'}<br>奖励 ${m.rewards.material}×${m.rewards.amount}`;
     card.appendChild(meta);
     // 推荐等级条
@@ -897,6 +897,8 @@ export interface RunSummary {
   picks: number;
   autoPicks: number;
   preset: string | null;
+  /** 无尽塔历史最高层数（塔模式结算展示） */
+  towerBest?: number;
 }
 
 export function createResultScreen(cb: ScreenCallbacks): {
@@ -924,6 +926,10 @@ export function createResultScreen(cb: ScreenCallbacks): {
         ? `<div class="row"><span>成长</span><b>Lv.${summary.level} · 强化 ${summary.picks} 项${summary.autoPicks > 0 ? `（自动 ${summary.autoPicks}）` : ''}</b></div>` +
           (summary.preset ? `<div class="row"><span>流派</span><b>${summary.preset} · 自动选择</b></div>` : '')
         : '';
+      const towerRow =
+        result.mission.tower && summary?.towerBest !== undefined
+          ? `<div class="row"><span>最高层数</span><b>${summary.towerBest} 层</b></div>`
+          : '';
       if (result.phase === 'clear') {
         title.textContent = '任务完成';
         title.style.color = 'var(--ok)';
@@ -933,6 +939,7 @@ export function createResultScreen(cb: ScreenCallbacks): {
           <div class="row"><span>击杀</span><b>${result.kills}</b></div>
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>
           ${growthRow}
+          ${towerRow}
           <div class="row"><span>掉落</span><b>${result.rewardMaterial} ×${result.rewardAmount}</b></div>
         `;
         actions.appendChild(button('primary', '返回任务简报', () => cb.onBackToMenu()));
@@ -946,6 +953,7 @@ export function createResultScreen(cb: ScreenCallbacks): {
           <div class="row"><span>击杀</span><b>${result.kills}</b></div>
           <div class="row"><span>用时</span><b>${result.timeSeconds}s</b></div>
           ${growthRow}
+          ${towerRow}
         `;
         actions.appendChild(button('', '返回任务简报', () => cb.onBackToMenu()));
         actions.appendChild(button('primary', '重整旗鼓', () => cb.onStartMission(result.mission.id)));

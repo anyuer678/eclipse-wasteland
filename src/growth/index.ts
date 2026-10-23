@@ -13,3 +13,4 @@ export { defaultAutoPick, sanitizeAutoPick, loadAutoPick, getAutoPick, saveAutoP
 export type { AutoPickConfig, AutoPickPreset } from './autopick';
 export { genDailyTasks, todayKey, loadDaily, saveDaily, ensureDaily, addDailyProgress, claimDaily } from './daily';
 export type { DailyTask, DailyKind, DailyState } from './daily';
+export { nextBest, loadTowerBest, recordTowerBest, TOWER_BEST_KEY } from './towerRecord';
