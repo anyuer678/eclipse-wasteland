@@ -1219,6 +1219,8 @@ function boot(): void {
         }
       }
       if (hitSomething) {
+        // 弱点命中（未击杀）轻顿 30ms；击杀的顿拍由 registerEnemyKill 统一给
+        if (!popupKill && popupWeak) hitStopT = Math.max(hitStopT, 0.03);
         shell.hud.hitmark(popupKill ? 'kill' : popupWeak ? 'weak' : 'normal');
         sfx.hit();
         // 复用本发的实际暴击判定；不要再掷一次，否则跳字颜色/字号会与伤害不符
@@ -1440,7 +1442,8 @@ function boot(): void {
     spawnParticles(e.root.position, 0xffd24a, 4, 3.5);
     killStreak += 1;
     killStreakTimer = 2.5;
-    if (killStreak >= 3) hitStopT = 0.07; // 连杀瞬间顿一拍
+    // 击杀顿一拍：普通击杀 45ms，连杀 ≥3 加深到 70ms（BOSS 死亡另有 140ms 长顿）
+    hitStopT = Math.max(hitStopT, killStreak >= 3 ? 0.07 : 0.045);
     const ev = streakEvent(killStreak);
     if (ev) {
       showAnnouncement(ev.text, ev.color, 1200);
@@ -1666,7 +1669,7 @@ function boot(): void {
       input.captureDefaultKeys = !inMenu;
       // hit-stop：冻结逻辑（渲染继续，画面整体停住），比慢动作更有顿挫
       if (hitStopT > 0) {
-        hitStopT -= dt * (settings.lowMotion ? 2.5 : 1);
+        hitStopT = Math.max(0, hitStopT - dt * (settings.lowMotion ? 2.5 : 1));
         return;
       }
       const snap = input.snapshot();
@@ -2265,6 +2268,7 @@ function boot(): void {
     killStreak: () => killStreak,
     expBonus: () => bonuses.expBonus,
     lastHit: () => ({ ...lastHit }),
+    hitStopT: () => hitStopT,
     barrels,
     crates,
     orbs: buffOrbs,

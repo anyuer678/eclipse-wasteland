@@ -68,6 +68,7 @@ export interface CommandDeps {
   killStreak: () => number;
   expBonus: () => number;
   lastHit: () => { y: number; centerY: number; weak: boolean; boss: boolean };
+  hitStopT: () => number;
   barrels: MissionBarrel[];
   crates: { alive: boolean }[];
   orbs: DebugOrb[];
@@ -279,6 +280,8 @@ export function createDebugApi(d: CommandDeps): Record<string, unknown> {
     weaponState: () => weaponState(d.stateDeps),
     /** 调试：跨局战斗状态（验证重开清理） */
     combatState: () => combatState(d.stateDeps),
+    /** 调试：当前 hit-stop 剩余时长（击杀/弱点顿帧观测） */
+    hitstop: () => d.hitStopT(),
     poolsInfo: () => poolsInfo(d.queryDeps),
     /** 调试：宝箱落点/奖励 */
     chestsInfo: () => chestsInfo(d.queryDeps),
