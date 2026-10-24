@@ -30,7 +30,7 @@ import { Shell } from './shell';
 import { skillLinesFor } from './play/weaponBrief';
 import { hudFrame } from './play/hudFrame';
 import { separateCrowd } from './play/crowdStep';
-import { clipToObstacles, pointOnObstacleSurface, rayAabbT, raySphere } from './play/raycast';
+import { clipToObstacles, pointOnObstacleSurface } from './play/raycast';
 import { castHitscan } from './play/hitscan';
 import { streakEvent } from './play/streak';
 import { shotDamage } from './play/shotDamage';
@@ -40,6 +40,7 @@ import { emitStatusFx, tickOrbPickups, tickShortBuffs } from './play/fieldTicks'
 import { tickEnemies } from './play/enemyTick';
 import { tickBoss } from './play/bossTick';
 import { applyHudFrame } from './shell/hudUpdate';
+import { findNearestVisible, resolvePierceTargets } from './play/targeting';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
 import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
@@ -216,6 +217,7 @@ function boot(): void {
   const nav = new NavField();
   /** 地形射线（弹道遮挡用；绑定一次避免每次开火新建闭包） */
   const terrainRay = nav.terrainRayDistance.bind(nav);
+  const navLos = nav.hasLineOfSight3D.bind(nav);
   /** BOSS 专用导航：体积更大，用更宽的膨胀半径单独烘焙 */
   const bossNav = new NavField();
   /** 刷怪落点专用随机（与战斗随机分离，保证波次可复现） */
@@ -1125,43 +1127,18 @@ function boot(): void {
       return hitSomething;
     },
     findTarget(origin, maxRange) {
-      let best: { e: Enemy; d: number } | null = null;
-      for (const e of spawner.all()) {
-        if (!e.alive) continue;
-        const c = e.center();
-        const d = c.distanceToSquared(origin);
-        if (d > maxRange * maxRange) continue;
-        if (!nav.hasLineOfSight3D(origin.x, origin.y, origin.z, c.x, c.y, c.z)) continue;
-        if (best === null || d < best.d) best = { e, d };
-      }
-      return best ? best.e.center() : null;
+      return findNearestVisible(origin, maxRange, {
+        enemies: () => spawner.all(),
+        hasLineOfSight3D: navLos,
+      });
     },
     resolvePierce(origin, dir, max) {
-      // 穿透也要被墙截断：先求墙距，挡在墙后的目标不进列表
-      let wallT = Infinity;
-      for (const o of nav.obstacles) {
-        const t = rayAabbT(origin, dir, o.x - o.hw, o.x + o.hw, -1000, o.top, o.z - o.hd, o.z + o.hd, 60);
-        if (t !== null && t > 0.02 && t < wallT) wallT = t;
-      }
-      const terrainT = nav.terrainRayDistance(
-        origin.x,
-        origin.y,
-        origin.z,
-        origin.x + dir.x * 60,
-        origin.y + dir.y * 60,
-        origin.z + dir.z * 60
-      );
-      if (terrainT !== null && terrainT < wallT) wallT = terrainT;
-      // 沿方向收集射线附近敌人（按距离排序）
-      const hits: { e: Enemy; t: number }[] = [];
-      for (const e of spawner.all()) {
-        if (!e.alive) continue;
-        const c = e.center();
-        const t = raySphere(origin, dir, c, 0.9);
-        if (t !== null && t < wallT) hits.push({ e, t });
-      }
-      hits.sort((a, b) => a.t - b.t);
-      return hits.slice(0, max).map((h) => h.e.center());
+      return resolvePierceTargets(origin, dir, max, {
+        enemies: () => spawner.all(),
+        hasLineOfSight3D: navLos,
+        obstacles: nav.obstacles,
+        terrainRayDistance: terrainRay,
+      });
     },
     onChain(pos, damage, jumps, falloff) {
       // 升级暂停后不再继续弹跳结算
