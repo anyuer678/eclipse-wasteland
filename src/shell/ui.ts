@@ -339,6 +339,12 @@ export const THEME = `
     opacity: 0; transition: opacity .08s ease;
   }
   #ss-damage-vignette.on { opacity: 1; }
+  /* 低血量持续脉动：动画接管 opacity，与受击闪烁并存 */
+  #ss-damage-vignette.low { animation: ss-lowhp 1.4s ease-in-out infinite; }
+  @keyframes ss-lowhp {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.95; }
+  }
 
   /* 战斗画面压角：轻收边（不遮画面信息） */
   #ss-grade {

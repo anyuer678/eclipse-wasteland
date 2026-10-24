@@ -170,6 +170,7 @@ export function createHud(): HudView {
       const enPct = d.maxEnergy > 0 ? Math.min(1, d.energy / d.maxEnergy) : 0;
       hpBar.style.transform = `scaleX(${hpPct.toFixed(3)})`;
       energyBar.style.transform = `scaleX(${enPct.toFixed(3)})`;
+      vignette.classList.toggle('low', hpPct < 0.3);
       const hpNow = Math.ceil(d.hp);
       if (hpNow !== cacheHp || d.maxHp !== cacheHpMax) {
         cacheHp = hpNow;

@@ -130,7 +130,7 @@
 | # | 内容 | 验收 |
 | --- | --- | --- |
 | 12.1 ✅ | 受击方向指示器 | 准星外环 `ch-hd`：伤害来源超出视野中轴 >60°（±π/3）才提示，CSS `--hdir` 旋转 + 0.9s 淡出动画（无常驻 draw call/DOM 开销）；伤害链路全量携带来源坐标（近战/自爆 `play/enemyTick.ts`、BOSS 招式 `play/bossTick.ts`、弹丸 `horde/projectiles.ts` 记录命中点、爆炸桶）；`hurt` 调试口补 src 参数；`hitdir` 确定性探针：正前（rel≈23°）不出弧、左 rotate(−90°)、背后 rotate(−157.1°) 与 `atan2` 几何精确一致；`hitdiag` 有机路径：chaser 绕圈后侧向命中 77.7° 触发弧；截图核对红弧指向左后；tsc + 207 单测 + build 全绿 |
-| 12.2 🚧 | 低血量红晕 | hp < 30% 时常驻红晕脉动（复用 `#ss-damage-vignette`），回血脱离即消失；探针 hurt/heal 驱动 + 截图核对 |
+| 12.2 ✅ | 低血量红晕 | hp < 30% 时 `#ss-damage-vignette` 加 `.low` 走 1.4s 无限脉动动画（opacity 0.5↔0.95，与受击闪烁 `.on` 并存），HUD 帧更新里 `classList.toggle` 随血量自动进出；`lowhp` 探针：hp 7 时 low=true/anim=ss-lowhp、heal 后 low=false/anim=none；`lowhpshot` 截图核对 hp 8 时屏幕四角红晕 |
 | 12.3 ⬜ | 击杀微顿帧（hitstop） | 击杀/弱点命中时 ~50ms 时间缩放 0.35，增强打击感；FixedLoop 加全局 timeScale，`__ss` 可观测；探针核对 game time 与真实时间偏差 |
 
 ## 四、执行顺序（每轮一项或一组）
