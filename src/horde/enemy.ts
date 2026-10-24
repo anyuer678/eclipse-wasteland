@@ -82,6 +82,8 @@ export class Enemy {
   /** 减速计时（霜锋冲锋枪命中触发） */
   slowTimer = 0;
   slowFactor = 0;
+  /** 易伤计时（能量爆发命中触发，受伤 ×1.15） */
+  vulnTimer = 0;
   /** 自爆计时（boomer 接近后引爆） */
   private fuseTimer = -1;
   private spitCooldown = 0;
@@ -243,6 +245,7 @@ export class Enemy {
 
     // 减速
     if (this.slowTimer > 0) this.slowTimer -= dt;
+    if (this.vulnTimer > 0) this.vulnTimer -= dt;
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
 
     tmpToPlayer.subVectors(playerPos, this.root.position);
@@ -529,6 +532,8 @@ export class Enemy {
       const reduction = elemRes === 1 ? 0.15 : elemRes === 2 ? 0.35 : 0.55;
       final *= 1 - reduction;
     }
+    // 易伤：受伤 ×1.15（与元素抗性叠乘）
+    if (this.vulnTimer > 0) final *= 1.15;
     this.hp -= final;
     this.flashTimer = 0.1;
     this.hitAnim = 1;
@@ -589,6 +594,11 @@ export class Enemy {
   applySlow(factor: number, seconds: number): void {
     this.slowTimer = seconds;
     this.slowFactor = factor;
+  }
+
+  /** 施加易伤（能量爆发进阶 2 命中触发）：持续时间内受到伤害 ×1.15 */
+  applyVuln(seconds: number): void {
+    this.vulnTimer = Math.max(this.vulnTimer, seconds);
   }
 
   /** 中心点（用于射线检测与命中判定） */

@@ -12,6 +12,7 @@ export interface QueryEnemy {
   slowTimer: number;
   slowFactor: number;
   burnTimer: number;
+  vulnTimer: number;
   isStunned(): boolean;
   telegraphActive?(): boolean;
 }
@@ -19,6 +20,7 @@ export interface QueryEnemy {
 export interface QueryPlayer {
   position: { x: number; y: number; z: number };
   onGround: boolean;
+  speedMult: number;
   terrainHeight(x: number, z: number): number;
 }
 
@@ -80,6 +82,7 @@ export function enemyMotion(deps: QueryDeps): {
   elite: boolean;
   slow: boolean;
   burn: boolean;
+  vuln: boolean;
 }[] {
   const p = deps.player;
   return deps.enemies().map((e) => {
@@ -99,11 +102,12 @@ export function enemyMotion(deps: QueryDeps): {
       slow: e.slowTimer > 0,
       slowFactor: e.slowTimer > 0 ? e.slowFactor : null,
       burn: e.burnTimer > 0,
+      vuln: e.vulnTimer > 0,
     };
   });
 }
 
-export function playerPos(deps: QueryDeps): { x: number; y: number; z: number; ground: number; onGround: boolean } {
+export function playerPos(deps: QueryDeps): { x: number; y: number; z: number; ground: number; onGround: boolean; speedMult: number } {
   const p = deps.player;
   return {
     x: +p.position.x.toFixed(2),
@@ -111,6 +115,7 @@ export function playerPos(deps: QueryDeps): { x: number; y: number; z: number; g
     z: +p.position.z.toFixed(2),
     ground: +p.terrainHeight(p.position.x, p.position.z).toFixed(2),
     onGround: p.onGround,
+    speedMult: +p.speedMult.toFixed(3),
   };
 }
 

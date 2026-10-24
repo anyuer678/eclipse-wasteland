@@ -5,6 +5,10 @@ import {
   chainAscensionMods,
   beamAscensionMods,
   slowAscensionMods,
+  energyAscensionMods,
+  overloadAscensionMods,
+  lockonAscensionMods,
+  chargeAscensionMods,
 } from '../src/growth/upgrade'
 
 describe('growth/ascension mods（文案与数值同表）', () => {
@@ -12,7 +16,7 @@ describe('growth/ascension mods（文案与数值同表）', () => {
     for (const [kind, rows] of Object.entries(ASCENSION_EFFECTS)) {
       expect(rows.length).toBe(3)
       for (const r of rows) expect(r.text.length).toBeGreaterThan(0)
-      if (kind === 'chain' || kind === 'beam' || kind === 'slow') {
+      if (kind !== 'guard') {
         for (const r of rows) expect(typeof r.num).toBe('number')
       }
     }
@@ -48,5 +52,35 @@ describe('growth/ascension mods（文案与数值同表）', () => {
     expect(slowAscensionMods(1)).toEqual({ durationMult: 1.4, hitBonus: 0, factorOverride: null })
     expect(slowAscensionMods(2)).toEqual({ durationMult: 1.4, hitBonus: 5, factorOverride: null })
     expect(slowAscensionMods(3)).toEqual({ durationMult: 1.4, hitBonus: 5, factorOverride: 0.4 })
+  })
+
+  it('energy：阶0 无加成，阶1 爆发伤害 ×1.1，阶2 附加 1s 易伤，阶3 暴击 +8%', () => {
+    expect(energyAscensionMods(0)).toEqual({ burstDmgMult: 1, vulnSeconds: 0, burstCritBonus: 0 })
+    expect(energyAscensionMods(1)).toEqual({ burstDmgMult: 1.1, vulnSeconds: 0, burstCritBonus: 0 })
+    expect(energyAscensionMods(2)).toEqual({ burstDmgMult: 1.1, vulnSeconds: 1, burstCritBonus: 0 })
+    expect(energyAscensionMods(3)).toEqual({ burstDmgMult: 1.1, vulnSeconds: 1, burstCritBonus: 0.08 })
+    expect(energyAscensionMods(9)).toEqual(energyAscensionMods(3))
+  })
+
+  it('overload：阶0 无加成，阶1 伤害 ×1.1，阶2 移速 ×1.15，阶3 能耗 ×0.7', () => {
+    expect(overloadAscensionMods(0)).toEqual({ dmgMult: 1, moveMult: 1, drainMult: 1 })
+    expect(overloadAscensionMods(1)).toEqual({ dmgMult: 1.1, moveMult: 1, drainMult: 1 })
+    expect(overloadAscensionMods(2)).toEqual({ dmgMult: 1.1, moveMult: 1.15, drainMult: 1 })
+    expect(overloadAscensionMods(3)).toEqual({ dmgMult: 1.1, moveMult: 1.15, drainMult: 0.7 })
+    expect(overloadAscensionMods(-2)).toEqual(overloadAscensionMods(0))
+  })
+
+  it('lockon：阶0 无加成，阶1 范围 ×1.25，阶2 弹射 1 次，阶3 伤害 ×1.2', () => {
+    expect(lockonAscensionMods(0)).toEqual({ rangeMult: 1, bounces: 0, dmgMult: 1 })
+    expect(lockonAscensionMods(1)).toEqual({ rangeMult: 1.25, bounces: 0, dmgMult: 1 })
+    expect(lockonAscensionMods(2)).toEqual({ rangeMult: 1.25, bounces: 1, dmgMult: 1 })
+    expect(lockonAscensionMods(3)).toEqual({ rangeMult: 1.25, bounces: 1, dmgMult: 1.2 })
+  })
+
+  it('charge：阶0 无加成，阶1 蓄速 ×1.25，阶2 满蓄穿透，阶3 满蓄暴击 +12%', () => {
+    expect(chargeAscensionMods(0)).toEqual({ speedMult: 1, fullPierce: 0, critBonus: 0 })
+    expect(chargeAscensionMods(1)).toEqual({ speedMult: 1.25, fullPierce: 0, critBonus: 0 })
+    expect(chargeAscensionMods(2)).toEqual({ speedMult: 1.25, fullPierce: 1, critBonus: 0 })
+    expect(chargeAscensionMods(3)).toEqual({ speedMult: 1.25, fullPierce: 1, critBonus: 0.12 })
   })
 })

@@ -28,15 +28,15 @@ export interface AscensionEffect {
 }
 
 export const ASCENSION_EFFECTS: Record<string, AscensionEffect[]> = {
-  energy: [{ text: '爆发伤害 +10%' }, { text: '爆发命中附加 1s 易伤' }, { text: '过载暴击率 +8%' }],
-  overload: [{ text: '过载伤害 +10%' }, { text: '过载期间移速 +15%' }, { text: '过载能量消耗 -30%' }],
-  lockon: [{ text: '索敌范围 +25%' }, { text: '电弧可弹射 1 次' }, { text: '索敌伤害 +20%' }],
+  energy: [{ text: '爆发伤害 +10%', num: 1.1 }, { text: '爆发命中附加 1s 易伤', num: 1 }, { text: '爆发暴击率 +8%', num: 0.08 }],
+  overload: [{ text: '过载伤害 +10%', num: 1.1 }, { text: '过载期间移速 +15%', num: 1.15 }, { text: '过载能量消耗 -30%', num: 0.7 }],
+  lockon: [{ text: '索敌范围 +25%', num: 1.25 }, { text: '电弧可弹射 1 次', num: 1 }, { text: '索敌伤害 +20%', num: 1.2 }],
   slow: [
     { text: '减速持续时间 +40%', num: 1.4 },
     { text: '霜缓命中附加 5 点伤害', num: 5 },
     { text: '减速效果提升至 60%', num: 0.4 },
   ],
-  charge: [{ text: '蓄力速度 +25%' }, { text: '满蓄力附加穿透' }, { text: '蓄力暴击率 +12%' }],
+  charge: [{ text: '蓄力速度 +25%', num: 1.25 }, { text: '满蓄力附加穿透', num: 1 }, { text: '蓄力暴击率 +12%', num: 0.12 }],
   beam: [
     { text: '射线射程 +30%', num: 1.3 },
     { text: '射线伤害 +12%', num: 1.12 },
@@ -98,6 +98,54 @@ export interface SlowAscensionMods {
 export function slowAscensionMods(ascension: number): SlowAscensionMods {
   const [duration, bonus, factor] = ascensionNums('slow', ascension);
   return { durationMult: duration ?? 1, hitBonus: bonus ?? 0, factorOverride: factor ?? null };
+}
+
+export interface EnergyAscensionMods {
+  burstDmgMult: number;
+  vulnSeconds: number;
+  burstCritBonus: number;
+}
+
+/** energy 进阶数值：阶1 爆发伤害 ×1.1 · 阶2 命中附加 1s 易伤 · 阶3 爆发暴击率 +0.08 */
+export function energyAscensionMods(ascension: number): EnergyAscensionMods {
+  const [dmg, vuln, crit] = ascensionNums('energy', ascension);
+  return { burstDmgMult: dmg ?? 1, vulnSeconds: vuln ?? 0, burstCritBonus: crit ?? 0 };
+}
+
+export interface OverloadAscensionMods {
+  dmgMult: number;
+  moveMult: number;
+  drainMult: number;
+}
+
+/** overload 进阶数值：阶1 过载伤害 ×1.1 · 阶2 过载移速 ×1.15 · 阶3 能耗 ×0.7 */
+export function overloadAscensionMods(ascension: number): OverloadAscensionMods {
+  const [dmg, move, drain] = ascensionNums('overload', ascension);
+  return { dmgMult: dmg ?? 1, moveMult: move ?? 1, drainMult: drain ?? 1 };
+}
+
+export interface LockonAscensionMods {
+  rangeMult: number;
+  bounces: number;
+  dmgMult: number;
+}
+
+/** lockon 进阶数值：阶1 索敌范围 ×1.25 · 阶2 电弧弹射 1 次 · 阶3 索敌伤害 ×1.2 */
+export function lockonAscensionMods(ascension: number): LockonAscensionMods {
+  const [range, bounce, dmg] = ascensionNums('lockon', ascension);
+  return { rangeMult: range ?? 1, bounces: bounce ?? 0, dmgMult: dmg ?? 1 };
+}
+
+export interface ChargeAscensionMods {
+  speedMult: number;
+  fullPierce: number;
+  critBonus: number;
+}
+
+/** charge 进阶数值：阶1 蓄速 ×1.25 · 阶2 满蓄穿透 +1 目标 · 阶3 蓄力暴击率 +0.12 */
+export function chargeAscensionMods(ascension: number): ChargeAscensionMods {
+  const [speed, pierce, crit] = ascensionNums('charge', ascension);
+  return { speedMult: speed ?? 1, fullPierce: pierce ?? 0, critBonus: crit ?? 0 };
 }
 /** 符文：每级伤害加成 */
 export const RUNE_DAMAGE_STEP = 0.02;

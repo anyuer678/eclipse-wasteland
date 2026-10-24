@@ -1,6 +1,7 @@
 export { Inventory } from './inventory';
 export type { InventoryData, WeaponGrowth } from './inventory';
-export { tryUpgrade, tryAscend, tryRuneUpgrade, tryUpgradeN, tryUpgradeMax, tryEnchant, tryEnchantN, tryPinnacle, tryPinnacleN, critFromGrowth, affixSlots, rollAffix, affixDamageMult, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, AFFIX_POOL, damageMultiplier, mechMultiplier, ascensionEffectsFor, ASCENSION_EFFECTS, chainAscensionMods, beamAscensionMods, slowAscensionMods, LEVEL_DAMAGE_STEP, ASCENSION_MECH_STEP, RUNE_DAMAGE_STEP, MAX_ASCENSION, MAX_RUNE, ENCHANT_CRIT_STEP, ENCHANT_SPD_STEP, MAX_ENCHANT, PINNACLE_DMG_STEP, PINNACLE_HP_STEP, MAX_PINNACLE, } from './upgrade';
+export { tryUpgrade, tryAscend, tryRuneUpgrade, tryUpgradeN, tryUpgradeMax, tryEnchant, tryEnchantN, tryPinnacle, tryPinnacleN, critFromGrowth, affixSlots, rollAffix, affixDamageMult, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, AFFIX_POOL, damageMultiplier, mechMultiplier, ascensionEffectsFor, ASCENSION_EFFECTS, chainAscensionMods, beamAscensionMods, slowAscensionMods, energyAscensionMods, overloadAscensionMods, lockonAscensionMods, chargeAscensionMods, LEVEL_DAMAGE_STEP, ASCENSION_MECH_STEP, RUNE_DAMAGE_STEP, MAX_ASCENSION, MAX_RUNE, ENCHANT_CRIT_STEP, ENCHANT_SPD_STEP, MAX_ENCHANT, PINNACLE_DMG_STEP, PINNACLE_HP_STEP, MAX_PINNACLE, } from './upgrade';
+export type { EnergyAscensionMods, OverloadAscensionMods, LockonAscensionMods, ChargeAscensionMods } from './upgrade';
 export { TALENT_NODES, loadTalents, saveTalents, talentLevel, upgradeTalent, talentBonuses } from './talent';
 export type { TalentNode, TalentState } from './talent';
 export { ACHIEVEMENTS, loadAchievements, addProgress, grantReward } from './achievements';

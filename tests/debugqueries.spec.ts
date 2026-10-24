@@ -16,7 +16,7 @@ const enemy = (over: Partial<QueryEnemy> = {}): QueryEnemy => ({
 
 const deps = (over: Partial<QueryDeps> = {}): QueryDeps => ({
   enemies: () => [enemy(), enemy({ hp: -3, alive: false, elite: { kind: 'armored' }, slowTimer: 0.5, burnTimer: 1 })],
-  player: { position: { x: 0, y: 1, z: 0 }, onGround: true, terrainHeight: (x, z) => 0.5 + x * 0.01 + z * 0.01 },
+  player: { position: { x: 0, y: 1, z: 0 }, onGround: true, speedMult: 1, terrainHeight: (x, z) => 0.5 + x * 0.01 + z * 0.01 },
   mapRoot: () => ({ userData: { poisonPools: [{ x: 2, z: -3, r: 2.2 }] } }),
   chests: () => [{ mesh: { position: { x: 1.234, y: 0.5, z: 2.345 } }, reward: '金币', amount: 12 }],
   crates: () => [{ x: -1, z: 2, alive: true }],
@@ -46,7 +46,7 @@ describe('debug/queries', () => {
 
   it('maps player, pools, chests, crates and nav', () => {
     const d = deps()
-    expect(playerPos(d)).toEqual({ x: 0, y: 1, z: 0, ground: 0.5, onGround: true })
+    expect(playerPos(d)).toEqual({ x: 0, y: 1, z: 0, ground: 0.5, onGround: true, speedMult: 1 })
     expect(poolsInfo(d)[0]).toEqual({ x: 2, z: -3, r: 2.2, ground: 0.49 })
     expect(chestsInfo(d)[0]).toEqual({ x: 1.23, y: 0.5, z: 2.35, ground: 0.54, reward: '金币', amount: 12 })
     expect(cratesInfo(d)[0]).toEqual({ x: -1, z: 2, alive: true, ground: 0.51 })

@@ -23,7 +23,7 @@ import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow, createPlacement, rebuildMissionMap, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards, towerFloorClearRewards } from './campaign';
 import type { MissionBarrel, MissionCrate } from './campaign';
-import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
+import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, overloadAscensionMods, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
 import { Shell } from './shell';
@@ -1139,7 +1139,7 @@ function boot(): void {
         killStreak,
         stealthMult: stealthTimer > 0 ? 2 * (1 + inventory.roleLevel(selectedRoleId) * 0.15) : 1,
         attackMult: st.attackMult,
-        critChance: st.critRate + critBonus,
+        critChance: st.critRate + critBonus + (extra.critBonus ?? 0),
         critMult: arsenal.current.def.critMult + runB.critDmgBonus,
         runDamageMult: runB.dmgMult,
         // 高地优势：玩家比命中点低 0.4m 以上 → +20% 伤害
@@ -1200,6 +1200,8 @@ function boot(): void {
           // 晕眩：狙击枪 35% 概率短晕
           if (arsenal.current.def.archetype === 'sniper' && Math.random() < 0.35) e.applyStun(0.6);
           if (extra.slow !== undefined) e.applySlow(extra.slow, extra.slowDur ?? 1.6);
+          // 易伤（能量爆发进阶 2 命中附加）：持续时间内受伤 ×1.15
+          if (extra.vuln !== undefined && extra.vuln > 0) e.applyVuln(extra.vuln);
           // 烈焰风暴：命中施加灼�?DOT
           if (arsenal.current.def.mech.kind === 'beam') e.applyBurn(2.2, 5);
           // 精英猎手：对精英额外伤害；狂暴：伤害 ×1.5；元素联动：冰缓暴击 / 灼烧易伤；弱点：命中头部 ×1.5
@@ -1465,9 +1467,11 @@ function boot(): void {
     statsCache = applyBuffs(base, buffs);
     return statsCache;
   };
-  // 移速倍率应用到玩家控制器（含疾行球 + 局内疾行）
+  // 移速倍率应用到玩家控制器（含疾行球 + 局内疾行 + 过载形态进阶移速）
   const applySpeedMult = (): void => {
-    player.speedMult = computeStats().speedMult * (shortBuffs.move > 0 ? 1.4 : 1) * runB.moveMult;
+    const w = arsenal.current;
+    const om = w.def.mech.kind === 'overload' && w.state.overloaded ? overloadAscensionMods(w.growthAscension).moveMult : 1;
+    player.speedMult = computeStats().speedMult * (shortBuffs.move > 0 ? 1.4 : 1) * runB.moveMult * om;
   };
   applySpeedMult();
   // 最大生命随成长更新（体质/巅峰 + 局内生命强化）
@@ -1789,11 +1793,10 @@ function boot(): void {
       fireCtx.direction.set(0, 0, -1).applyQuaternion(world.camera.quaternion).normalize();
 
       arsenal.current.update(dt, fireCtx);
-      if (benchFire && !snap.fire) arsenal.current.fire(fireCtx);
 
-      if (snap.fire) {
+      if (snap.fire || benchFire) {
         arsenal.current.fire(fireCtx);
-        viewmodel?.kickNow(0.6);
+        if (snap.fire) viewmodel?.kickNow(0.6);
       } else {
         arsenal.current.releaseFire(fireCtx);
       }
@@ -1813,7 +1816,10 @@ function boot(): void {
         keyState.melee = false;
       }
       // E = 武器技能（形态切�?能量爆发/索敌�?
-      if (snap.skill && !keyState.skill) arsenal.current.skill(fireCtx);
+      if (snap.skill && !keyState.skill) {
+        arsenal.current.skill(fireCtx);
+        applySpeedMult(); // 过载开关即时生效于移速
+      }
       keyState.skill = snap.skill;
 
       // 武器切换：数字键 1-5 / Q 循环
@@ -2229,6 +2235,10 @@ function boot(): void {
         magMult: w.magMult,
         magCap: w.magCap(),
         ammo: w.state.ammo,
+        energy: +w.state.energy.toFixed(1),
+        overloaded: w.state.overloaded,
+        charging: w.state.charging,
+        chargeTime: +w.state.chargeTime.toFixed(3),
       };
     },
     shortBuffs: () => shortBuffs,
@@ -2303,6 +2313,13 @@ function boot(): void {
     beginMission,
     syncBossModel,
     remountViewmodel: mountViewmodel,
+    castSkill: () => {
+      arsenal.current.skill(fireCtx);
+      applySpeedMult(); // 过载开关即时生效于移速
+    },
+    releaseFire: () => {
+      arsenal.current.releaseFire(fireCtx);
+    },
     setHp,
     performDash,
     applyDamageToPlayer,

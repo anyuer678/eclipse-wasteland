@@ -17,7 +17,8 @@ import {
 } from './combat';
 import type { WeaponDef } from './defs';
 import type { TracerPool } from './tracer';
-import { beamAscensionMods, chainAscensionMods, slowAscensionMods } from '../growth';
+import { beamAscensionMods, chainAscensionMods, slowAscensionMods, energyAscensionMods, overloadAscensionMods, lockonAscensionMods, chargeAscensionMods } from '../growth';
+import type { ChargeAscensionMods } from '../growth';
 
 /** 射击上下文：由外部（玩家系统）注入 */
 export interface FireContext {
@@ -27,7 +28,7 @@ export interface FireContext {
   /** 命中点计算：返回世界命中点（无敌人时落到场景/地面） */
   resolveHit: (origin: THREE.Vector3, dir: THREE.Vector3) => THREE.Vector3;
   /** 命中敌人回调（阶段 4 接入）：返回 true 表示命中敌人（用于减速/吸血等） */
-  onHitEnemy?: (pos: THREE.Vector3, damage: number, extra: { slow?: number; slowDur?: number; flatBonus?: number; lockTarget?: boolean }) => boolean;
+  onHitEnemy?: (pos: THREE.Vector3, damage: number, extra: { slow?: number; slowDur?: number; flatBonus?: number; lockTarget?: boolean; vuln?: number; critBonus?: number }) => boolean;
   /** 穿透查询：沿方向收集射线上的敌人位置（含最近目标，按距离排序） */
   resolvePierce?: (origin: THREE.Vector3, dir: THREE.Vector3, max: number) => THREE.Vector3[];
   /** 局内「穿透弹」强化：主命中后继续穿透的额外目标数与衰减 */
@@ -118,12 +119,14 @@ export class Weapon {
     this.guardCooldown = Math.max(0, this.guardCooldown - dt);
 
     if (s.overloaded && this.def.mech.kind === 'overload') {
-      s.energy = Math.max(0, s.energy - (this.def.mech as { energyPerSec: number }).energyPerSec * dt);
+      const om = overloadAscensionMods(this.growthAscension);
+      s.energy = Math.max(0, s.energy - (this.def.mech as { energyPerSec: number }).energyPerSec * om.drainMult * dt);
       if (s.energy <= 0) s.overloaded = false;
     }
 
     if (s.charging) {
-      s.chargeTime = Math.min(s.chargeTime + dt, (this.def.mech as { time: number }).time);
+      const cm = chargeAscensionMods(this.growthAscension);
+      s.chargeTime = Math.min(s.chargeTime + dt * cm.speedMult, (this.def.mech as { time: number }).time);
     }
   }
 
@@ -151,20 +154,28 @@ export class Weapon {
       if (s.energy >= m.cost) {
         s.energy -= m.cost;
         if (this.fireCooldown <= 0) {
+          const em = energyAscensionMods(this.growthAscension);
           const origin = ctx.origin.clone().addScaledVector(ctx.direction, 0.5);
           const hit = ctx.resolveHit(origin, ctx.direction);
           ctx.tracer.fire(origin, hit, 0xff5566, 2);
-          ctx.onHitEnemy?.(hit, shotDamage(this.def.damage, m.multiplier, this.growthMech), {});
+          ctx.onHitEnemy?.(hit, shotDamage(this.def.damage, m.multiplier * em.burstDmgMult, this.growthMech), {
+            vuln: em.vulnSeconds,
+            critBonus: em.burstCritBonus,
+          });
           this.fireCooldown = fireIntervalSeconds(this.def.rpm, this.fireRateMult);
         }
       }
     } else if (m.kind === 'lockon') {
       if (this.skillCooldown > 0) return;
-      const target = ctx.findTarget?.(ctx.origin, m.range) ?? null;
+      const lm = lockonAscensionMods(this.growthAscension);
+      const target = ctx.findTarget?.(ctx.origin, m.range * lm.rangeMult) ?? null;
       if (target && ctx.onHitEnemy) {
         this.skillCooldown = m.cooldown;
         ctx.tracer.fire(ctx.origin, target, 0x66e0ff, 2);
-        ctx.onHitEnemy(target, shotDamage(this.def.damage, m.damageFactor, this.growthMech), { lockTarget: true });
+        const dmg = shotDamage(this.def.damage, m.damageFactor * lm.dmgMult, this.growthMech);
+        ctx.onHitEnemy(target, dmg, { lockTarget: true });
+        // 进阶 2：电弧可弹射 1 次（主命中目标已由 onChain 的 exclude 排除，不会回打）
+        if (lm.bounces > 0 && ctx.onChain) ctx.onChain(target, dmg * 0.7, lm.bounces, 0.7);
       }
     } else if (m.kind === 'overload') {
       this.toggleOverload();
@@ -201,7 +212,7 @@ export class Weapon {
     return true;
   }
 
-  /** 松开左键：蓄力武器在此刻结算 */
+  /** 松开左键：蓄力武器在此刻结算（满蓄力附加穿透与暴击加成） */
   releaseFire(ctx: FireContext): void {
     const s = this.state;
     if (!s.charging) return;
@@ -210,11 +221,12 @@ export class Weapon {
     const t = clamp(s.chargeTime / mech.time, 0, 1);
     const mult = chargeDamageMult(s.chargeTime, mech.maxMult, mech.time);
     s.chargeTime = 0;
-    this.discharge(ctx, mult, 1 + t * 1.5);
+    const cm = t >= 1 ? chargeAscensionMods(this.growthAscension) : null;
+    this.discharge(ctx, mult, 1 + t * 1.5, cm);
   }
 
-  /** 结算一次开火（亮线 + 伤害回调） */
-  private discharge(ctx: FireContext, damageMult = 1, lineIntensity = 1): void {
+  /** 结算一次开火（亮线 + 伤害回调）；chargeMods 非空表示满蓄力结算（附加穿透 + 暴击加成） */
+  private discharge(ctx: FireContext, damageMult = 1, lineIntensity = 1, chargeMods: ChargeAscensionMods | null = null): void {
     const s = this.state;
     const d = this.def;
     s.ammo -= 1;
@@ -222,7 +234,9 @@ export class Weapon {
     // 能量累积
     s.energy = energyAfterShot(s.energy, d.energyGain, this.energyGainMult, d.energyMax);
 
-    const shotDmg = shotDamage(d.damage, damageMult, this.growthDamage);
+    let shotDmg = shotDamage(d.damage, damageMult, this.growthDamage);
+    // 过载期间开火：进阶 1 过载伤害 ×1.1
+    if (d.mech.kind === 'overload' && s.overloaded) shotDmg *= overloadAscensionMods(this.growthAscension).dmgMult;
 
     // beam 机制（烈焰风暴）：持续射线耗能量、不耗弹药；进阶给射程/伤害/能耗
     let beamRange = Infinity;
@@ -254,7 +268,7 @@ export class Weapon {
       }
       ctx.tracer.fire(origin, hit, isBeam ? 0xff7a3a : d.color, isBeam ? 2 : lineIntensity);
       if (ctx.onHitEnemy) {
-        const extra: { slow?: number; slowDur?: number; flatBonus?: number } = {};
+        const extra: { slow?: number; slowDur?: number; flatBonus?: number; critBonus?: number } = {};
         if (d.mech.kind === 'slow') {
           const m = d.mech as { factor: number; seconds: number };
           const sm = slowAscensionMods(this.growthAscension);
@@ -262,7 +276,17 @@ export class Weapon {
           extra.slowDur = m.seconds * sm.durationMult;
           extra.flatBonus = sm.hitBonus;
         }
+        // 满蓄力暴击率加成（charge 进阶 3）
+        if (chargeMods) extra.critBonus = chargeMods.critBonus;
         const hitAny = ctx.onHitEnemy(hit, shotDmg * beamDmgMult, extra);
+        // 满蓄力附加穿透（charge 进阶 2）：与 pierce 机制同形，额外目标 ×0.7 衰减
+        if (p === 0 && chargeMods?.fullPierce && d.mech.kind !== 'pierce' && d.mech.kind !== 'beam') {
+          const rest = ctx.resolvePierce?.(origin, ctx.direction, 2) ?? [];
+          for (let i = 1; i < rest.length; i++) {
+            ctx.tracer.fire(origin, rest[i], d.color, lineIntensity * 0.75);
+            ctx.onHitEnemy?.(rest[i], shotDmg * Math.pow(0.7, i), {});
+          }
+        }
         // 局内「穿透弹」：主命中后沿弹道继续穿透（武器自身 pierce 机制不叠加）
         if (p === 0 && ctx.runPierce && ctx.runPierce.targets > 0 && d.mech.kind !== 'pierce' && d.mech.kind !== 'beam') {
           const rest = ctx.resolvePierce?.(origin, ctx.direction, 1 + ctx.runPierce.targets) ?? [];

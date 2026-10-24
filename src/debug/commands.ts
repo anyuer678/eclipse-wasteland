@@ -84,6 +84,8 @@ export interface CommandDeps {
   beginMission: () => void;
   syncBossModel: () => void;
   remountViewmodel: () => void;
+  castSkill: () => void;
+  releaseFire: () => void;
   setHp: (v: number) => void;
   performDash: () => void;
   applyDamageToPlayer: (v: number, src?: { x: number; z: number }) => boolean;
@@ -300,6 +302,14 @@ export function createDebugApi(d: CommandDeps): Record<string, unknown> {
       const g = d.inventory.getWeapon(d.arsenal.current.def.id);
       g.ascension = Math.max(0, Math.min(3, Math.floor(n)));
       d.arsenal.refreshGrowth(d.inventory);
+    },
+    /** 调试：释放当前武器主动技能（E 键；过载开关连带移速刷新） */
+    castSkill: () => d.castSkill(),
+    /** 调试：松开左键（蓄力武器满蓄结算回归用） */
+    releaseFire: () => d.releaseFire(),
+    /** 调试：充满当前武器能量（能量爆发/过载回归用） */
+    fillEnergy(): void {
+      d.arsenal.current.state.energy = d.arsenal.current.def.energyMax;
     },
     /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
     weaponState: () => weaponState(d.stateDeps),
