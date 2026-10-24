@@ -349,6 +349,13 @@ function enemyMaterial(roughness = 0.62, metalness = 0.12): THREE.MeshStandardMa
     shader.uniforms.uAttack = { value: 0 };
     shader.uniforms.uHit = { value: 0 };
     shader.vertexShader = ANIM_UNIFORMS + shader.vertexShader.replace('#include <begin_vertex>', ANIM_BODY);
+    // 轮廓光：让低多边形敌人在草地/雾里仍有清晰剪影（顶点色染色）
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+       float rim = pow(1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0), 2.0);
+       totalEmissiveRadiance += vColor.rgb * rim * 0.7;`
+    );
     mat.userData.anim = shader.uniforms;
   };
   return mat;

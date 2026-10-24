@@ -546,6 +546,7 @@ function boot(): void {
     roleCooldown = 0;
     meleeCooldown = 0;
     dashCooldown = 0;
+    dashInvuln = 0;
     if (summonGroup) {
       world.scene.remove(summonGroup);
       summonGroup = null;
@@ -882,6 +883,7 @@ function boot(): void {
 
   /** 每帧复用的临时向量（避免热路径 new Vector3） */
   const eyeScratch = new THREE.Vector3();
+  const muzzleScratch = new THREE.Vector3();
   const centerScratch = new THREE.Vector3();
   /** 敌人分离用空间哈希（复用，避免每帧分配） */
   const enemyHash = new SpatialHash(1.5);
@@ -973,6 +975,9 @@ function boot(): void {
     tracer,
     onShot: (): void => {
       sfx.shot(arsenal.current.def.archetype);
+      // 枪口闪光：短促高亮粒子，配合 Bloom 形成枪口焰
+      muzzleScratch.copy(fireCtx.origin).addScaledVector(fireCtx.direction, 0.85);
+      fx.emit(muzzleScratch, 0xffd08a, settings.lowMotion ? 1 : 2, 0.9, 1.15);
       fovKick = Math.min(fovKick + (settings.lowMotion ? 0.35 : 0.9), 3.5);
       // 镜头后坐力：按枪型给不同的上抬，指数回落
       const kick: Record<string, number> = { rifle: 0.011, pistol: 0.008, smg: 0.006, shotgun: 0.028, sniper: 0.04 };
@@ -1353,6 +1358,14 @@ function boot(): void {
     // 等级压制：怪物等级高于玩家时伤害放大
     v *= suppressionTaken(runState.level - flow.monsterLevel);
     if (hurtInvuln > 0) return false; // 无敌帧：防多敌人同帧秒杀，也不再播放受击反馈
+    if (dashInvuln > 0) {
+      // 完美闪避：吃掉无敌帧并把冲刺冷却压到 ≤1.5s，鼓励主动读招
+      dashInvuln = 0;
+      dashCooldown = Math.min(dashCooldown, 1.5);
+      addDamagePopup(player.position.clone().add(new THREE.Vector3(0, 1.7, 0)), '完美闪避 · 冲刺冷却缩短', '#9fc9e8', 16);
+      sfx.pickup();
+      return false;
+    }
     if (!Number.isFinite(v) || v <= 0) return false; // NaN 防护
     hurtInvuln = 0.4;
     sfx.hurt();
@@ -1395,6 +1408,8 @@ function boot(): void {
     fx.popup(worldPos, text, color, size, key);
   };
   let dashCooldown = 0;
+  /** 冲刺无敌帧（秒）：起手短暂免伤，给玩家主动躲招的空间 */
+  let dashInvuln = 0;
   let shieldTimer = 0;
   let shieldCooldown = 0;
 
@@ -1460,6 +1475,17 @@ function boot(): void {
       furyTimer = role.duration * roleMult;
       tracer.fire(player.eye(), player.eye().clone().addScaledVector(fireCtx.direction, 2), role.color, 1.6);
     }
+  }
+
+  /** F 冲刺：步进碰撞 + 0.35s 无敌帧 + 残影（战斗循环与调试口共用） */
+  function performDash(): void {
+    dashCooldown = 4;
+    dashStep(player, player.yaw, { arenaRadius: ARENA_RADIUS, terrainHeightAt });
+    dashInvuln = 0.35;
+    muzzleScratch.copy(player.position);
+    muzzleScratch.y += 1.0;
+    fx.emit(muzzleScratch, 0x9fc9e8, 6, 2.4, 0.9);
+    tracer.fire(player.eye(), player.eye().clone().addScaledVector(fireCtx.direction, 3), 0x9fc9e8, 1.4);
   }
 
   /** 右键近战：前�?2.5m 扇形内命中首个敌�?BOSS */
@@ -1718,6 +1744,7 @@ function boot(): void {
 
       meleeCooldown = Math.max(0, meleeCooldown - dt);
       dashCooldown = Math.max(0, dashCooldown - dt);
+      dashInvuln = Math.max(0, dashInvuln - dt);
       shieldCooldown = Math.max(0, shieldCooldown - dt);
       shieldTimer = Math.max(0, shieldTimer - dt);
 
@@ -1784,11 +1811,7 @@ function boot(): void {
       }
 
       // F 冲刺：向面朝方向突进（步进碰撞，避免穿墙/穿平台）
-      if (snap.key('KeyF') && !keyState.dash && dashCooldown <= 0) {
-        dashCooldown = 4;
-        dashStep(player, player.yaw, { arenaRadius: ARENA_RADIUS, terrainHeightAt });
-        tracer.fire(player.eye(), player.eye().clone().addScaledVector(fireCtx.direction, 3), 0x9fc9e8, 1.4);
-      }
+      if (snap.key('KeyF') && !keyState.dash && dashCooldown <= 0) performDash();
       keyState.dash = snap.key('KeyF');
 
       // G 护盾�? 秒减�?
@@ -2097,6 +2120,7 @@ function boot(): void {
         fps: +perfFps.toFixed(1),
         frameMs: +perfFrameMs.toFixed(2),
         calls: info.render.calls,
+        postFx: world.postFxActive ? 1 : 0,
         triangles: info.render.triangles,
         geometries: info.memory.geometries,
         textures: info.memory.textures,
@@ -2238,6 +2262,12 @@ function boot(): void {
     },
     hurt(amount: number): void {
       setHp(hp - amount);
+    },
+    /** 触发一次冲刺（调试口：验证无敌帧/完美闪避） */
+    dash: () => performDash(),
+    /** 走完整受击管线（护甲/护盾/无敌帧），用于验证冲刺无敌帧 */
+    damagePlayer(amount: number): boolean {
+      return applyDamageToPlayer(amount);
     },
     grant(material: string, amount: number): void {
       inventory.addMaterial(material, amount);
@@ -2434,9 +2464,15 @@ function boot(): void {
       applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
       refreshRun();
     },
-    mapInfo(): { platforms: { x: number; z: number; w: number; d: number; h: number }[]; crates: number; playerY: number; playerGround: number } {
+    mapInfo(): { platforms: { x: number; z: number; w: number; d: number; h: number }[]; crates: number; playerY: number; playerGround: number; ground: boolean } {
       const plats = (mapRoot?.userData.platforms ?? []) as { x: number; z: number; w: number; d: number; h: number }[];
-      return { platforms: plats, crates: crates.filter((c) => c.alive).length, playerY: +player.position.y.toFixed(2), playerGround: +player.terrainHeight(player.position.x, player.position.z).toFixed(2) };
+      return {
+        platforms: plats,
+        crates: crates.filter((c) => c.alive).length,
+        playerY: +player.position.y.toFixed(2),
+        playerGround: +player.terrainHeight(player.position.x, player.position.z).toFixed(2),
+        ground: !!mapRoot?.userData.ground,
+      };
     },
     envInfo(): { instances: number; scales: number[]; positions: number[][] } {
       const scales: number[] = [];

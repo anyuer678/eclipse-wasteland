@@ -14,25 +14,35 @@ export const ENV_MODELS: Record<string, EnvModelSpec[]> = {
   facility: [
     { name: 'env/env_rockSmall', count: 7, scale: [1.6, 3], y: 0 },
     { name: 'env/env_log', count: 5, scale: [1.8, 3], y: 0.25 },
-    { name: 'env/env_bush', count: 9, scale: [0.35, 0.62], y: 0.02 }, // 地表草丛（小、不抢眼）
+    { name: 'env/env_bush', count: 20, scale: [0.35, 0.62], y: 0.02 }, // 地表草丛（小、不抢眼）
   ],
   quarry: [
     { name: 'env/env_rockA', count: 7, scale: [2.2, 4.2], y: 0 },
     { name: 'env/env_rockB', count: 6, scale: [2.2, 4.2], y: 0 },
     { name: 'env/env_rockTall', count: 4, scale: [2.2, 3.6], y: 0 },
     { name: 'env/env_log', count: 3, scale: [1.8, 3.2], y: 0.25 },
-    { name: 'env/env_bush', count: 9, scale: [0.35, 0.6], y: 0.02 },
+    { name: 'env/env_bush', count: 18, scale: [0.35, 0.6], y: 0.02 },
   ],
   lab: [
     { name: 'env/env_treePine', count: 6, scale: [2.0, 3.2], y: 0 },
     { name: 'env/env_treeDefault', count: 5, scale: [1.9, 2.9], y: 0 },
     { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
-    { name: 'env/env_bush', count: 10, scale: [0.35, 0.6], y: 0.02 },
+    { name: 'env/env_bush', count: 20, scale: [0.35, 0.6], y: 0.02 },
   ],
   canyon: [
     { name: 'env/env_rockA', count: 8, scale: [2.4, 4.4], y: 0 },
     { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
-    { name: 'env/env_bush', count: 8, scale: [0.35, 0.6], y: 0.02 },
+    { name: 'env/env_bush', count: 16, scale: [0.35, 0.6], y: 0.02 },
+  ],
+  volcano: [
+    { name: 'env/env_rockA', count: 8, scale: [2.2, 4.4], y: 0 },
+    { name: 'env/env_rockTall', count: 5, scale: [2.2, 3.8], y: 0 },
+    { name: 'env/env_rockSmall', count: 6, scale: [1.6, 3], y: 0 },
+  ],
+  ice: [
+    { name: 'env/env_treePine', count: 7, scale: [2.0, 3.4], y: 0 },
+    { name: 'env/env_rockSmall', count: 8, scale: [1.6, 3], y: 0 },
+    { name: 'env/env_rockTall', count: 3, scale: [2.2, 3.6], y: 0 },
   ],
 };
 

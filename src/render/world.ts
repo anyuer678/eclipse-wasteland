@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { solid } from './materials';
+import { PostFx } from './postFx';
 
 /** 简单种子随机（地图布局用，保证同关卡布局一致） */
 function mulberry32(seed: number): () => number {
@@ -390,6 +391,7 @@ export class World {
   private sun: THREE.DirectionalLight | null = null;
   private fill: THREE.DirectionalLight | null = null;
   private hemi: THREE.HemisphereLight | null = null;
+  private postFx: PostFx | null = null;
   private groundMat: THREE.MeshStandardMaterial | null = null;
   private sunGlow: THREE.Sprite | null = null;
   private readonly shadowTarget = new THREE.Object3D();
@@ -397,9 +399,14 @@ export class World {
   quality: 'low' | 'medium' | 'high' = 'medium';
   /** 是否允许根据帧时自动升降档（手动 setQuality 后关闭） */
   autoQuality = true;
+  /** 后处理是否可用（无 WebGL2/RT 的环境可能构造失败） */
+  get postFxActive(): boolean {
+    return this.postFx !== null;
+  }
   /** 自适应像素比状态 */
   private maxDpr = 1.5;
   private frameAccum = 0;
+  private slowFrames = 0;
   private frameCount = 0;
   private lastFrameStamp = 0;
 
@@ -456,6 +463,17 @@ export class World {
     this.scene.add(fill);
     this.fill = fill;
 
+    try {
+      this.postFx = new PostFx(this.renderer, this.scene, this.camera, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        strength: 0.4,
+      });
+    } catch {
+      // 无 WebGL2/RT 支持的环境退回直接渲染
+      this.postFx = null;
+    }
+
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -463,6 +481,7 @@ export class World {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.postFx?.setSize(window.innerWidth, window.innerHeight);
   }
 
   add(obj: THREE.Object3D): void {
@@ -484,6 +503,11 @@ export class World {
 
   render(): void {
     this.autoTune();
+    if (this.postFx && this.quality !== 'low') {
+      this.postFx.setPixelRatio(this.renderer.getPixelRatio());
+      this.postFx.render();
+      return;
+    }
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -498,6 +522,7 @@ export class World {
     }
     if (this.sunGlow) this.sunGlow.visible = level !== 'low';
     if (this.fill) this.fill.visible = level !== 'low';
+    this.postFx?.setStrength(level === 'high' ? 0.55 : 0.4);
     if (this.hemi) this.hemi.intensity = level === 'low' ? 1.45 : 1.15;
     // 阴影开关切换后需要重建程序
     this.scene.traverse((o) => {
@@ -519,7 +544,20 @@ export class World {
     }
     const dt = now - this.lastFrameStamp;
     this.lastFrameStamp = now;
-    if (dt <= 0 || dt > 500) return; // 切标签页/断点后不采样
+    if (dt <= 0) return;
+    if (dt > 500) {
+      // 极慢帧（低端 GPU / 软件渲染）：连续 3 次就降档，避免后处理长期拖死帧率
+      if (document.visibilityState !== 'hidden') {
+        this.slowFrames += 1;
+        if (this.slowFrames >= 3 && this.autoQuality) {
+          if (this.quality === 'high') this.setQuality('medium', true);
+          else if (this.quality === 'medium') this.setQuality('low', true);
+          this.slowFrames = 0;
+        }
+      }
+      return; // 切标签页/断点后不采样
+    }
+    this.slowFrames = 0;
     this.frameAccum += dt;
     this.frameCount += 1;
     if (this.frameCount < 90) return;
@@ -714,6 +752,7 @@ export class World {
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.receiveShadow = true;
     root.add(ground);
+    root.userData.ground = ground; // 调试守卫：地形网格必须存在（曾因误删导致山体消失）
     this.groundMat = groundMat;
 
     // ---------- 共享材质（每张图一套，切换关卡即释放） ----------

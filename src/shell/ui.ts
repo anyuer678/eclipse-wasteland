@@ -315,6 +315,7 @@ export const THEME = `
       linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0) 16%);
   }
   #ss-webgl { position: fixed; inset: 0; z-index: 0; }
+  #ss-webgl canvas { filter: saturate(1.08) contrast(1.04); }
 `;
 
 export function injectTheme(): void {
