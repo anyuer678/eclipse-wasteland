@@ -399,9 +399,9 @@ export class World {
   quality: 'low' | 'medium' | 'high' = 'medium';
   /** 是否允许根据帧时自动升降档（手动 setQuality 后关闭） */
   autoQuality = true;
-  /** 后处理是否可用（无 WebGL2/RT 的环境可能构造失败） */
+  /** 后处理当前是否生效（仅高档；无 WebGL2/RT 或中低档为 false） */
   get postFxActive(): boolean {
-    return this.postFx !== null;
+    return this.postFx !== null && this.quality === 'high';
   }
   /** 自适应像素比状态 */
   private maxDpr = 1.5;
@@ -503,7 +503,7 @@ export class World {
 
   render(): void {
     this.autoTune();
-    if (this.postFx && this.quality !== 'low') {
+    if (this.postFx && this.quality === 'high') {
       this.postFx.setPixelRatio(this.renderer.getPixelRatio());
       this.postFx.render();
       return;

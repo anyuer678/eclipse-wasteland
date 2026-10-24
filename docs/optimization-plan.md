@@ -114,7 +114,7 @@
 
 | # | 内容 | 验收 |
 | --- | --- | --- |
-| 11.1 ✅ | 轻量 Bloom 后处理 | `render/postFx.ts`：RenderPass + UnrealBloom（半分辨率）+ OutputPass；中/高档开启、低档与无 RT 环境回退直接渲染；连续 3 个 >500ms 慢帧自动降档；`__ss.perf().postFx` 可观测 |
+| 11.1 ✅ | 轻量 Bloom 后处理 | `render/postFx.ts`：RenderPass + UnrealBloom（半分辨率）+ OutputPass；**仅高档开启**，中/低档与无 RT 环境回退直接渲染（自动画质先跑稳再升档）；连续 3 个 >500ms 慢帧自动降档；`__ss.perf().postFx` 可观测（medium=0 / high=1） |
 | 11.2 ✅ | 光照/天空/轮廓光/枪口焰 | 主光与半球光重新配比、雾距回调；敌人 shader 加 Fresnel 轮廓光；开火时枪口高亮粒子（配合 Bloom）；有头截图核对近景/远景可读性 |
 | 11.3 ✅ | 环境素材补齐 | volcano 补岩石、ice 补松树/岩石；facility/quarry/lab/canyon 草丛密度提高；`envInfo` 可核对实例数 |
 | 11.4 ✅ | 冲刺无敌帧与完美闪避 | F 冲刺 0.35s 免伤；免伤成功时冲刺冷却压到 ≤1.5s 并弹「完美闪避」；`__ss.dash()/damagePlayer()` 确定性探针：免伤后 hp 100→100、cd 4→1.5，600ms 后同伤害 hp→78 |
