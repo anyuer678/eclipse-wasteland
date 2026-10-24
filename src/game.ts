@@ -41,6 +41,7 @@ import { tickEnemies } from './play/enemyTick';
 import { tickBoss } from './play/bossTick';
 import { applyHudFrame } from './shell/hudUpdate';
 import { findNearestVisible, resolvePierceTargets } from './play/targeting';
+import { chainLightning } from './play/chain';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
 import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
@@ -1143,31 +1144,16 @@ function boot(): void {
     onChain(pos, damage, jumps, falloff) {
       // 升级暂停后不再继续弹跳结算
       if (paused) return;
-      // 连锁闪电：从命中点向附近敌人弹跳，伤害逐跳衰减；每跳都要求视线
-      let fromPos = pos;
-      let dmg = damage;
-      const alive = (): Enemy[] => spawner.all().filter((e) => e.alive);
-      for (let j = 0; j < jumps; j++) {
-        let best: { e: Enemy; d: number } | null = null;
-        for (const e of alive()) {
-          const c = e.center();
-          const d = c.distanceToSquared(fromPos);
-          if (d < 1e-4) continue;
-          if (d >= 100) continue;
-          if (!nav.hasLineOfSight3D(fromPos.x, fromPos.y, fromPos.z, c.x, c.y, c.z)) continue;
-          if (best === null || d < best.d) best = { e, d };
-        }
-        if (!best) break;
-        dmg *= falloff;
-        const to = best.e.center();
-        tracer.fire(fromPos, to, 0x7ab0ff, 1.8);
-        const dead = best.e.takeDamage(dmg, 'energy');
-        if (dead) {
+      chainLightning(pos, damage, jumps, falloff, {
+        enemies: () => spawner.all(),
+        hasLineOfSight3D: navLos,
+        fire: (from, to) => tracer.fire(from, to, 0x7ab0ff, 1.8),
+        damage: (e, n) => e.takeDamage(n, 'energy'),
+        onKill: (e) => {
           creditWeaponKill();
-          if (registerEnemyKill(best.e)) break;
-        }
-        fromPos = to;
-      }
+          return registerEnemyKill(e);
+        },
+      });
     },
     onHeal(amount) {
       setHp(hp + amount);
