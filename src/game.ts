@@ -59,10 +59,9 @@ import { resolveCrowdObstacles, settleCrowd } from './play/enemyPhysics';
 import type { EnemyPhysicsCtx } from './play/enemyPhysics';
 import { combatGood } from './play/combatShop';
 import { MOODS } from './play/ambience';
-import { chestsInfo, cratesInfo, enemyHealths, enemyMotion, navInfo, obstaclesDump, playerPos, poolsInfo } from './debug/queries';
 import type { QueryDeps } from './debug/queries';
-import { buffState, combatState, runDump, uiState, weaponState } from './debug/stateQueries';
 import type { StateDeps } from './debug/stateQueries';
+import { createDebugApi } from './debug/commands';
 import { mountEnvModels } from './render/envMount';
 import { buildChestMesh, buildOrbMesh, buildRoleRing, buildSummonMesh } from './render/lootModels';
 
@@ -2174,7 +2173,7 @@ function boot(): void {
   services.register('world', world);
   services.register('spawner', spawner);
 
-  // 开发期调试钩子（正式发布前移除�?
+  // 开发期调试钩子（正式发布前移除）：查询映射在 debug/queries，可变命令在 debug/commands
   const dbg = window as unknown as { __ss?: Record<string, unknown> };
   /** 调试查询依赖（只读）：交给 debug/queries 做映射，便于单测 */
   const queryDeps: QueryDeps = {
@@ -2231,467 +2230,70 @@ function boot(): void {
     killStreak: () => killStreak,
     run: () => runState,
   };
-  dbg.__ss = {
-    /** 最近命中点/中心高度（验证弱点判定） */
+  dbg.__ss = createDebugApi({
+    world,
+    spawner,
+    nav,
+    player,
+    arsenal,
+    inventory,
+    shell,
+    flow,
+    settings,
+    placementRng,
+    fireCtx,
+    queryDeps,
+    stateDeps,
+    dailyState,
+    talentState,
+    boss: () => activeBoss,
+    run: () => runState,
+    mapRoot: () => mapRoot,
+    envRoot: () => envRoot,
+    viewmodel: () => viewmodel,
+    viewmodelWeaponId: () => viewmodelWeaponId,
+    perfFps: () => perfFps,
+    perfFrameMs: () => perfFrameMs,
+    hp: () => hp,
+    maxHp: () => maxHp,
+    killStreak: () => killStreak,
+    expBonus: () => bonuses.expBonus,
     lastHit: () => ({ ...lastHit }),
-    /** 性能快照：FPS / 绘制调用 / 三角形 / 资源数 / 场上次级对象数 */
-    perf(): Record<string, number> {
-      const info = world.renderer.info;
-      return {
-        fps: +perfFps.toFixed(1),
-        frameMs: +perfFrameMs.toFixed(2),
-        calls: info.render.calls,
-        postFx: world.postFxActive ? 1 : 0,
-        triangles: info.render.triangles,
-        geometries: info.memory.geometries,
-        textures: info.memory.textures,
-        programs: info.programs?.length ?? 0,
-        dpr: +world.renderer.getPixelRatio().toFixed(2),
-        enemies: spawner.all().length,
-      };
+    barrels,
+    crates,
+    orbs: buffOrbs,
+    setMissionIndex: (i) => {
+      missionIndex = i;
     },
-    /** 设置快照（探针用：确认 FOV/准星/伤害数字/低动态/音乐音量已生效） */
-    settingsInfo(): { fov: number; crosshair: string; damageNumbers: boolean; lowMotion: boolean; musicVolume: number } {
-      return {
-        fov: +world.camera.fov.toFixed(1),
-        crosshair: settings.crosshair,
-        damageNumbers: settings.damageNumbers,
-        lowMotion: settings.lowMotion,
-        musicVolume: +settings.musicVolume.toFixed(2),
-      };
+    setBenchFire: (v) => {
+      benchFire = v;
     },
-    setQuality(level: 'low' | 'medium' | 'high', auto = false): string {
-      world.setQuality(level, auto);
-      return world.quality;
+    setPaused: (v) => {
+      paused = v;
     },
-    /** 直接进入指定副本（跳过菜单，压测用） */
-    enterCombat(index = 0): void {
-      document.querySelectorAll('.ss-screen').forEach((s) => s.classList.add('hidden'));
-      missionIndex = Math.max(0, Math.min(MISSIONS.length - 1, index));
-      flow.mission = MISSIONS[missionIndex];
-      beginMission();
-    },
-    /** 压力测试：一次刷 n 只追击怪（hpMult 拉高避免被打死，便于稳态采样） */
-    spawnStress(n = 20, spread = 14, hpMult = 1e6): void {
-      spawner.spawnWave({ chasers: n, boomers: 0, spitters: 0 }, { hpMult });
-      syncBossModel();
-      const placed: { x: number; z: number; r: number }[] = [];
-      for (const e of spawner.all()) {
-        const spot = nav.findSpawnPoint(
-          () => placementRng.next(),
-          player.position.x,
-          player.position.z,
-          4,
-          Math.max(8, spread),
-          placed,
-          1.2
-        );
-        if (spot) {
-          e.place(spot.x, spot.z, spot.y);
-          placed.push({ x: spot.x, z: spot.z, r: e.def.radius });
-        }
-      }
-    },
-    /** 调整视角（截图/调试用） */
-    setView(yaw: number, pitch: number): void {
-      player.yaw = yaw;
-      player.pitch = Math.max(-1.5, Math.min(1.5, pitch));
-    },
-    /** 传送到指定水平位置（贴地） */
-    moveTo(x: number, z: number): void {
-      player.position.set(x, player.terrainHeight(x, z), z);
-    },
-    /** 调试：把 BOSS 挪到指定水平位置（寻路回归用） */
-    moveBoss(x: number, z: number): void {
-      if (!activeBoss) return;
-      activeBoss.root.position.set(x, player.terrainHeight(x, z), z);
-    },
-    /** BOSS 状态与动画（调试用） */
-    bossInfo(): Record<string, unknown> | null {
-      if (!activeBoss) return null;
-      const p = activeBoss.root.position;
-      return {
-        hp: Math.round(activeBoss.hp),
-        maxHp: Math.round(activeBoss.maxHp),
-        phase: activeBoss.phase,
-        children: activeBoss.root.children.length,
-        anim: activeBoss.animState(),
-        x: +p.x.toFixed(2),
-        y: +p.y.toFixed(2),
-        z: +p.z.toFixed(2),
-        ground: +player.terrainHeight(p.x, p.z).toFixed(2),
-        dist: +Math.hypot(p.x - player.position.x, p.z - player.position.z).toFixed(2),
-        alive: activeBoss.alive,
-        charging: activeBoss.isCharging(),
-      };
-    },
-    /** 按兵种刷怪（调试/截图用） */
-    spawnKinds(counts: Partial<Record<string, number>>, hpMult = 1e6): number {
-      spawner.spawnWave(
-        {
-          chasers: counts.chaser ?? 0,
-          boomers: counts.boomer ?? 0,
-          spitters: counts.spitter ?? 0,
-          guards: counts.guard ?? 0,
-          berserkers: counts.berserker ?? 0,
-          casters: counts.caster ?? 0,
-          healers: counts.healer ?? 0,
-          turrets: counts.turret ?? 0,
-        },
-        { hpMult }
-      );
-      syncBossModel();
-      // 排成一排摆在玩家正前方（截图/对比用），落点贴地
-      const list = spawner.all();
-      for (let i = 0; i < list.length; i++) {
-        const off = (i - (list.length - 1) / 2) * 1.55;
-        const x = player.position.x + off;
-        const z = player.position.z - 5;
-        list[i].place(x, z, player.terrainHeight(x, z));
-      }
-      return list.length;
-    },
-    /** 关卡切换用的环境统计已由 envInfo 提供 */
-
-    /** 开关自动开火（压测命中特效链路） */
-    setBenchFire(on: boolean): void {
-      benchFire = on;
-    },
-    teleportEnemies(offsetX: number, offsetZ: number): void {
-      for (const e of spawner.all()) {
-        const x = player.position.x + offsetX;
-        const z = player.position.z + offsetZ;
-        e.place(x, z, player.terrainHeight(x, z));
-      }
-      syncBossModel();
-    },
-    /** 调试：把指定序号的敌人放到世界坐标（穿透/排队类命中探针用） */
-    placeEnemy(index: number, x: number, z: number): boolean {
-      const e = spawner.all()[index];
-      if (!e) return false;
-      e.place(x, z, player.terrainHeight(x, z));
-      return true;
-    },
-    /** 调试：对指定敌人造成伤害（治疗/减伤类探针用） */
-    damageEnemy(index: number, amount: number): boolean {
-      const e = spawner.all()[index];
-      if (!e || !e.alive) return false;
-      return e.takeDamage(amount);
-    },
-    heal(): void {
-      setHp(maxHp);
-    },
-    hurt(amount: number): void {
-      setHp(hp - amount);
-    },
-    /** 触发一次冲刺（调试口：验证无敌帧/完美闪避） */
-    dash: () => performDash(),
-    /** 走完整受击管线（护甲/护盾/无敌帧），用于验证冲刺无敌帧 */
-    damagePlayer(amount: number): boolean {
-      return applyDamageToPlayer(amount);
-    },
-    grant(material: string, amount: number): void {
-      inventory.addMaterial(material, amount);
-    },
-    materialOf(material: string): number {
-      return inventory.material(material);
-    },
-    /** 调试：当前金币（商店/结算探针用） */
-    goldOf(): number {
-      return inventory.gold;
-    },
-    enemyHealths: () => enemyHealths(queryDeps),
-    /** 敌人运动采样：位置/地面高度/与玩家距离/卡位状态（AI 调试与回归用） */
-    enemyMotion: () => enemyMotion(queryDeps),
-    playerHp(): number {
-      return Math.round(hp);
-    },
-    /** 调试：UI/暂停状态（验证面板开关与输入分支） */
-    uiState: () => uiState(stateDeps),
-    /** 调试：设置当前武器击杀数（不刷新倍率，用于熟练度里程碑回归） */
-    setWeaponKills(n: number): void {
-      inventory.getWeapon(arsenal.current.def.id).kills = Math.max(0, Math.floor(n));
-    },
-    /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
-    weaponState: () => weaponState(stateDeps),
-    /** 调试：跨局战斗状态（验证重开清理） */
-    combatState: () => combatState(stateDeps),
-    poolsInfo: () => poolsInfo(queryDeps),
-    /** 调试：宝箱落点/奖励 */
-    chestsInfo: () => chestsInfo(queryDeps),
-    /** 调试：木箱位置/存活（校验是否被平台吞掉） */
-    cratesInfo: () => cratesInfo(queryDeps),
-    barrelsInfo: () => barrels.map((b, i) => ({ i, x: b.x, z: b.z, hp: b.hp, alive: b.alive, fuse: b.fuse })),
-    igniteBarrel: (i: number) => {
-      const b = barrels[i];
-      if (b) igniteBarrel(b);
-      return barrels.map((b2) => b2.alive);
-    },
-    playerPos: () => playerPos(queryDeps),
-    /** 调试：切换角色（验证召唤/炼狱等角色技能的视线判定） */
-    setRole(id: string): boolean {
-      if (!ROLES.some((r) => r.id === id)) return false;
+    setSelectedRoleId: (id) => {
       selectedRoleId = id;
-      return true;
     },
-    /** 导航网格状态（校验换图后是否成功烘焙） */
-    navInfo: () => navInfo(queryDeps),
-    /** 碰撞体列表（地图调试：确认随机道具是否堵路） */
-    obstaclesDump: () => obstaclesDump(queryDeps),
-    /** 单点导航探针：可走/可达/流场方向（AI 调试用） */
-    navProbe(x: number, z: number): { walkable: boolean; reachable: boolean; dx: number; dz: number; dist: number; rawDx: number; rawDz: number } {
-      nav.updateTarget(player.position.x, player.position.z);
-      const out = { x: 0, z: 0 };
-      nav.steer(x, z, player.terrainHeight(x, z), out);
-      const raw = { x: 0, z: 0 };
-      const rawOk = nav.rawFlow(x, z, raw);
-      return {
-        walkable: nav.isWalkable(x, z),
-        reachable: nav.reachable(x, z),
-        dx: +out.x.toFixed(2),
-        dz: +out.z.toFixed(2),
-        dist: nav.distanceAt(x, z),
-        rawDx: rawOk ? +raw.x.toFixed(2) : 0,
-        rawDz: rawOk ? +raw.z.toFixed(2) : 0,
-      };
+    setKillStreak: (v) => {
+      killStreak = v;
     },
-    /** 分离审计：当前场上敌人里，空间哈希是否覆盖了所有真实重叠对 */
-    separationAudit(): { crowd: number; hashPairs: number; brutePairs: number; missing: number } {
-      const crowd = spawner.all().filter((e) => e.alive);
-      const hash = new SpatialHash(1.5);
-      const pos = crowd.map((e) => e.root.position);
-      pos.forEach((p, i) => hash.insert(i, p.x, p.z));
-      const pairs = hash.pairs();
-      const hashSet = new Set<string>();
-      for (let k = 0; k < pairs.length; k += 2) hashSet.add(`${pairs[k]},${pairs[k + 1]}`);
-      let brute = 0;
-      let missing = 0;
-      for (let i = 0; i < crowd.length; i++) {
-        for (let j = i + 1; j < crowd.length; j++) {
-          const need = crowd[i].def.radius + crowd[j].def.radius + 0.12;
-          if (Math.hypot(pos[i].x - pos[j].x, pos[i].z - pos[j].z) < need) {
-            brute += 1;
-            if (!hashSet.has(`${i},${j}`)) missing += 1;
-          }
-        }
-      }
-      return { crowd: crowd.length, hashPairs: pairs.length / 2, brutePairs: brute, missing };
+    setKillStreakTimer: (v) => {
+      killStreakTimer = v;
     },
-    enemyDump(): { childTypes: string[]; modelApplied: boolean; barOk: boolean; modelVisible: boolean }[] {
-      return spawner.all().map((e) => ({
-        childTypes: e.root.children.map((c) => `${c.type}[${c.name || ''}] children=${c.children.length} vis=${c.visible}`),
-        modelApplied: e.root.children.some((c) => (c as THREE.Mesh).isMesh),
-        // 血条为精灵（第 2 个子节点），满血时隐藏
-        barOk: e.root.children.some((c) => (c as THREE.Sprite).isSprite),
-        modelVisible: e.root.children.some((c) => c.visible),
-      }));
+    setLastKills: (v) => {
+      lastKills = v;
     },
-    enemyTypes(): { kind: string; elite: string | null; hp: number; maxHp: number; modelH: number }[] {
-      return spawner.all().map((e) => {
-        // 模型实际高度（含 scale）
-        let h = 0;
-        const box = new THREE.Box3().setFromObject(e.root);
-        h = +(box.getSize(new THREE.Vector3()).y).toFixed(2);
-        return { kind: e.def.kind, elite: e.elite ? e.elite.name : null, hp: Math.round(e.hp), maxHp: Math.round(e.def.hp), modelH: h };
-      });
-    },
-    testShot(): string {
-      const eye = player.eye();
-      const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(world.camera.quaternion).normalize();
-      const hit = fireCtx.resolveHit(eye, dir);
-      const dist = eye.distanceTo(hit);
-      return dist < 59 ? `HIT d=${dist.toFixed(2)}` : 'NO HIT';
-    },
-    sceneStats(): { meshes: number; skinned: number; groups: number } {
-      let meshes = 0;
-      let skinned = 0;
-      let groups = 0;
-      world.scene.traverse((o) => {
-        if ((o as THREE.Mesh).isMesh) {
-          meshes += 1;
-          if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned += 1;
-        }
-        if ((o as THREE.Group).isGroup) groups += 1;
-      });
-      return { meshes, skinned, groups };
-    },
-    viewmodelInfo(): { meshes: number; hasGunModel: boolean; box: { size: number[]; center: number[] }; children: string[] } {
-      const vg = viewmodel?.group;
-      let meshes = 0;
-      const children: string[] = [];
-      let box = { size: [0, 0, 0], center: [0, 0, 0] };
-      if (vg) {
-        const bb = new THREE.Box3().setFromObject(vg);
-        const size = bb.getSize(new THREE.Vector3());
-        const center = bb.getCenter(new THREE.Vector3());
-        box = { size: [size.x, size.y, size.z], center: [center.x, center.y, center.z] };
-        vg.traverse((o) => {
-          if ((o as THREE.Mesh).isMesh) meshes += 1;
-        });
-      }
-      let gunBox: Record<string, number[]> | null = null;
-      let gun: THREE.Object3D | null = null;
-      vg?.traverse((o) => {
-        if (o.userData.gun) gun = o;
-      });
-      if (gun) {
-        const gb = new THREE.Box3().setFromObject(gun);
-        const gs = gb.getSize(new THREE.Vector3());
-        const gc = gb.getCenter(new THREE.Vector3());
-        gunBox = { size: [+gs.x.toFixed(3), +gs.y.toFixed(3), +gs.z.toFixed(3)], center: [+gc.x.toFixed(3), +gc.y.toFixed(3), +gc.z.toFixed(3)] };
-      }
-      return { meshes, hasGunModel: meshes > 8, box, gunBox, children: children.slice(0, 5) } as unknown as {
-        meshes: number;
-        hasGunModel: boolean;
-        box: { size: number[]; center: number[] };
-        children: string[];
-      };
-    },
-    buffState: () => buffState(stateDeps),
-    runDump: () => runDump(stateDeps),
-    /** 调试：直接设置局内强化层数（验证 HUD/倍率刷新） */
-    setBoost(id: string, stacks: number): boolean {
-      if (!(id in runState.boosts)) return false;
-      runState.boosts[id as keyof typeof runState.boosts] = Math.max(0, Math.floor(stacks));
-      refreshRun();
-      return true;
-    },
-    killAll(): { killed: number; level: number } {
-      // 调试：击杀场上所有敌人（走完整击杀结算：经验/升级/每日/熟练度）
-      let killed = 0;
-      for (const e of spawner.all()) {
-        if (!e.alive) continue;
-        if (e.takeDamage(1e9)) {
-          killed += 1;
-          flow.kills += 1;
-          syncBossModel();
-          const curG = inventory.getWeapon(arsenal.current.def.id);
-          curG.kills += 1;
-          addDailyProgress(dailyState, 'kills', 1);
-        }
-      }
-      if (killed > 0) {
-        lastKills = flow.kills;
-        killStreak += killed;
-        killStreakTimer = 5;
-        for (let i = 0; i < killed; i++) {
-          if (addKillExp(runState, false, 1, 1 + bonuses.expBonus)) {
-            sfx.levelUp();
-            paused = true;
-            unlockMouse();
-            shell.hidePause();
-            shell.showLevelUp(runState.level, rollChoices(runState).map((b) => ({ id: b.id, name: b.name, desc: b.desc })));
-            break;
-          }
-        }
-      }
-      return { killed, level: runState.level };
-    },
-    forcePick(id: string): void {
-      applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
-      refreshRun();
-    },
-    mapInfo(): { platforms: { x: number; z: number; w: number; d: number; h: number }[]; crates: number; playerY: number; playerGround: number; ground: boolean; ambient: boolean } {
-      const plats = (mapRoot?.userData.platforms ?? []) as { x: number; z: number; w: number; d: number; h: number }[];
-      return {
-        platforms: plats,
-        crates: crates.filter((c) => c.alive).length,
-        playerY: +player.position.y.toFixed(2),
-        playerGround: +player.terrainHeight(player.position.x, player.position.z).toFixed(2),
-        ground: !!mapRoot?.userData.ground,
-        ambient: !!mapRoot?.userData.ambient,
-      };
-    },
-    envInfo(): { instances: number; scales: number[]; positions: number[][] } {
-      const scales: number[] = [];
-      const positions: number[][] = [];
-      let instances = 0;
-      envRoot?.traverse((o) => {
-        const inst = o as THREE.InstancedMesh;
-        if (inst.isInstancedMesh) {
-          instances += inst.count;
-          const m = new THREE.Matrix4();
-          for (let i = 0; i < Math.min(inst.count, 6); i++) {
-            inst.getMatrixAt(i, m);
-            const p = new THREE.Vector3();
-            const q = new THREE.Quaternion();
-            const sc = new THREE.Vector3();
-            m.decompose(p, q, sc);
-            scales.push(+sc.x.toFixed(2));
-            if (positions.length < 5) positions.push([+p.x.toFixed(1), +p.z.toFixed(1)]);
-          }
-        }
-      });
-      return { instances, scales: scales.slice(0, 10), positions };
-    },
-    terrainAt(x: number, z: number): number {
-      return +player.terrainHeight(x, z).toFixed(2);
-    },
-    addDailyKills(n: number): void {
-      addDailyProgress(dailyState, 'kills', n);
-    },
-    orbState(): { orbs: number; short: { fireSpd: number; crit: number; move: number } } {
-      return { orbs: buffOrbs.length, short: { ...shortBuffs } };
-    },
-    /** 调试：在指定水平位置生成 BUFF 球（校验平台/坡上的贴地） */
-    spawnOrbAt(x: number, z: number): void {
-      spawnBuffOrb(new THREE.Vector3(x, 0, z));
-    },
-    orbsInfo(): { x: number; y: number; z: number; ground: number }[] {
-      return buffOrbs.map((o) => ({
-        x: +o.mesh.position.x.toFixed(2),
-        y: +o.mesh.position.y.toFixed(2),
-        z: +o.mesh.position.z.toFixed(2),
-        ground: +player.terrainHeight(o.mesh.position.x, o.mesh.position.z).toFixed(2),
-      }));
-    },
-    spawnOrbHere(kind?: string): void {
-      if (kind) {
-        const k = kind as 'fireSpd' | 'crit' | 'heal' | 'energy' | 'move';
-        const g = new THREE.Group();
-        const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28, 0), new THREE.MeshBasicMaterial({ color: 0xffd24a }));
-        core.position.y = 0.9;
-        g.add(core);
-        g.position.copy(player.position);
-        world.scene.add(g);
-        buffOrbs.push({ mesh: g, kind: k });
-      } else {
-        spawnBuffOrb(player.position.clone());
-      }
-    },
-    addConsumable(id: string, n: number): void {
-      inventory.addConsumable(id, n);
-    },
-    grantGold(amount: number): void {
-      inventory.addGold(amount);
-    },
-    grantTalentPoints(amount: number): void {
-      inventory.addTalentPoints(amount);
-    },
-    talentStateDump(): { talents: Record<string, number>; points: number } {
-      return { talents: { ...talentState.talents }, points: inventory.talentPoints };
-    },
-    skipWave(): void {
-      for (const e of spawner.all()) e.alive = false;
-      spawner.sweep();
-      syncBossModel();
-    },
-    killBoss(): void {
-      if (activeBoss && activeBoss.alive) {
-        activeBoss.hp = 0;
-        activeBoss.alive = false;
-        syncBossModel();
-      }
-    },
-    /** 调试：对 BOSS 造成伤害并走统一死亡结算（验证经验/掉落/塔模式升级队列） */
-    damageBoss(amount: number): { dead: boolean; hp: number } | null {
-      if (!activeBoss || !activeBoss.alive) return null;
-      const boss = activeBoss;
-      const dead = boss.takeDamage(amount);
-      if (dead) onBossKilled(boss);
-      return { dead, hp: Math.max(0, Math.round(boss.hp)) };
-    },
-  };
+    beginMission,
+    syncBossModel,
+    setHp,
+    performDash,
+    applyDamageToPlayer,
+    refreshRun,
+    onBossKilled,
+    spawnBuffOrb,
+    igniteBarrel,
+    unlockMouse,
+  });
 
   shell.showMenu();
   // 首次进入游戏：弹出角色选择（之后可从主菜单"角色"卡更换）
