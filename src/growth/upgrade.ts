@@ -21,25 +21,83 @@ export const ASCENSION_MECH_STEP = 0.5;
 /** 进阶上限 */
 export const MAX_ASCENSION = 3;
 
-/** 配件改装：每阶进阶解锁的新效果描述（配件机制） */
-export const ASCENSION_EFFECTS: Record<string, string[]> = {
-  energy: ['爆发伤害 +10%', '爆发命中附加 1s 易伤', '过载暴击率 +8%'],
-  overload: ['过载伤害 +10%', '过载期间移速 +15%', '过载能量消耗 -30%'],
-  lockon: ['索敌范围 +25%', '电弧可弹射 1 次', '索敌伤害 +20%'],
-  slow: ['减速持续时间 +40%', '霜缓命中附加 5 点伤害', '减速效果提升至 60%'],
-  charge: ['蓄力速度 +25%', '满蓄力附加穿透', '蓄力暴击率 +12%'],
-  beam: ['射线射程 +30%', '射线伤害 +12%', '射线能量消耗 -25%'],
-  chain: ['弹跳次数 +1', '弹跳衰减降低', '首跳伤害 +20%'],
-  guard: ['治疗量 +40%', '治疗附加 2s 护盾', '冷却时间 -25%'],
+/** 进阶效果（文案+数值同表）：num 为该阶效果的数值载荷，由各系 ascensionMods 消费 */
+export interface AscensionEffect {
+  text: string;
+  num?: number;
+}
+
+export const ASCENSION_EFFECTS: Record<string, AscensionEffect[]> = {
+  energy: [{ text: '爆发伤害 +10%' }, { text: '爆发命中附加 1s 易伤' }, { text: '过载暴击率 +8%' }],
+  overload: [{ text: '过载伤害 +10%' }, { text: '过载期间移速 +15%' }, { text: '过载能量消耗 -30%' }],
+  lockon: [{ text: '索敌范围 +25%' }, { text: '电弧可弹射 1 次' }, { text: '索敌伤害 +20%' }],
+  slow: [
+    { text: '减速持续时间 +40%', num: 1.4 },
+    { text: '霜缓命中附加 5 点伤害', num: 5 },
+    { text: '减速效果提升至 60%', num: 0.4 },
+  ],
+  charge: [{ text: '蓄力速度 +25%' }, { text: '满蓄力附加穿透' }, { text: '蓄力暴击率 +12%' }],
+  beam: [
+    { text: '射线射程 +30%', num: 1.3 },
+    { text: '射线伤害 +12%', num: 1.12 },
+    { text: '射线能量消耗 -25%', num: 0.75 },
+  ],
+  chain: [
+    { text: '弹跳次数 +1', num: 1 },
+    { text: '弹跳衰减降低', num: 0.75 },
+    { text: '首跳伤害 +20%', num: 1.2 },
+  ],
+  guard: [{ text: '治疗量 +40%' }, { text: '治疗附加 2s 护盾' }, { text: '冷却时间 -25%' }],
 };
 
 /** 某武器当前进阶已解锁/下一阶效果文案 */
 export function ascensionEffectsFor(mechKind: string, ascension: number): { next: string | null; unlocked: string[] } {
   const list = ASCENSION_EFFECTS[mechKind] ?? [];
   return {
-    unlocked: list.slice(0, ascension),
-    next: ascension < list.length ? list[ascension] : null,
+    unlocked: list.slice(0, ascension).map((r) => r.text),
+    next: ascension < list.length ? list[ascension].text : null,
   };
+}
+
+/** 前 n 阶效果的数值载荷（无载荷的阶为 undefined；n 夹取 0-3） */
+function ascensionNums(kind: string, n: number): (number | undefined)[] {
+  return (ASCENSION_EFFECTS[kind] ?? []).slice(0, Math.max(0, Math.min(3, n))).map((r) => r.num);
+}
+
+export interface ChainAscensionMods {
+  jumpsBonus: number;
+  falloffOverride: number | null;
+  firstHitMult: number;
+}
+
+/** chain 进阶数值：阶1 弹跳 +1 · 阶2 衰减改 0.75 · 阶3 首跳 ×1.2 */
+export function chainAscensionMods(ascension: number): ChainAscensionMods {
+  const [jumps, falloff, first] = ascensionNums('chain', ascension);
+  return { jumpsBonus: jumps ?? 0, falloffOverride: falloff ?? null, firstHitMult: first ?? 1 };
+}
+
+export interface BeamAscensionMods {
+  rangeMult: number;
+  damageMult: number;
+  energyMult: number;
+}
+
+/** beam 进阶数值：阶1 射程 ×1.3 · 阶2 伤害 ×1.12 · 阶3 能耗 ×0.75 */
+export function beamAscensionMods(ascension: number): BeamAscensionMods {
+  const [range, damage, energy] = ascensionNums('beam', ascension);
+  return { rangeMult: range ?? 1, damageMult: damage ?? 1, energyMult: energy ?? 1 };
+}
+
+export interface SlowAscensionMods {
+  durationMult: number;
+  hitBonus: number;
+  factorOverride: number | null;
+}
+
+/** slow 进阶数值：阶1 时长 ×1.4 · 阶2 命中附加 5 伤害 · 阶3 减速系数改 0.4（60% 减速） */
+export function slowAscensionMods(ascension: number): SlowAscensionMods {
+  const [duration, bonus, factor] = ascensionNums('slow', ascension);
+  return { durationMult: duration ?? 1, hitBonus: bonus ?? 0, factorOverride: factor ?? null };
 }
 /** 符文：每级伤害加成 */
 export const RUNE_DAMAGE_STEP = 0.02;

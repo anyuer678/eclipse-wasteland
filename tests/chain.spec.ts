@@ -18,7 +18,7 @@ const fake = (name: string, z: number, hp = 100): Fake => ({
 })
 
 describe('chainLightning', () => {
-  it('按最近可见目标逐跳，伤害按 falloff 衰减', () => {
+  it('按最近可见目标逐跳且不重复命中，伤害按 falloff 衰减', () => {
     const e1 = fake('a', 3)
     const e2 = fake('b', 6)
     const damages: number[] = []
@@ -35,10 +35,27 @@ describe('chainLightning', () => {
       },
       onKill: () => false,
     })
-    expect(fires).toEqual(['0->3', '3->6', '6->3'])
+    // 3 跳只有 2 个目标：跳数 = 不同目标数上限，不回弹重复命中
+    expect(fires).toEqual(['0->3', '3->6'])
     expect(damages[0]).toBeCloseTo(60)
     expect(damages[1]).toBeCloseTo(36)
-    expect(damages[2]).toBeCloseTo(21.6)
+  })
+
+  it('等距直线靶不回弹：逐个新目标被命中', () => {
+    const targets = [fake('a', 3), fake('b', 6), fake('c', 9), fake('d', 12)]
+    const hit: string[] = []
+    chainLightning(v(0, 1, 0), 100, 4, 0.6, {
+      enemies: () => targets,
+      hasLineOfSight3D: () => true,
+      fire: () => {},
+      damage: (e) => {
+        hit.push(e.name)
+        return false
+      },
+      onKill: () => false,
+    })
+    // 旧算法会在 a/b 间来回 ping-pong；现在 4 跳命中 4 个不同目标
+    expect(hit).toEqual(['a', 'b', 'c', 'd'])
   })
 
   it('视线被挡/距离超过 10m 的目标跳过', () => {
@@ -86,5 +103,26 @@ describe('chainLightning', () => {
       onKill: () => false,
     })
     expect(fires).toBe(0)
+  })
+
+  it('exclude 的主命中目标不参与弹跳，跳数全部花在新目标上', () => {
+    const main = fake('main', 3)
+    const b = fake('b', 6)
+    const c = fake('c', 9)
+    const damages: string[] = []
+    const fires: string[] = []
+    chainLightning(v(0.3, 1, 3.2), 100, 3, 0.6, {
+      enemies: () => [main, b, c],
+      hasLineOfSight3D: () => true,
+      fire: (from, to) => fires.push(`${from.z.toFixed(1)}->${to.z}`),
+      damage: (e, n) => {
+        damages.push(`${e.name}:${n}`)
+        return false
+      },
+      onKill: () => false,
+      exclude: main,
+    })
+    expect(fires).toEqual(['3.2->6', '6.0->9'])
+    expect(damages).toEqual(['b:60', 'c:36'])
   })
 })

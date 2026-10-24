@@ -1049,6 +1049,8 @@ function boot(): void {
     if (g.kills % 20 === 0) refreshGrowth();
   };
 
+  // 链式武器本发主命中的敌人：onChain 传给 chainLightning 排除，避免第一跳打回主目标
+  let chainHitEnemy: Enemy | null = null;
   const fireCtx: FireContext = {
     origin: new THREE.Vector3(),
     direction: new THREE.Vector3(),
@@ -1081,6 +1083,7 @@ function boot(): void {
     onHitEnemy(pos, damage, extra) {
       // 升级选牌已暂停：同一发/后续弹丸不再继续结算
       if (paused) return false;
+      chainHitEnemy = null;
       // 射线停在掩体/地形表面：这一发不算命中任何单位（哪怕敌人贴在墙后/山后）
       if (pointOnObstacleSurface(pos, nav.obstacles)) return false;
       if (hitTerrainSurface) return false;
@@ -1154,7 +1157,7 @@ function boot(): void {
         if (bdx * bdx + bdy * bdy + bdz * bdz < 12) {
           popupKey = 'boss';
           const weakMult = weakpointFromAim(fireCtx.origin, fireCtx.direction, centerScratch);
-          popupDmg = dmg * weakMult;
+          popupDmg = dmg * weakMult + (extra.flatBonus ?? 0);
           popupWeak = weakMult > 1;
           lastHit.y = +pos.y.toFixed(2);
           lastHit.centerY = +centerScratch.y.toFixed(2);
@@ -1183,6 +1186,7 @@ function boot(): void {
         }
         if (bestE) {
           const e = bestE;
+          chainHitEnemy = e;
           popupKey = `en${e.id}`;
           // 击退：沿弹道方向推（重武器更强 / 暴击加成；盾兵与厚甲精英抗性高）
           const kdx = e.root.position.x - player.position.x;
@@ -1195,13 +1199,13 @@ function boot(): void {
           e.applyKnockback(kdx / kl, kdz / kl, imp);
           // 晕眩：狙击枪 35% 概率短晕
           if (arsenal.current.def.archetype === 'sniper' && Math.random() < 0.35) e.applyStun(0.6);
-          if (extra.slow !== undefined) e.applySlow(extra.slow, 1.6);
+          if (extra.slow !== undefined) e.applySlow(extra.slow, extra.slowDur ?? 1.6);
           // 烈焰风暴：命中施加灼�?DOT
           if (arsenal.current.def.mech.kind === 'beam') e.applyBurn(2.2, 5);
           // 精英猎手：对精英额外伤害；狂暴：伤害 ×1.5；元素联动：冰缓暴击 / 灼烧易伤；弱点：命中头部 ×1.5
           const furyMult = furyTimer > 0 ? 1.5 : 1;
           const weakMult = weakpointFromAim(fireCtx.origin, fireCtx.direction, e.center());
-          const finalDmg = (e.elite ? dmg * runB.eliteDmg : dmg) * furyMult * elementSynergyMult(isCrit, e.slowTimer > 0, e.burnTimer > 0) * weakMult;
+          const finalDmg = (e.elite ? dmg * runB.eliteDmg : dmg) * furyMult * elementSynergyMult(isCrit, e.slowTimer > 0, e.burnTimer > 0) * weakMult + (extra.flatBonus ?? 0);
           popupDmg = finalDmg;
           popupWeak = weakMult > 1;
           lastHit.y = +pos.y.toFixed(2);
@@ -1277,6 +1281,7 @@ function boot(): void {
       chainLightning(pos, damage, jumps, falloff, {
         enemies: () => spawner.all(),
         hasLineOfSight3D: navLos,
+        exclude: chainHitEnemy,
         fire: (from, to) => tracer.fire(from, to, 0x7ab0ff, 1.8),
         damage: (e, n) => e.takeDamage(n, 'energy'),
         onKill: (e) => {
@@ -2297,6 +2302,7 @@ function boot(): void {
     },
     beginMission,
     syncBossModel,
+    remountViewmodel: mountViewmodel,
     setHp,
     performDash,
     applyDamageToPlayer,

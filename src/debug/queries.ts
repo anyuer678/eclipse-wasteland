@@ -10,6 +10,7 @@ export interface QueryEnemy {
   alive: boolean;
   elite: unknown;
   slowTimer: number;
+  slowFactor: number;
   burnTimer: number;
   isStunned(): boolean;
   telegraphActive?(): boolean;
@@ -96,6 +97,7 @@ export function enemyMotion(deps: QueryDeps): {
       telegraph: !!e.telegraphActive?.(),
       elite: !!e.elite,
       slow: e.slowTimer > 0,
+      slowFactor: e.slowTimer > 0 ? e.slowFactor : null,
       burn: e.burnTimer > 0,
     };
   });

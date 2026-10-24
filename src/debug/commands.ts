@@ -83,6 +83,7 @@ export interface CommandDeps {
   /** 游戏闭包内的函数 */
   beginMission: () => void;
   syncBossModel: () => void;
+  remountViewmodel: () => void;
   setHp: (v: number) => void;
   performDash: () => void;
   applyDamageToPlayer: (v: number, src?: { x: number; z: number }) => boolean;
@@ -275,6 +276,30 @@ export function createDebugApi(d: CommandDeps): Record<string, unknown> {
     /** 调试：设置当前武器击杀数（不刷新倍率，用于熟练度里程碑回归） */
     setWeaponKills(n: number): void {
       d.inventory.getWeapon(d.arsenal.current.def.id).kills = Math.max(0, Math.floor(n));
+    },
+    /** 调试：切换/加入出战武器（机制与进阶效果回归用） */
+    useWeapon(id: string): boolean {
+      const ids = d.arsenal.loadoutIds();
+      if (ids.includes(id)) {
+        d.arsenal.select(ids.indexOf(id));
+        d.remountViewmodel();
+        d.shell.currentWeaponId = id;
+        return true;
+      }
+      if (d.arsenal.isLoadoutFull()) d.arsenal.removeFromLoadout(ids[0]);
+      const ok = d.arsenal.addToLoadout(id);
+      if (ok) {
+        d.arsenal.select(d.arsenal.loadoutIds().indexOf(id));
+        d.remountViewmodel();
+        d.shell.currentWeaponId = id;
+      }
+      return ok;
+    },
+    /** 调试：设置当前武器进阶阶数 0-3（进阶效果回归用） */
+    setWeaponAscension(n: number): void {
+      const g = d.inventory.getWeapon(d.arsenal.current.def.id);
+      g.ascension = Math.max(0, Math.min(3, Math.floor(n)));
+      d.arsenal.refreshGrowth(d.inventory);
     },
     /** 调试：当前武器与第一人称模型是否一致（仓库换枪回归） */
     weaponState: () => weaponState(d.stateDeps),

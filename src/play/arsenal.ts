@@ -82,8 +82,10 @@ export class Arsenal {
   /** 切枪后刷新成长倍率 */
   refreshGrowth(inventory: Inventory): void {
     for (const w of this.weapons) {
+      const g = inventory.getWeapon(w.def.id);
       w.growthDamage = damageMultiplier(w.def, inventory);
       w.growthMech = mechMultiplier(w.def, inventory);
+      w.growthAscension = g.ascension;
     }
   }
 }

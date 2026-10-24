@@ -17,6 +17,7 @@ import {
 } from './combat';
 import type { WeaponDef } from './defs';
 import type { TracerPool } from './tracer';
+import { beamAscensionMods, chainAscensionMods, slowAscensionMods } from '../growth';
 
 /** 射击上下文：由外部（玩家系统）注入 */
 export interface FireContext {
@@ -26,7 +27,7 @@ export interface FireContext {
   /** 命中点计算：返回世界命中点（无敌人时落到场景/地面） */
   resolveHit: (origin: THREE.Vector3, dir: THREE.Vector3) => THREE.Vector3;
   /** 命中敌人回调（阶段 4 接入）：返回 true 表示命中敌人（用于减速/吸血等） */
-  onHitEnemy?: (pos: THREE.Vector3, damage: number, extra: { slow?: number; lockTarget?: boolean }) => boolean;
+  onHitEnemy?: (pos: THREE.Vector3, damage: number, extra: { slow?: number; slowDur?: number; flatBonus?: number; lockTarget?: boolean }) => boolean;
   /** 穿透查询：沿方向收集射线上的敌人位置（含最近目标，按距离排序） */
   resolvePierce?: (origin: THREE.Vector3, dir: THREE.Vector3, max: number) => THREE.Vector3[];
   /** 局内「穿透弹」强化：主命中后继续穿透的额外目标数与衰减 */
@@ -55,11 +56,12 @@ export class Weapon {
   readonly def: WeaponDef;
   state: WeaponState;
 
-  /** 养成倍率（由 growth 系统注入）：伤害倍率 / 机制倍率 / 能量获取倍率 / 攻速倍率 */
+  /** 养成倍率（由 growth 系统注入）：伤害倍率 / 机制倍率 / 能量获取倍率 / 攻速倍率 / 进阶阶数 */
   growthDamage = 1;
   growthMech = 1;
   energyGainMult = 1;
   fireRateMult = 1;
+  growthAscension = 0;
   /** 局内扩容弹夹 / 速装填（run 成长） */
   magMult = 1;
   reloadMult = 1;
@@ -222,14 +224,19 @@ export class Weapon {
 
     const shotDmg = shotDamage(d.damage, damageMult, this.growthDamage);
 
-    // beam 机制（烈焰风暴）：持续射线耗能量、不耗弹药
+    // beam 机制（烈焰风暴）：持续射线耗能量、不耗弹药；进阶给射程/伤害/能耗
+    let beamRange = Infinity;
+    let beamDmgMult = 1;
     if (d.mech.kind === 'beam') {
       const m = d.mech as { energyPerSec: number; range: number };
-      s.energy = Math.max(0, s.energy - m.energyPerSec * this.fireCooldown);
+      const bm = beamAscensionMods(this.growthAscension);
+      s.energy = Math.max(0, s.energy - m.energyPerSec * bm.energyMult * this.fireCooldown);
       if (s.energy <= 0) {
         s.ammo = Math.max(0, s.ammo - 1);
         return;
       }
+      beamRange = m.range * bm.rangeMult;
+      beamDmgMult = bm.damageMult;
     }
 
     ctx.onShot?.();
@@ -240,11 +247,22 @@ export class Weapon {
       const dir = this.spreadDir(ctx.direction, d.spreadDeg, p);
       const hit = ctx.resolveHit(origin, dir);
       const isBeam = d.mech.kind === 'beam';
+      // 射线射程：超出射程的命中只画光束到射程终点，不结算伤害
+      if (isBeam && origin.distanceTo(hit) > beamRange) {
+        ctx.tracer.fire(origin, _beamEnd.copy(origin).addScaledVector(dir, beamRange), 0xff7a3a, 2);
+        continue;
+      }
       ctx.tracer.fire(origin, hit, isBeam ? 0xff7a3a : d.color, isBeam ? 2 : lineIntensity);
       if (ctx.onHitEnemy) {
-        const extra: { slow?: number } = {};
-        if (d.mech.kind === 'slow') extra.slow = (d.mech as { factor: number }).factor;
-        const hitAny = ctx.onHitEnemy(hit, shotDmg, extra);
+        const extra: { slow?: number; slowDur?: number; flatBonus?: number } = {};
+        if (d.mech.kind === 'slow') {
+          const m = d.mech as { factor: number; seconds: number };
+          const sm = slowAscensionMods(this.growthAscension);
+          extra.slow = sm.factorOverride ?? m.factor;
+          extra.slowDur = m.seconds * sm.durationMult;
+          extra.flatBonus = sm.hitBonus;
+        }
+        const hitAny = ctx.onHitEnemy(hit, shotDmg * beamDmgMult, extra);
         // 局内「穿透弹」：主命中后沿弹道继续穿透（武器自身 pierce 机制不叠加）
         if (p === 0 && ctx.runPierce && ctx.runPierce.targets > 0 && d.mech.kind !== 'pierce' && d.mech.kind !== 'beam') {
           const rest = ctx.resolvePierce?.(origin, ctx.direction, 1 + ctx.runPierce.targets) ?? [];
@@ -273,10 +291,11 @@ export class Weapon {
             ctx.onHitEnemy?.(rest[i], shotDmg * Math.pow(m.falloff, i), {});
           }
         }
-        // chain 机制（雷暴投枪）：命中后弹跳
+        // chain 机制（雷暴投枪）：命中后弹跳；进阶给弹跳次数/衰减/首跳伤害
         if (d.mech.kind === 'chain' && hitAny && ctx.onChain) {
           const m = d.mech as { jumps: number; falloff: number };
-          ctx.onChain(hit, shotDmg * 0.7, m.jumps, m.falloff);
+          const cm = chainAscensionMods(this.growthAscension);
+          ctx.onChain(hit, shotDmg * 0.7 * cm.firstHitMult, m.jumps + cm.jumpsBonus, cm.falloffOverride ?? m.falloff);
         }
       }
     }
@@ -295,8 +314,10 @@ export class Weapon {
     if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
     else right.normalize();
     const realUp = _realUp.crossVectors(right, base).normalize();
-    const offX = ((seed * 1.6180339887) % 1 - 0.5) * 2;
-    const offY = ((seed * 2.7182818284) % 1 - 0.5) * 2;
+    // 相位居中：seed 0 → 零偏移（单弹丸武器准星正中），多弹丸扇形仍覆盖整个锥角。
+    // 旧映射 seed 0 → -1（扇形角角），单弹丸+扩散武器每发恒偏满扩散角，永远打不中准星目标。
+    const offX = ((seed * 1.6180339887 + 0.5) % 1 - 0.5) * 2;
+    const offY = ((seed * 2.7182818284 + 0.5) % 1 - 0.5) * 2;
     return _dir.copy(base).addScaledVector(right, offX * spread).addScaledVector(realUp, offY * spread).normalize();
   }
 }
@@ -306,3 +327,4 @@ const _right = new THREE.Vector3();
 const _realUp = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 const _origin = new THREE.Vector3();
+const _beamEnd = new THREE.Vector3();
