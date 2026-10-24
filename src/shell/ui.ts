@@ -286,6 +286,18 @@ export const THEME = `
   #ss-crosshair.hit .ch-piece, #ss-crosshair.hit .ch-dot {
     background: var(--cinnabar); box-shadow: 0 0 0 1px rgba(255,255,255,0.9);
   }
+  /* 命中标记 ×：普通白 / 弱点黄 / 击杀红，向外弹开淡出 */
+  #ss-crosshair .ch-hm {
+    position: absolute; width: 2px; height: 8px;
+    background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+    opacity: 0; transform: rotate(var(--rot, 0deg));
+  }
+  #ss-crosshair .ch-hm.on { animation: ss-hm-pop 0.22s ease-out; }
+  @keyframes ss-hm-pop {
+    0% { opacity: 1; transform: rotate(var(--rot, 0deg)) scale(1.5); }
+    70% { opacity: 0.9; }
+    100% { opacity: 0; transform: rotate(var(--rot, 0deg)) scale(0.8); }
+  }
 
   /* 技能面板 */
   #ss-skills {

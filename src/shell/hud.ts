@@ -41,6 +41,8 @@ export interface HudView {
   hideBoss(): void;
   hit(): void;
   hitConfirm(): void;
+  /** 命中标记 ×：普通白 / 弱点黄 / 击杀红 */
+  hitmark(kind: 'normal' | 'weak' | 'kill'): void;
   /** 屏幕震动（） */
   shake(intensity?: number): void;
   /** 击杀提示（） */
@@ -94,6 +96,22 @@ export function createHud(): HudView {
   }
   const ringPiece = el('div', 'ch-ring', '');
   crosshair.appendChild(ringPiece);
+
+  // 命中标记：4 段斜杠拼 ×，出现即向外弹开淡出（颜色由 hitmark 设置）
+  const hmPieces: HTMLElement[] = [];
+  for (const [x, y, rot] of [
+    [-13, -13, -45],
+    [11, -13, 45],
+    [-13, 9, 45],
+    [11, 9, -45],
+  ] as const) {
+    const hm = el('div', 'ch-hm', '');
+    hm.style.left = `${x}px`;
+    hm.style.top = `${y}px`;
+    hm.style.setProperty('--rot', `${rot}deg`);
+    crosshair.appendChild(hm);
+    hmPieces.push(hm);
+  }
 
   // 技能数值面板
   const skills = el('div', '', '');
@@ -222,6 +240,15 @@ export function createHud(): HudView {
     hitConfirm() {
       crosshair.classList.add('hit');
       window.setTimeout(() => crosshair.classList.remove('hit'), 90);
+    },
+    hitmark(kind) {
+      const color = kind === 'kill' ? '#ff5544' : kind === 'weak' ? '#ffe066' : '#ffffff';
+      for (const hm of hmPieces) {
+        hm.style.background = color;
+        hm.classList.remove('on');
+        void hm.offsetWidth; // 重启动画
+        hm.classList.add('on');
+      }
     },
     shake(intensity = 1) {
       root.style.transform = `translate(${(Math.random() - 0.5) * 6 * intensity}px, ${(Math.random() - 0.5) * 6 * intensity}px)`;

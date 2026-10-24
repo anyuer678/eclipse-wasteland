@@ -1031,6 +1031,7 @@ function boot(): void {
       let popupKey = '';
       let popupDmg = 0;
       let popupWeak = false;
+      let popupKill = false;
       // 等级压制：玩家等级 vs 怪物等级（升级后打同级怪一定更轻松）
       const supDealt = suppressionDealt(runState.level - flow.monsterLevel);
       // 连杀增伤 + 隐身增伤 + 攻击倍率 + 局内成长 + 暴击（概率含词缀/暴击球；倍率取当前武器 def.critMult，与武器简报一致）
@@ -1069,6 +1070,7 @@ function boot(): void {
           lastHit.boss = true;
           const dead = activeBoss.takeDamage(popupDmg, elem);
           if (dead) onBossKilled(activeBoss);
+          popupKill = dead;
           hitSomething = true;
         }
       }
@@ -1117,6 +1119,7 @@ function boot(): void {
           // 寒霜弹：命中减速
           if (runB.frost > 0) e.applySlow(1 - runB.frost, 1.5);
           const dead = e.takeDamage(finalDmg, elem);
+          popupKill = dead;
           if (dead) {
             registerEnemyKill(e);
             fovKick = Math.max(fovKick, 2.2);
@@ -1126,7 +1129,7 @@ function boot(): void {
         }
       }
       if (hitSomething) {
-        shell.hud.hitConfirm();
+        shell.hud.hitmark(popupKill ? 'kill' : popupWeak ? 'weak' : 'normal');
         sfx.hit();
         // 复用本发的实际暴击判定；不要再掷一次，否则跳字颜色/字号会与伤害不符
         if (settings.damageNumbers) {
@@ -2490,7 +2493,7 @@ function boot(): void {
       applyChoice(runState, id as Parameters<typeof applyChoice>[1]);
       refreshRun();
     },
-    mapInfo(): { platforms: { x: number; z: number; w: number; d: number; h: number }[]; crates: number; playerY: number; playerGround: number; ground: boolean } {
+    mapInfo(): { platforms: { x: number; z: number; w: number; d: number; h: number }[]; crates: number; playerY: number; playerGround: number; ground: boolean; ambient: boolean } {
       const plats = (mapRoot?.userData.platforms ?? []) as { x: number; z: number; w: number; d: number; h: number }[];
       return {
         platforms: plats,
@@ -2498,6 +2501,7 @@ function boot(): void {
         playerY: +player.position.y.toFixed(2),
         playerGround: +player.terrainHeight(player.position.x, player.position.z).toFixed(2),
         ground: !!mapRoot?.userData.ground,
+        ambient: !!mapRoot?.userData.ambient,
       };
     },
     envInfo(): { instances: number; scales: number[]; positions: number[][] } {

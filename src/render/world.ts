@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { solid } from './materials';
 import { PostFx } from './postFx';
+import { createAmbientField, type AmbientField } from './ambient';
 
 /** 简单种子随机（地图布局用，保证同关卡布局一致） */
 function mulberry32(seed: number): () => number {
@@ -392,6 +393,8 @@ export class World {
   private fill: THREE.DirectionalLight | null = null;
   private hemi: THREE.HemisphereLight | null = null;
   private postFx: PostFx | null = null;
+  private ambient: AmbientField | null = null;
+  private lastRenderStamp = 0;
   private groundMat: THREE.MeshStandardMaterial | null = null;
   private sunGlow: THREE.Sprite | null = null;
   private readonly shadowTarget = new THREE.Object3D();
@@ -502,6 +505,12 @@ export class World {
   }
 
   render(): void {
+    const now = performance.now();
+    const dt = this.lastRenderStamp > 0 ? Math.min(0.1, (now - this.lastRenderStamp) / 1000) : 0;
+    this.lastRenderStamp = now;
+    if (this.ambient && dt > 0) {
+      this.ambient.update(dt, this.camera.position.x, this.camera.position.y, this.camera.position.z);
+    }
     this.autoTune();
     if (this.postFx && this.quality === 'high') {
       this.postFx.setPixelRatio(this.renderer.getPixelRatio());
@@ -1233,6 +1242,12 @@ export class World {
     // ---------- 落地：合并桶一次性产出（通常 4~8 个 draw call） ----------
     bag.build(root, true, true);
     root.add(crateGroup);
+
+    // ---------- 氛围粒子（跟随相机的单 Points，重建地图时换一套） ----------
+    this.ambient?.dispose();
+    this.ambient = createAmbientField(mapId);
+    if (this.ambient) this.scene.add(this.ambient.points);
+    root.userData.ambient = this.ambient !== null;
 
     root.userData.obstacles = obstacles;
     root.userData.platforms = platforms;
