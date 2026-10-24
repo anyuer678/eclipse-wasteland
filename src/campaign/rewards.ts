@@ -35,7 +35,8 @@ export function difficultyRewardMult(difficulty: number, luckyGold = 0): number 
 /** 通关（普通关或塔层）奖励 */
 export function clearRewards(i: SettleInput): RewardOut {
   const d = difficultyRewardMult(i.difficulty, i.luckyGold);
-  const talentGain = Math.floor(i.kills / 15);
+  // 天赋点：通关基础 +1，每击杀 15 个敌人额外 +1（与天赋屏提示一致）
+  const talentGain = 1 + Math.floor(i.kills / 15);
   if (i.tower) {
     const floor = i.towerFloor;
     return {

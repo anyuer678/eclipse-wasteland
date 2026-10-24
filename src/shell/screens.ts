@@ -579,7 +579,7 @@ export function createTalentScreen(
   card.appendChild(grid);
   const tip = el('div', 'ss-tip', '');
   tip.style.marginTop = '14px';
-  tip.textContent = '天赋点获取：每击杀 15 个敌人 +1 · 每通关一关 +2';
+  tip.textContent = '天赋点获取：每通关一关 +1 · 每击杀 15 个敌人额外 +1';
   card.appendChild(tip);
   screen.appendChild(card);
   screen.appendChild(button('', '返回', () => cb.onBack()));
@@ -615,7 +615,7 @@ export function createTalentScreen(
       });
       btn.style.cssText = 'min-width:0;width:100%;padding:7px 0;font-size:12px;margin-top:4px;';
       btn.disabled = maxed || inventory.talentPoints <= 0;
-      if (inventory.talentPoints <= 0 && !maxed) btn.title = '天赋点不足（击杀 15 个敌人或通关获取）';
+      if (inventory.talentPoints <= 0 && !maxed) btn.title = '天赋点不足（通关 +1 · 每击杀 15 个敌人额外 +1）';
       cell.appendChild(btn);
       grid.appendChild(cell);
     }

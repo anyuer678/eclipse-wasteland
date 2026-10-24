@@ -1,7 +1,7 @@
 /**
  * growth/talent — 天赋系统。
  *
- * 天赋点来源：击杀（每 15 击杀 +1）与通关（每关 +2）。
+ * 天赋点来源：通关（每关 +1）与击杀（每 15 击杀额外 +1），见 campaign/rewards.ts。
  * 技能树 4 节点，每节点 5 级，全属性加成（数值占位，后续平衡）。
  */
 import type { Inventory } from './inventory';

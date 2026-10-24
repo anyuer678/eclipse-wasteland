@@ -933,7 +933,9 @@ function boot(): void {
       const r = clearRewards(settleInput);
       inventory.addMaterial(r.material, r.materialAmount);
       inventory.addGold(r.gold);
-      settleRewardText = `${r.material} ×${r.materialAmount} · 金币 ${r.gold}`;
+      settleRewardText =
+        `${r.material} ×${r.materialAmount} · 金币 ${r.gold}` +
+        (r.talentGain > 0 ? ` · 天赋点 +${r.talentGain}` : '');
       if (r.talentGain > 0) inventory.addTalentPoints(r.talentGain);
       addDailyProgress(dailyState, 'clears'); // 每日任务：通关
       achAdd('clears', 1);

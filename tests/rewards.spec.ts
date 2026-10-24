@@ -28,7 +28,7 @@ describe('campaign/rewards', () => {
     const r = clearRewards(input({ difficulty: 1.5, goldBonus: 0.2 }))
     expect(r.materialAmount).toBe(18)
     expect(r.gold).toBe(Math.round((30 + 3 * 5) * 1.2 * 1.8))
-    expect(r.talentGain).toBe(2)
+    expect(r.talentGain).toBe(3)
   })
 
   it('scales tower-floor rewards with the floor', () => {
