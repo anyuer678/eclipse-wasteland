@@ -16,11 +16,16 @@ export interface InputSnapshot {
   key: (name: string) => boolean;
 }
 
+/** 会触发浏览器默认行为的游戏键（Tab 切焦点、空格/方向键滚动） */
+const PREVENT_DEFAULT_KEYS = new Set(['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+
 export class Input {
   private keys = new Set<string>();
   private mouseDown = new Set<number>();
   private mx = 0;
   private my = 0;
+  /** 游戏中拦截 Tab/空格/方向键默认行为；主菜单关闭以保留键盘焦点导航 */
+  captureDefaultKeys = true;
 
   /** 绑定到目标元素，开始采集（并锁定指针） */
   attach(target: HTMLElement): void {
@@ -30,20 +35,30 @@ export class Input {
     window.addEventListener('mouseup', this.onMouseUp);
     target.addEventListener('mousemove', this.onMouseMove);
     target.addEventListener('contextmenu', this.onContextMenu);
+    // 切走标签/失焦时 keyup 可能收不到：清空按键，避免 Tab/移动键“卡住”
+    window.addEventListener('blur', this.onBlur);
   }
 
   detach(): void {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('mousemove', this.onMouseMove);
+    window.removeEventListener('blur', this.onBlur);
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    // Tab/空格/方向键在浏览器里有默认行为（切焦点/滚动），会让指针锁与按键状态错乱
+    if (this.captureDefaultKeys && PREVENT_DEFAULT_KEYS.has(e.code)) e.preventDefault();
     this.keys.add(e.code);
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
     this.keys.delete(e.code);
+  };
+
+  private onBlur = (): void => {
+    this.keys.clear();
+    this.mouseDown.clear();
   };
 
   private onMouseDown = (e: MouseEvent): void => {

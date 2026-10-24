@@ -98,7 +98,11 @@ function boot(): void {
       /* 环境不支持指针锁定：忽略，仍可继续游戏 */
     }
   };
-  world.renderer.domElement.addEventListener('click', requestPointerLockSafe);
+  world.renderer.domElement.addEventListener('click', () => {
+    // 商店/设置/暂停等模态打开时不要抢指针锁：光标消失会让界面看起来“卡死”
+    if (paused || inMenu || shopOpen || settingsPanel.visible()) return;
+    requestPointerLockSafe();
+  });
   /** 弹出交互界面时解锁鼠标（升级选牌/暂停/结算）；返回战斗时重新锁定 */
   const unlockMouse = (): void => {
     pointerUnlockCalls += 1;
@@ -1509,6 +1513,8 @@ function boot(): void {
     fixedDt: 1 / 60,
     onFixed: (dt, time) => {
       fixedTicks += 1;
+      // 局内拦截 Tab/空格/方向键默认行为；主菜单/选关/结算保留键盘焦点导航
+      input.captureDefaultKeys = !inMenu;
       // hit-stop：冻结逻辑（渲染继续，画面整体停住），比慢动作更有顿挫
       if (hitStopT > 0) {
         hitStopT -= dt * (settings.lowMotion ? 2.5 : 1);
@@ -1531,6 +1537,17 @@ function boot(): void {
           shell.hud.root.style.display = 'block';
           lockMouse();
           keyState.shopTab = true;
+          return;
+        }
+        // Esc 也能关商店：Tab 被浏览器/输入法抢走时仍有一个退出键
+        if (shopOpen && snap.key('Escape') && !keyState.esc) {
+          shopOpen = false;
+          paused = false;
+          shell.hideCombatShop();
+          shell.hud.root.style.display = 'block';
+          lockMouse();
+          keyState.esc = true;
+          keyState.shopTab = snap.key('Tab');
           return;
         }
         keyState.shopTab = snap.key('Tab');
