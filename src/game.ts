@@ -38,6 +38,7 @@ import { dashStep } from './play/dash';
 import { mitigatedDamage } from './play/damageTaken';
 import { emitStatusFx, tickOrbPickups, tickShortBuffs } from './play/fieldTicks';
 import { tickEnemies } from './play/enemyTick';
+import { tickBoss } from './play/bossTick';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
 import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
@@ -1910,60 +1911,30 @@ function boot(): void {
 
       // BOSS AI
       if (activeBoss && activeBoss.alive) {
-        // 转阶段演出：吼叫 + 公告 + 冲击环（bossPhase<0 表示刚记录，不触发）
-        if (activeBoss.phase !== bossPhaseSeen) {
-          if (bossPhaseSeen >= 0) {
-            sfx.roar();
-            showAnnouncement('⚠ 狂暴化', '#ff4444', 1500);
-            fx.burst(activeBoss.root.position, 0xff4a22, 6);
-            activeBoss.centerInto(centerScratch);
-            fx.emit(centerScratch, 0xff5a22, 22, 6.5, 2);
-          }
-          bossPhaseSeen = activeBoss.phase;
-        }
-        // BOSS 追击也走导航流场绕障；地面高度每帧注入（践踏跳跃叠在地形上）
-        bossNav.updateTarget(player.position.x, player.position.z);
-        const bossDir = { x: 0, z: 0 };
-        bossNav.steer(activeBoss.root.position.x, activeBoss.root.position.z, activeBoss.root.position.y, bossDir);
-        const bevt = activeBoss.update(dt, player.position, { navX: bossDir.x, navZ: bossDir.z });
-        activeBoss.applyGround(terrainHeightAt(activeBoss.root.position.x, activeBoss.root.position.z));
-        // BOSS 体积碰撞兜底：冲锋/被击退都不得穿墙，也不许站进斜坡体内
-        clampArena(activeBoss.root.position);
-        resolveEnemyObstacles(activeBoss.root.position, 1.25);
-        activeBoss.applyGround(terrainHeightAt(activeBoss.root.position.x, activeBoss.root.position.z));
-        if (bevt) {
-          const bp = activeBoss.root.position;
-          // BOSS 的所有直接伤害都要过视线：隔墙不结算
-          const bossLos = nav.hasLineOfSight3D(
-            bp.x,
-            bp.y + 1.2,
-            bp.z,
-            player.position.x,
-            player.position.y + 1.0,
-            player.position.z
-          );
-          if (bevt.melee !== undefined) {
-            // 横扫 / 冲锋撞击（撞击是冲锋结束帧的 melee 结算）
-            if (bossLos) {
-              if (applyDamageToPlayer(bevt.melee)) shell.hud.hit();
-            }
-          } else if (bevt.chargeDir) {
-            // 冲锋起手只做预警，伤害只在撞击帧结算；不能起手瞬发
-            addShake(0.1, 0.2);
-          } else if (bevt.stompRadius) {
-            addShake(0.2, 0.4);
-            if (bossLos && player.position.distanceTo(bp) < bevt.stompRadius) {
-              if (applyDamageToPlayer(8)) shell.hud.hit();
-            }
-          } else if (bevt.summon) {
-            // 召唤物围绕 BOSS 出现，而不是全图随机位置 / 玩家脚下
+        bossPhaseSeen = tickBoss(activeBoss, {
+          nav,
+          playerPos: player.position,
+          dt,
+          phaseSeen: bossPhaseSeen,
+          terrainHeightAt,
+          clampArena,
+          resolveObstacles: resolveEnemyObstacles,
+          damagePlayer: applyDamageToPlayer,
+          hudHit: () => shell.hud.hit(),
+          shake: addShake,
+          roar: () => sfx.roar(),
+          announce: showAnnouncement,
+          burst: (pos, color, scale) => fx.burst(pos, color, scale),
+          emit: (pos, color, count, speed, scale) => fx.emit(pos, color, count, speed, scale),
+          summon: (count, x, z) => {
             spawner.spawnWave(
-              { chasers: bevt.summon, boomers: 0, spitters: 0 },
-              { center: { x: activeBoss.root.position.x, z: activeBoss.root.position.z }, placeMin: 3.5, placeMax: 9 }
+              { chasers: count, boomers: 0, spitters: 0 },
+              { center: { x, z }, placeMin: 3.5, placeMax: 9 }
             );
             syncBossModel();
-          }
-        }
+          },
+          scratch: centerScratch,
+        });
       }
 
       spawner.sweep();
