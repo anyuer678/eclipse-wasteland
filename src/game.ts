@@ -42,6 +42,7 @@ import { tickBoss } from './play/bossTick';
 import { applyHudFrame } from './shell/hudUpdate';
 import { findNearestVisible, resolvePierceTargets } from './play/targeting';
 import { chainLightning } from './play/chain';
+import { weakpointFromAim } from './play/weakpoint';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
 import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
@@ -951,6 +952,8 @@ function boot(): void {
 
   /** 上一次 resolveHit 是否停在地形上（用于禁止对山后敌人的邻近结算） */
   let hitTerrainSurface = false;
+  /** 最近一次命中点/目标中心（调试：验证弱点判定） */
+  const lastHit = { y: 0, centerY: 0, weak: false, boss: false };
 
   /** 当前武器机制对应的伤害元素（烈焰/霜锋/雷暴/过载），其余按物理结算 */
   const currentElement = (): Element => {
@@ -1026,6 +1029,8 @@ function boot(): void {
       }
       /** 本次命中的跳字聚合键（BOSS / 兵种敌人各自一行不断累加） */
       let popupKey = '';
+      let popupDmg = 0;
+      let popupWeak = false;
       // 等级压制：玩家等级 vs 怪物等级（升级后打同级怪一定更轻松）
       const supDealt = suppressionDealt(runState.level - flow.monsterLevel);
       // 连杀增伤 + 隐身增伤 + 攻击倍率 + 局内成长 + 暴击（概率含词缀/暴击球；倍率取当前武器 def.critMult，与武器简报一致）
@@ -1046,6 +1051,7 @@ function boot(): void {
       });
       const isCrit = shot.isCrit;
       const dmg = shot.damage;
+      popupDmg = dmg;
       if (activeBoss && activeBoss.alive) {
         activeBoss.centerInto(centerScratch);
         const bdx = centerScratch.x - pos.x;
@@ -1054,7 +1060,14 @@ function boot(): void {
         // 命中球体半径 3.2，判定半径需匹配（distance² < 12）
         if (bdx * bdx + bdy * bdy + bdz * bdz < 12) {
           popupKey = 'boss';
-          const dead = activeBoss.takeDamage(dmg, elem);
+          const weakMult = weakpointFromAim(fireCtx.origin, fireCtx.direction, centerScratch);
+          popupDmg = dmg * weakMult;
+          popupWeak = weakMult > 1;
+          lastHit.y = +pos.y.toFixed(2);
+          lastHit.centerY = +centerScratch.y.toFixed(2);
+          lastHit.weak = popupWeak;
+          lastHit.boss = true;
+          const dead = activeBoss.takeDamage(popupDmg, elem);
           if (dead) onBossKilled(activeBoss);
           hitSomething = true;
         }
@@ -1091,9 +1104,16 @@ function boot(): void {
           if (extra.slow !== undefined) e.applySlow(extra.slow, 1.6);
           // 烈焰风暴：命中施加灼�?DOT
           if (arsenal.current.def.mech.kind === 'beam') e.applyBurn(2.2, 5);
-          // 精英猎手：对精英额外伤害；狂暴：伤害 ×1.5；元素联动：冰缓暴击 / 灼烧易伤
+          // 精英猎手：对精英额外伤害；狂暴：伤害 ×1.5；元素联动：冰缓暴击 / 灼烧易伤；弱点：命中头部 ×1.5
           const furyMult = furyTimer > 0 ? 1.5 : 1;
-          const finalDmg = (e.elite ? dmg * runB.eliteDmg : dmg) * furyMult * elementSynergyMult(isCrit, e.slowTimer > 0, e.burnTimer > 0);
+          const weakMult = weakpointFromAim(fireCtx.origin, fireCtx.direction, e.center());
+          const finalDmg = (e.elite ? dmg * runB.eliteDmg : dmg) * furyMult * elementSynergyMult(isCrit, e.slowTimer > 0, e.burnTimer > 0) * weakMult;
+          popupDmg = finalDmg;
+          popupWeak = weakMult > 1;
+          lastHit.y = +pos.y.toFixed(2);
+          lastHit.centerY = +e.center().y.toFixed(2);
+          lastHit.weak = popupWeak;
+          lastHit.boss = false;
           // 寒霜弹：命中减速
           if (runB.frost > 0) e.applySlow(1 - runB.frost, 1.5);
           const dead = e.takeDamage(finalDmg, elem);
@@ -1109,9 +1129,13 @@ function boot(): void {
         shell.hud.hitConfirm();
         sfx.hit();
         // 复用本发的实际暴击判定；不要再掷一次，否则跳字颜色/字号会与伤害不符
-        if (settings.damageNumbers) addDamagePopup(pos, `-${Math.round(dmg)}`, isCrit ? '#ffd24a' : '#ffb0a0', isCrit ? 27 : 20, popupKey);
-        // 命中火花（小而淡，避免遮挡视野）
-        spawnParticles(pos, isCrit ? 0xffd24a : 0xffaa66, isCrit ? 3 : 2, 2);
+        if (settings.damageNumbers) {
+          const txt = `${popupWeak ? '弱点 ' : ''}-${Math.round(popupDmg)}`;
+          const color = popupWeak ? '#ffe066' : isCrit ? '#ffd24a' : '#ffb0a0';
+          addDamagePopup(pos, txt, color, popupWeak ? 26 : isCrit ? 27 : 20, popupKey);
+        }
+        // 命中火花（小而淡，避免遮挡视野）；弱点命中更亮更大
+        spawnParticles(pos, popupWeak ? 0xffe066 : isCrit ? 0xffd24a : 0xffaa66, popupWeak ? 4 : isCrit ? 3 : 2, popupWeak ? 2.6 : 2);
         // 吸血：词缀吸血 + 局内嗜血
         const vamp = affixVampMult(inventory.getWeapon(arsenal.current.def.id)) + runB.vamp;
         if (vamp > 0) setHp(hp + dmg * vamp);
@@ -2113,6 +2137,8 @@ function boot(): void {
     run: () => runState,
   };
   dbg.__ss = {
+    /** 最近命中点/中心高度（验证弱点判定） */
+    lastHit: () => ({ ...lastHit }),
     /** 性能快照：FPS / 绘制调用 / 三角形 / 资源数 / 场上次级对象数 */
     perf(): Record<string, number> {
       const info = world.renderer.info;

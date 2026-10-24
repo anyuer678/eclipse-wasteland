@@ -11,7 +11,7 @@
 | 成长 | 局外武器养成 + 天赋 + 角色 + 自动选择流派 | `ss-autopick-v1`；自动模式探针连升 4 级 0 暂停 |
 | 渲染 | draw calls 57–90，triangles 40–58k（无头 SwiftShader） | `ss.perf()` |
 | 代码 | `game.ts` 2681 行、`world.ts` 1320、`screens.ts` 1040 | `wc -l` |
-| 测试 | 195 项纯函数单测；CI = Test + Deploy + CodeQL | vitest / GitHub Actions |
+| 测试 | 198 项纯函数单测；CI = Test + Deploy + CodeQL | vitest / GitHub Actions |
 | 已知短板 | ① 地图变大但波次人数没跟；② 强化池同质化（重弹头/攻击强化都是纯伤害）；③ 局内商店价值低；④ 设置面板选项少（无 FOV/准星/伤害数字/低动态）；⑤ `game.ts` 过大；⑥ 存档无版本迁移 | 见下各阶段 |
 
 ## 二、原则与门槛
@@ -119,6 +119,7 @@
 | 11.3 ✅ | 环境素材补齐 | volcano 补岩石、ice 补松树/岩石；facility/quarry/lab/canyon 草丛密度提高；`envInfo` 可核对实例数 |
 | 11.4 ✅ | 冲刺无敌帧与完美闪避 | F 冲刺 0.35s 免伤；免伤成功时冲刺冷却压到 ≤1.5s 并弹「完美闪避」；`__ss.dash()/damagePlayer()` 确定性探针：免伤后 hp 100→100、cd 4→1.5，600ms 后同伤害 hp→78 |
 | 11.5 ✅ | 地形网格守卫 | 修复草丛实验误删 `root.add(ground)` 导致山体消失的问题；`mapInfo().ground` 返回布尔值供探针断言（实测 true） |
+| 11.6 ✅ | 弱点命中（爆头） | 瞄准线在目标中心处的通过高度高出 ≥0.35m 时伤害 ×1.5；用「最近点高度」而非球面命中点，BOSS/大体型同样可用；跳字显示「弱点 -N」、火花更亮；新手提示补一行。纯函数 3 项单测；BOSS 探针：身体中位 18、头部中位 27（×1.5）；`play` 首关 35 杀通关、`bossdmg` 100→86 |
 
 ## 四、执行顺序（每轮一项或一组）
 

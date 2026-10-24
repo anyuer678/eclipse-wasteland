@@ -27,6 +27,7 @@ export function createTips(): TipsView {
     'WASD 移动 · 空格跳跃 · F 冲刺 · 鼠标瞄准 / 左键射击 / 右键近战',
     'E 武器技能 · R 换弹 · 1–5 换枪 · X 角色大招 · Esc 暂停 · Tab 局内商店',
     '击杀升级：每级三选一强化；主菜单「自动选择」可让流派自动领取，不再打断战斗',
+    'F 冲刺有短暂无敌帧：免伤触发「完美闪避」缩短冷却；命中敌人头部造成 150% 伤害',
   ];
   for (const line of lines) {
     const row = document.createElement('div');
