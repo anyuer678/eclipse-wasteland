@@ -39,6 +39,7 @@ import { mitigatedDamage } from './play/damageTaken';
 import { emitStatusFx, tickOrbPickups, tickShortBuffs } from './play/fieldTicks';
 import { tickEnemies } from './play/enemyTick';
 import { tickBoss } from './play/bossTick';
+import { applyHudFrame } from './shell/hudUpdate';
 import { POISON_DPS, inPoisonPool } from './play/hazards';
 import type { PoisonPool } from './play/hazards';
 import { ORB_KINDS, rollChestReward, rollOrbKind } from './play/loot';
@@ -1973,45 +1974,44 @@ function boot(): void {
       // HUD 更新（帧数据由 play/hudFrame 组装）
       if (flow.phase === 'intro' || flow.phase === 'wave' || flow.phase === 'boss') {
         const g = inventory.getWeapon(arsenal.current.def.id);
-        shell.hud.update(hudFrame({
-          hp,
-          maxHp,
-          energy: arsenal.current.state.energy,
-          maxEnergy: arsenal.current.def.energyMax,
-          weaponName: arsenal.current.def.name,
-          weaponLevel: g.level,
-          weaponAsc: g.ascension,
-          damageMult: arsenal.current.growthDamage,
-          ammo: arsenal.current.state.ammo,
-          mag: arsenal.current.magCap(),
-          reloading: arsenal.current.state.reloading,
-          phase: flow.phase,
-          wave: flow.waveIndex,
-          totalWaves: flow.mission.waves.length,
-          tower: !!flow.mission.tower,
-          missionName: flow.mission.name,
-          autoPick: autoPickLabel(),
-          monsterLevel: flow.monsterLevel,
-          playerLevel: runState.level,
-          runLevel: runState.level,
-          runExp: runState.exp,
-          boosts: runState.boosts,
-          weaponLines: skillLinesFor(arsenal.current.def),
-          roleName: findRole(selectedRoleId).name,
-          roleCooldown,
-          dashCooldown,
-          shieldCooldown,
-          shieldTimer,
-          killStreak,
-          slots: arsenal.defs.map((w) => ({ name: w.name, rarity: w.rarity })),
-          slotIndex: arsenal.index,
-        }));
-        shell.hud.setSpread(snap.fire ? 0.5 : 0);
-        if (activeBoss && activeBoss.alive) {
-          shell.hud.boss(activeBoss.spec.name, Math.max(0, (activeBoss.hp / activeBoss.maxHp) * 100));
-        } else {
-          shell.hud.hideBoss();
-        }
+        applyHudFrame(
+          shell.hud,
+          hudFrame({
+            hp,
+            maxHp,
+            energy: arsenal.current.state.energy,
+            maxEnergy: arsenal.current.def.energyMax,
+            weaponName: arsenal.current.def.name,
+            weaponLevel: g.level,
+            weaponAsc: g.ascension,
+            damageMult: arsenal.current.growthDamage,
+            ammo: arsenal.current.state.ammo,
+            mag: arsenal.current.magCap(),
+            reloading: arsenal.current.state.reloading,
+            phase: flow.phase,
+            wave: flow.waveIndex,
+            totalWaves: flow.mission.waves.length,
+            tower: !!flow.mission.tower,
+            missionName: flow.mission.name,
+            autoPick: autoPickLabel(),
+            monsterLevel: flow.monsterLevel,
+            playerLevel: runState.level,
+            runLevel: runState.level,
+            runExp: runState.exp,
+            boosts: runState.boosts,
+            weaponLines: skillLinesFor(arsenal.current.def),
+            roleName: findRole(selectedRoleId).name,
+            roleCooldown,
+            dashCooldown,
+            shieldCooldown,
+            shieldTimer,
+            killStreak,
+            slots: arsenal.defs.map((w) => ({ name: w.name, rarity: w.rarity })),
+            slotIndex: arsenal.index,
+          }),
+          snap.fire,
+          activeBoss && activeBoss.alive ? { name: activeBoss.spec.name, hp: activeBoss.hp, maxHp: activeBoss.maxHp } : null
+        );
       }
 
       hitFlash = Math.max(0, hitFlash - dt);
