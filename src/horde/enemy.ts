@@ -98,6 +98,8 @@ export class Enemy {
   private readonly bodyMat: THREE.MeshStandardMaterial;
   private readonly bar: { sprite: THREE.Sprite; setHp: (pct: number) => void };
   private readonly barSprite: THREE.Sprite;
+  /** 前摇警示环（近战/自爆/重炮蓄力时可见） */
+  private readonly telegraph: THREE.Mesh;
   /** 动画相位（错开走路节奏） */
   private phase = Math.random() * Math.PI * 2;
   /** 上一帧位置（判断是否真的在移动） */
@@ -165,6 +167,16 @@ export class Enemy {
     this.barSprite.position.y = tpl.height + 0.28;
     this.barSprite.visible = false;
     this.root.add(this.barSprite);
+
+    // 前摇警示：贴地环，蓄力时亮起并脉动（给玩家反应窗口）
+    this.telegraph = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 0.72, 24),
+      new THREE.MeshBasicMaterial({ color: 0xff5533, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide })
+    );
+    this.telegraph.rotation.x = -Math.PI / 2;
+    this.telegraph.position.y = 0.05;
+    this.telegraph.visible = false;
+    this.root.add(this.telegraph);
 
     // 精英光环（词缀色）
     if (this.elite) {
@@ -405,6 +417,16 @@ export class Enemy {
     // 整体落脚起伏
     this.body.position.y = moving ? Math.abs(Math.sin(this.phase)) * 0.035 : Math.sin(this.phase * 0.5) * 0.008;
     this.body.rotation.z = Math.sin(this.phase * 0.5) * (moving ? 0.05 : 0.015);
+    // 前摇警示环：近战/自爆/重炮各自配色，脉动提示
+    const teleColor = this.windup > 0 ? 0xff5533 : this.fuseTimer > 0 ? 0xffc14a : this.spitWindup > 0 ? 0xffd24a : 0;
+    this.telegraph.visible = teleColor !== 0;
+    if (teleColor !== 0) {
+      const mat = this.telegraph.material as THREE.MeshBasicMaterial;
+      mat.color.setHex(teleColor);
+      mat.opacity = 0.3 + Math.abs(Math.sin(this.phase * 6)) * 0.3;
+      const base = Math.max(0.75, this.def.radius / 0.5);
+      this.telegraph.scale.setScalar(base * (1 + Math.sin(this.phase * 9) * 0.08));
+    }
   }
 
   /** 攻击前倾强度（近战/喷吐时置 1，随后衰减） */
@@ -413,6 +435,11 @@ export class Enemy {
   private hitAnim = 0;
   /** 近战前摇剩余时间（>0 时定在原地蓄力） */
   private windup = 0;
+
+  /** 前摇警示是否可见（调试/探针） */
+  telegraphActive(): boolean {
+    return this.windup > 0 || this.spitWindup > 0 || this.fuseTimer > 0;
+  }
   /** 状态效果：晕眩剩余时间 / 击退滑行速度 */
   private stunT = 0;
   private kvx = 0;

@@ -12,6 +12,7 @@ export interface QueryEnemy {
   slowTimer: number;
   burnTimer: number;
   isStunned(): boolean;
+  telegraphActive?(): boolean;
 }
 
 export interface QueryPlayer {
@@ -74,6 +75,7 @@ export function enemyMotion(deps: QueryDeps): {
   radius: number;
   alive: boolean;
   stunned: boolean;
+  telegraph: boolean;
   elite: boolean;
   slow: boolean;
   burn: boolean;
@@ -91,6 +93,7 @@ export function enemyMotion(deps: QueryDeps): {
       dist: +Math.hypot(pos.x - p.position.x, pos.z - p.position.z).toFixed(2),
       alive: e.alive,
       stunned: e.isStunned(),
+      telegraph: !!e.telegraphActive?.(),
       elite: !!e.elite,
       slow: e.slowTimer > 0,
       burn: e.burnTimer > 0,
