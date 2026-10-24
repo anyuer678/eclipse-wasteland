@@ -17,6 +17,7 @@ const base = (over: Partial<Parameters<typeof castHitscan>[0]> = {}) => ({
   obstacles: [],
   terrainRay: noTerrain,
   crates: [],
+  barrels: [],
   enemies: [],
   boss: null,
   ...over,
@@ -55,6 +56,16 @@ describe('castHitscan', () => {
     const r = castHitscan(base({ crates: [crate], enemies: [dead], boss: unit(0, 1, 20) }))
     expect(r.point.z).toBeCloseTo(16.8) // 20 - 3.2
     expect(r.terrainSurface).toBe(false)
+  })
+
+  it('爆炸桶可被命中，死桶跳过', () => {
+    const barrel = { x: 0, z: 5, alive: true }
+    const r = castHitscan(base({ barrels: [barrel] }))
+    expect(r.point.z).toBeGreaterThan(4) // 命中桶前表面（圆心 z=5, r=0.9 → ≥4.1）
+    expect(r.point.z).toBeLessThan(5)
+    const dead = { x: 0, z: 5, alive: false }
+    const r2 = castHitscan(base({ barrels: [dead] }))
+    expect(r2.point.z).toBeCloseTo(60) // 射程尽头
   })
 
   it('前方无命中且不朝下时返回射程点', () => {

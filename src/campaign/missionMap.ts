@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import { World } from '../render/world';
+import { BARREL_HP } from '../play/barrels';
 import type { NavObstacle } from '../horde';
 
 export interface MissionCrate {
@@ -17,10 +18,22 @@ export interface MissionCrate {
   obstacle?: NavObstacle;
 }
 
+/** 爆炸桶（射击引爆，波及周围；fuse 为引信秒数，undefined=未点燃） */
+export interface MissionBarrel {
+  x: number;
+  z: number;
+  hp: number;
+  alive: boolean;
+  mesh?: THREE.Mesh;
+  obstacle?: NavObstacle;
+  fuse?: number;
+}
+
 export interface MissionMap {
   mapRoot: THREE.Group;
   spawnAnchors: { x: number; z: number }[];
   crates: MissionCrate[];
+  barrels: MissionBarrel[];
 }
 
 export const CRATE_HP = 25;
@@ -51,5 +64,19 @@ export function rebuildMissionMap(
       obstacle: c.obstacle,
     });
   }
-  return { mapRoot, spawnAnchors, crates };
+  const barrelDefs = (mapRoot.userData.barrels ?? []) as { x: number; z: number; obstacle?: NavObstacle }[];
+  const barrelGroup = mapRoot.userData.barrelGroup as THREE.Group | undefined;
+  const barrels: MissionBarrel[] = [];
+  for (let i = 0; i < barrelDefs.length; i++) {
+    const b = barrelDefs[i]!;
+    barrels.push({
+      x: b.x,
+      z: b.z,
+      hp: BARREL_HP,
+      alive: true,
+      mesh: barrelGroup?.children[i] as THREE.Mesh | undefined,
+      obstacle: b.obstacle,
+    });
+  }
+  return { mapRoot, spawnAnchors, crates, barrels };
 }

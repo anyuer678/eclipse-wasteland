@@ -1166,6 +1166,52 @@ export class World {
       if (p) addPillar(p.x, p.z, 3.0);
     }
 
+    // ---------- 爆炸桶（2 簇 × 2 只成对放置；射击引爆波及周围，成对才有链式引爆的价值） ----------
+    const barrelGroup = new THREE.Group();
+    const barrelMat = solid(0x93382a, { roughness: 0.65, metalness: 0.3 });
+    barrelMat.map = propTex;
+    const barrelBodyGeo = new THREE.CylinderGeometry(0.34, 0.37, 0.95, 10);
+    const barrelBandGeo = new THREE.CylinderGeometry(0.375, 0.375, 0.14, 10);
+    const barrelBandMat = new THREE.MeshBasicMaterial({ color: 0xffb03a, fog: false });
+    const barrels: { x: number; z: number; obstacle: WorldObstacle }[] = [];
+    const placeBarrel = (x: number, z: number, pad = 1.1): boolean => {
+      if (nearSpawn(x, z, 6)) return false;
+      if (heightSpread(x, z, 1.4, 1.4) > 0.4) return false;
+      if (!clearOf(x, z, 0.5, 0.5, pad)) return false;
+      const baseY = heightfield(x, z);
+      const obstacle: WorldObstacle = { x, z, hw: 0.4, hd: 0.4, top: baseY + 0.95, crate: true };
+      obstacles.push(obstacle);
+      barrels.push({ x, z, obstacle });
+      const body = new THREE.Mesh(barrelBodyGeo, barrelMat);
+      body.position.set(x, baseY + 0.475, z);
+      body.rotation.y = rng() * Math.PI;
+      body.castShadow = true;
+      body.receiveShadow = true;
+      const band = new THREE.Mesh(barrelBandGeo, barrelBandMat);
+      band.position.y = 0.145;
+      body.add(band);
+      barrelGroup.add(body);
+      return true;
+    };
+    for (let cluster = 0; cluster < 2; cluster++) {
+      for (let tries = 0; tries < 40; tries++) {
+        const a = rng() * Math.PI * 2;
+        const d = 8 + rng() * 15;
+        const x = Math.cos(a) * d;
+        const z = Math.sin(a) * d;
+        if (!placeBarrel(x, z)) continue;
+        // 第二只摆在同簇 1.1m 侧后：既能链式引爆，又不会完全重叠（间隙小于常规 pad）
+        const a2 = rng() * Math.PI * 2;
+        if (!placeBarrel(x + Math.cos(a2) * 1.1, z + Math.sin(a2) * 1.1, 0.1)) {
+          placeBarrel(x - Math.cos(a2) * 1.1, z - Math.sin(a2) * 1.1, 0.1);
+        }
+        break;
+      }
+    }
+    root.add(barrelGroup);
+    root.userData.barrels = barrels;
+    root.userData.barrelGroup = barrelGroup;
+
     // ---------- 地图专属装饰 ----------
     if (mapId === 'volcano') {
       const lavaMat = new THREE.MeshBasicMaterial({ color: 0xff5410, fog: true });

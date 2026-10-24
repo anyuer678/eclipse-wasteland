@@ -22,7 +22,7 @@ import { Enemy, NavField, Spawner, SpatialHash } from './horde';
 import type { Element, NavObstacle } from './horde';
 import { ProjectilePool } from './horde/projectiles';
 import { MISSIONS, MissionFlow, createPlacement, rebuildMissionMap, loadDifficulty, saveDifficulty, recordMissionClear, clearRewards, towerFailureRewards, towerFloorClearRewards } from './campaign';
-import type { MissionCrate } from './campaign';
+import type { MissionBarrel, MissionCrate } from './campaign';
 import { Inventory, tryUpgrade, tryAscend, loadTalents, talentBonuses, upgradeTalent, loadAchievements, addProgress, grantReward, baseStats, applyBuffs, applyBuff, tickBuffs, affixCritMult, affixSpdMult, affixEnergyMult, affixVampMult, newRun, addKillExp, rollChoices, applyChoice, runBonuses, loadDaily, ensureDaily, addDailyProgress, claimDaily, suppressionDealt, suppressionTaken, activePreset, autoPickLabel, pickBoost, elementSynergyMult, recordTowerBest, resetAllProgress } from './growth';
 import { Arsenal } from './play/arsenal';
 import { ROLES, findRole } from './play/roles';
@@ -32,6 +32,14 @@ import { hudFrame } from './play/hudFrame';
 import { separateCrowd } from './play/crowdStep';
 import { clipToObstacles, pointOnObstacleSurface } from './play/raycast';
 import { castHitscan } from './play/hitscan';
+import {
+  BARREL_BASE_DMG,
+  BARREL_CHAIN_DELAY,
+  BARREL_PLAYER_DMG,
+  BARREL_RADIUS,
+  barrelFalloff,
+  collectChainBarrels,
+} from './play/barrels';
 import { streakEvent } from './play/streak';
 import { shotDamage } from './play/shotDamage';
 import { dashStep } from './play/dash';
@@ -595,6 +603,9 @@ function boot(): void {
     // 可破坏箱（从地图配置重建；mesh 引用用于击碎后隐藏）
     crates.length = 0;
     for (const c of built.crates) crates.push(c);
+    // 爆炸桶（每图 3~4 只，射击引爆）
+    barrels.length = 0;
+    for (const b of built.barrels) barrels.push(b);
     mountEnv(); // 挂载开源环境素材（Kenney CC0：岩石/树木/灌木）
     player.position.set(SPAWN_POINT.x, 0, SPAWN_POINT.z);
     // 换图后重新烘焙导航网格；刷怪落点由导航网格给出（不再随机刷在玩家脸上/墙里）
@@ -610,22 +621,88 @@ function boot(): void {
   let mapRoot: THREE.Group | null = null;
   /** 可破坏箱（打碎掉补给） */
   const crates: MissionCrate[] = [];
+  /** 爆炸桶（射击引爆，波及周围） */
+  const barrels: MissionBarrel[] = [];
 
-  /** 当前地图碰撞体 → 小怪/BOSS 两套导航网格（木箱击碎后也必须重烘） */
+  /** 当前地图碰撞体 → 小怪/BOSS 两套导航网格（木箱/油桶移除后也必须重烘） */
   function buildNavsForMap(): void {
     const obs = (mapRoot?.userData.obstacles ?? []) as NavObstacle[];
     nav.build(obs, player.terrainHeight, { agentRadius: 0.62, stepHeight: 0.4, walkRadius: ARENA_RADIUS, minX: -ARENA_RADIUS - 1, maxX: ARENA_RADIUS + 1, minZ: -ARENA_RADIUS - 1, maxZ: ARENA_RADIUS + 1 });
     bossNav.build(obs, player.terrainHeight, { agentRadius: 1.3, stepHeight: 0.5, walkRadius: ARENA_RADIUS, minX: -ARENA_RADIUS - 1, maxX: ARENA_RADIUS + 1, minZ: -ARENA_RADIUS - 1, maxZ: ARENA_RADIUS + 1 });
   }
 
-  /** 木箱被击碎：从地图障碍中移除并重烘导航，打开被堵住的路线 */
-  function removeCrateObstacle(c: MissionCrate): void {
+  /** 木箱/油桶从地图障碍中移除并重烘导航，打开被堵住的路线 */
+  function removeCrateObstacle(c: { obstacle?: NavObstacle }): void {
     if (!c.obstacle) return;
     const obs = (mapRoot?.userData.obstacles ?? []) as NavObstacle[];
     const i = obs.indexOf(c.obstacle);
     if (i >= 0) obs.splice(i, 1);
     c.obstacle = undefined;
     buildNavsForMap();
+  }
+
+  /** 点燃引信（直射命中即近乎即时爆炸；链式引爆有短延时） */
+  function igniteBarrel(b: MissionBarrel, delay = 0.02): void {
+    if (!b.alive || b.fuse !== undefined) return;
+    b.fuse = delay;
+  }
+
+  function explodeBarrel(b: MissionBarrel): void {
+    if (!b.alive) return;
+    b.alive = false;
+    b.fuse = undefined;
+    if (b.mesh) b.mesh.visible = false;
+    removeCrateObstacle(b);
+    const c = centerScratch.set(b.x, player.terrainHeight(b.x, b.z) + 0.6, b.z);
+    spawnParticles(c, 0xff8a3a, 26, 7);
+    spawnParticles(c, 0xffd24a, 14, 5);
+    addShake(0.55, 0.4);
+    sfx.boom();
+    // 波及敌人：中心全额 → 边缘 35%
+    for (const e of spawner.all()) {
+      if (!e.alive) continue;
+      e.centerInto(centerScratch);
+      const d = Math.hypot(centerScratch.x - b.x, centerScratch.z - b.z);
+      if (d > BARREL_RADIUS) continue;
+      const dead = e.takeDamage(BARREL_BASE_DMG * barrelFalloff(d));
+      if (dead) {
+        registerEnemyKill(e);
+        creditWeaponKill();
+      }
+    }
+    if (activeBoss && activeBoss.alive) {
+      activeBoss.centerInto(centerScratch);
+      const d = Math.hypot(centerScratch.x - b.x, centerScratch.z - b.z);
+      if (d <= BARREL_RADIUS + 1.5) {
+        const dead = activeBoss.takeDamage(BARREL_BASE_DMG * barrelFalloff(Math.max(0, d - 1.5)));
+        if (dead) onBossKilled(activeBoss);
+      }
+    }
+    // 玩家站太近也有风险（冲刺无敌帧照常生效）
+    const pd = Math.hypot(player.position.x - b.x, player.position.z - b.z);
+    if (pd <= BARREL_RADIUS * 0.7) applyDamageToPlayer(BARREL_PLAYER_DMG * barrelFalloff(pd));
+    // 链式引爆邻近油桶 + 波及木箱（打碎掉补给）
+    for (const nb of collectChainBarrels(barrels, b.x, b.z)) igniteBarrel(nb, BARREL_CHAIN_DELAY);
+    for (const cr of crates) {
+      if (!cr.alive) continue;
+      const d = Math.hypot(cr.x - b.x, cr.z - b.z);
+      if (d > BARREL_RADIUS) continue;
+      cr.alive = false;
+      if (cr.mesh) cr.mesh.visible = false;
+      removeCrateObstacle(cr);
+      spawnBuffOrb(new THREE.Vector3(cr.x, 0.8, cr.z));
+      maybeDropOrb(new THREE.Vector3(cr.x, 0.8, cr.z));
+      addDamagePopup(new THREE.Vector3(cr.x, 1.2, cr.z), '箱子击碎', '#ffd24a');
+    }
+  }
+
+  /** 每帧推进引信并引爆炸桶 */
+  function tickBarrels(dt: number): void {
+    for (const b of barrels) {
+      if (!b.alive || b.fuse === undefined) continue;
+      b.fuse -= dt;
+      if (b.fuse <= 0) explodeBarrel(b);
+    }
   }
 
   // ---------- 开源环境素材（Kenney CC0 nature-kit） ----------
@@ -993,6 +1070,7 @@ function boot(): void {
         obstacles: nav.obstacles,
         terrainRay,
         crates,
+        barrels,
         enemies: spawner.all(),
         boss: activeBoss && activeBoss.alive ? activeBoss : null,
       });
@@ -1024,6 +1102,19 @@ function boot(): void {
             maybeDropOrb(new THREE.Vector3(c.x, 0.8, c.z));
             addDamagePopup(new THREE.Vector3(c.x, 1.2, c.z), '箱子击碎', '#ffd24a');
           }
+          return true;
+        }
+      }
+      // 爆炸桶：先于敌人扣桶血，打空引信即爆
+      for (const b of barrels) {
+        if (!b.alive) continue;
+        const bdx = b.x - pos.x;
+        const bdz = b.z - pos.z;
+        const bdy = 0.55 - pos.y;
+        if (bdx * bdx + bdy * bdy + bdz * bdz < 0.95) {
+          b.hp -= damage;
+          spawnParticles(pos, 0xffd24a, 2, 1.6);
+          if (b.hp <= 0) igniteBarrel(b);
           return true;
         }
       }
@@ -2000,6 +2091,7 @@ function boot(): void {
       });
       // 短期增益计时
       if (tickShortBuffs(shortBuffs, dt)) refreshGrowth(); // 到期恢复
+      tickBarrels(dt); // 爆炸桶引信（直射 0.02s ≈ 即爆；链式 0.15s）
 
       // HUD 更新（帧数据由 play/hudFrame 组装）
       if (flow.phase === 'intro' || flow.phase === 'wave' || flow.phase === 'boss') {
@@ -2329,6 +2421,12 @@ function boot(): void {
     chestsInfo: () => chestsInfo(queryDeps),
     /** 调试：木箱位置/存活（校验是否被平台吞掉） */
     cratesInfo: () => cratesInfo(queryDeps),
+    barrelsInfo: () => barrels.map((b, i) => ({ i, x: b.x, z: b.z, hp: b.hp, alive: b.alive, fuse: b.fuse })),
+    igniteBarrel: (i: number) => {
+      const b = barrels[i];
+      if (b) igniteBarrel(b);
+      return barrels.map((b2) => b2.alive);
+    },
     playerPos: () => playerPos(queryDeps),
     /** 调试：切换角色（验证召唤/炼狱等角色技能的视线判定） */
     setRole(id: string): boolean {

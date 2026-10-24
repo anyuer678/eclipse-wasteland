@@ -25,6 +25,7 @@ export interface HitscanInput {
   obstacles: readonly NavObstacle[];
   terrainRay: (ax: number, ay: number, az: number, bx: number, by: number, bz: number) => number | null;
   crates: readonly HitscanCrate[];
+  barrels: readonly HitscanCrate[];
   enemies: readonly HitscanUnit[];
   boss: HitscanUnit | null;
 }
@@ -56,6 +57,16 @@ export function castHitscan(inp: HitscanInput): HitscanResult {
     if (!c.alive) continue;
     hitScratch.set(c.x, 0.7, c.z);
     const t = raySphere(origin, dir, hitScratch, 1.0);
+    if (t !== null && t < bestT && t < wallT) {
+      bestT = t;
+      hit = true;
+    }
+  }
+  // 爆炸桶：低矮圆柱，命中球近似
+  for (const b of inp.barrels) {
+    if (!b.alive) continue;
+    hitScratch.set(b.x, 0.5, b.z);
+    const t = raySphere(origin, dir, hitScratch, 0.9);
     if (t !== null && t < bestT && t < wallT) {
       bestT = t;
       hit = true;

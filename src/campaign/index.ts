@@ -14,5 +14,5 @@ export type { SpawnAnchor } from './spawnZones';
 export { createPlacement } from './placement';
 export type { Placement, PlacementDeps, PlacementNav, PlacementOpts, PlacementPoint } from './placement';
 export { CRATE_HP, rebuildMissionMap } from './missionMap';
-export type { MissionCrate, MissionMap } from './missionMap';
+export type { MissionBarrel, MissionCrate, MissionMap } from './missionMap';
 export type { BossSpec, Element, FlowPhase, MissionDef, WaveSpec } from './types';
