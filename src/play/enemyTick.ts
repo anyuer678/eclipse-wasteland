@@ -50,7 +50,7 @@ export interface EnemyTickDeps<T extends EnemyTickEnemy = EnemyTickEnemy> {
   onKill(e: T): boolean;
   sfx: { boom(): void; spit(): void };
   shake(amp: number, dur: number): void;
-  damagePlayer(amount: number): boolean;
+  damagePlayer(amount: number, src?: { x: number; z: number }): boolean;
   hudHit(): void;
   spawnProjectile(from: THREE.Vector3, to: THREE.Vector3, color: number, speed: number, damage: number): void;
   /** 弹道被掩体/地形截断后的终点 */
@@ -95,9 +95,9 @@ export function tickEnemies<T extends EnemyTickEnemy>(crowd: readonly T[], dt: n
         const radius = e.def.blastRadius > 0 ? e.def.blastRadius : 2.6;
         const exposed = d.nav.hasLineOfSight3D(ep.x, ep.y + 0.8, ep.z, pp.x, pp.y + 1.0, pp.z);
         if (dx * dx + dz * dz <= radius * radius && Math.abs(dy) < 2.2 && exposed) {
-          if (d.damagePlayer(evt.blast)) d.hudHit();
+          if (d.damagePlayer(evt.blast, { x: ep.x, z: ep.z })) d.hudHit();
         }
-      } else if (d.damagePlayer(evt.melee ?? 0)) {
+      } else if (d.damagePlayer(evt.melee ?? 0, { x: ep.x, z: ep.z })) {
         d.hudHit();
       }
     }

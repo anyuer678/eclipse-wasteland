@@ -84,7 +84,7 @@ export interface CommandDeps {
   syncBossModel: () => void;
   setHp: (v: number) => void;
   performDash: () => void;
-  applyDamageToPlayer: (v: number) => boolean;
+  applyDamageToPlayer: (v: number, src?: { x: number; z: number }) => boolean;
   refreshRun: () => void;
   onBossKilled: (boss: Boss) => void;
   spawnBuffOrb: (pos: THREE.Vector3) => void;
@@ -244,8 +244,8 @@ export function createDebugApi(d: CommandDeps): Record<string, unknown> {
     heal(): void {
       d.setHp(d.maxHp());
     },
-    hurt(amount: number): void {
-      d.setHp(d.hp() - amount);
+    hurt(amount: number, sx?: number, sz?: number): void {
+      d.applyDamageToPlayer(amount, sx !== undefined && sz !== undefined ? { x: sx, z: sz } : undefined);
     },
     /** 触发一次冲刺（调试口：验证无敌帧/完美闪避） */
     dash: () => d.performDash(),

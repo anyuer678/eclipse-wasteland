@@ -37,7 +37,7 @@ export interface BossTickDeps {
   terrainHeightAt(x: number, z: number): number;
   clampArena(pos: THREE.Vector3): void;
   resolveObstacles(pos: THREE.Vector3, radius: number): void;
-  damagePlayer(amount: number): boolean;
+  damagePlayer(amount: number, src?: { x: number; z: number }): boolean;
   hudHit(): void;
   shake(amp: number, dur: number): void;
   roar(): void;
@@ -78,14 +78,14 @@ export function tickBoss(boss: BossLike, d: BossTickDeps): number {
   const bossLos = d.nav.hasLineOfSight3D(bp.x, bp.y + 1.2, bp.z, d.playerPos.x, d.playerPos.y + 1.0, d.playerPos.z);
   if (evt.melee !== undefined) {
     // 横扫 / 冲锋撞击（撞击是冲锋结束帧的 melee 结算）
-    if (bossLos && d.damagePlayer(evt.melee)) d.hudHit();
+    if (bossLos && d.damagePlayer(evt.melee, { x: bp.x, z: bp.z })) d.hudHit();
   } else if (evt.chargeDir) {
     // 冲锋起手只做预警，伤害只在撞击帧结算；不能起手瞬发
     d.shake(0.1, 0.2);
   } else if (evt.stompRadius) {
     d.shake(0.2, 0.4);
     if (bossLos && d.playerPos.distanceTo(bp) < evt.stompRadius) {
-      if (d.damagePlayer(8)) d.hudHit();
+      if (d.damagePlayer(8, { x: bp.x, z: bp.z })) d.hudHit();
     }
   } else if (evt.summon) {
     // 召唤物围绕 BOSS 出现，而不是全图随机位置 / 玩家脚下

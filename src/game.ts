@@ -679,7 +679,7 @@ function boot(): void {
     }
     // 玩家站太近也有风险（冲刺无敌帧照常生效）
     const pd = Math.hypot(player.position.x - b.x, player.position.z - b.z);
-    if (pd <= BARREL_RADIUS * 0.7) applyDamageToPlayer(BARREL_PLAYER_DMG * barrelFalloff(pd));
+    if (pd <= BARREL_RADIUS * 0.7) applyDamageToPlayer(BARREL_PLAYER_DMG * barrelFalloff(pd), { x: b.x, z: b.z });
     // 链式引爆邻近油桶 + 波及木箱（打碎掉补给）
     for (const nb of collectChainBarrels(barrels, b.x, b.z)) igniteBarrel(nb, BARREL_CHAIN_DELAY);
     for (const cr of crates) {
@@ -1471,7 +1471,7 @@ function boot(): void {
   applyMaxHpGrowth();
 
   /** 玩家受伤统一结算（护甲 + 护盾减伤 + 局内铁壁 + 荆棘反弹 + 受击无敌帧） */  let hurtInvuln = 0;
-  const applyDamageToPlayer = (v: number): boolean => {
+  const applyDamageToPlayer = (v: number, src?: { x: number; z: number }): boolean => {
     // 等级压制：怪物等级高于玩家时伤害放大
     v *= suppressionTaken(runState.level - flow.monsterLevel);
     if (hurtInvuln > 0) return false; // 无敌帧：防多敌人同帧秒杀，也不再播放受击反馈
@@ -1489,6 +1489,12 @@ function boot(): void {
     addShake(0.14, 0.32);
     // 受击红色碎片
     spawnParticles(player.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xff4444, 2, 2.2);
+    if (src) {
+      // 受击方向指示：来源超出视野中轴（>60°）才提示，准星弧指向来源侧
+      const yawToSrc = Math.atan2(player.position.x - src.x, player.position.z - src.z);
+      const rel = Math.atan2(Math.sin(yawToSrc - player.yaw), Math.cos(yawToSrc - player.yaw));
+      if (Math.abs(rel) > Math.PI / 3) shell.hud.hitFrom((-rel * 180) / Math.PI);
+    }
     const st = computeStats();
     const furyResist = furyTimer > 0 ? 0.3 : 0;
     // 总减伤（天赋韧性 + 局内铁壁 + 狂暴抗性）夹取到 85%，避免叠穿
@@ -2028,7 +2034,7 @@ function boot(): void {
 
       // 敌人弹丸推进与命中
       const projDmg = projectiles.update(dt, player.position, terrainHeightAt);
-      if (projDmg > 0 && applyDamageToPlayer(projDmg)) shell.hud.hit();
+      if (projDmg > 0 && applyDamageToPlayer(projDmg, projectiles.lastHitSrc ?? undefined)) shell.hud.hit();
 
       // BOSS AI
       if (activeBoss && activeBoss.alive) {

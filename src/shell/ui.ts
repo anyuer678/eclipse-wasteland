@@ -299,6 +299,27 @@ export const THEME = `
     100% { opacity: 0; transform: rotate(var(--rot, 0deg)) scale(0.8); }
   }
 
+  /* 受击方向指示：准星外的红色弧，旋转角 --hdir 指向伤害来源侧 */
+  #ss-crosshair .ch-hd {
+    position: absolute;
+    left: -54px;
+    top: -54px;
+    width: 108px;
+    height: 108px;
+    border: 4px solid transparent;
+    border-top-color: rgba(255, 72, 58, 0.95);
+    border-radius: 50%;
+    opacity: 0;
+    transform: rotate(var(--hdir, 0deg));
+    pointer-events: none;
+    filter: drop-shadow(0 0 4px rgba(255, 60, 40, 0.8));
+  }
+  #ss-crosshair .ch-hd.on { animation: ss-hd-fade 0.9s ease-out; }
+  @keyframes ss-hd-fade {
+    0% { opacity: 0.95; }
+    100% { opacity: 0; }
+  }
+
   /* 技能面板 */
   #ss-skills {
     position: fixed; right: 22px; bottom: 18px; z-index: 15; pointer-events: none;

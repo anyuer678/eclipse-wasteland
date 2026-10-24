@@ -27,6 +27,8 @@ export class ProjectilePool {
   private readonly geo = new THREE.SphereGeometry(0.09, 8, 6);
   private readonly mats = new Map<number, THREE.MeshBasicMaterial>();
   private readonly items: Proj[] = [];
+  /** 最近一次命中玩家的弹丸位置（受击方向指示用） */
+  lastHitSrc: { x: number; z: number } | null = null;
 
   constructor(scene: THREE.Scene, fx: Fx) {
     this.scene = scene;
@@ -80,6 +82,7 @@ export class ProjectilePool {
       const dz = m.position.z - playerPos.z;
       if (dx * dx + dy * dy + dz * dz < HIT_RADIUS * HIT_RADIUS) {
         damage += p.damage;
+        this.lastHitSrc = { x: m.position.x, z: m.position.z };
         this.fx.emit(m.position, p.color, 5, 2.4);
         this.remove(i);
         continue;
@@ -106,5 +109,6 @@ export class ProjectilePool {
   clear(): void {
     for (const p of this.items) this.scene.remove(p.mesh);
     this.items.length = 0;
+    this.lastHitSrc = null;
   }
 }

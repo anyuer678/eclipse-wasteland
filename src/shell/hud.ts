@@ -43,6 +43,8 @@ export interface HudView {
   hitConfirm(): void;
   /** 命中标记 ×：普通白 / 弱点黄 / 击杀红 */
   hitmark(kind: 'normal' | 'weak' | 'kill'): void;
+  /** 受击方向指示：relDeg 为指向伤害来源的屏幕旋转角（0 = 正前） */
+  hitFrom(relDeg: number): void;
   /** 屏幕震动（） */
   shake(intensity?: number): void;
   /** 击杀提示（） */
@@ -112,6 +114,10 @@ export function createHud(): HudView {
     crosshair.appendChild(hm);
     hmPieces.push(hm);
   }
+
+  // 受击方向指示：视野外的伤害来源方向（准星弧，--hdir 为朝向来源的旋转角）
+  const hitDir = el('div', 'ch-hd', '');
+  crosshair.appendChild(hitDir);
 
   // 技能数值面板
   const skills = el('div', '', '');
@@ -249,6 +255,12 @@ export function createHud(): HudView {
         void hm.offsetWidth; // 重启动画
         hm.classList.add('on');
       }
+    },
+    hitFrom(relDeg) {
+      hitDir.classList.remove('on');
+      void hitDir.offsetWidth; // 重启动画
+      hitDir.style.setProperty('--hdir', `${relDeg.toFixed(1)}deg`);
+      hitDir.classList.add('on');
     },
     shake(intensity = 1) {
       root.style.transform = `translate(${(Math.random() - 0.5) * 6 * intensity}px, ${(Math.random() - 0.5) * 6 * intensity}px)`;
