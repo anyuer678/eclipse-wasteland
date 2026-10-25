@@ -836,6 +836,22 @@ function boot(): void {
     announceTimers.push(window.setTimeout(() => { inner.style.opacity = '1'; }, 30));
     announceTimers.push(window.setTimeout(() => { inner.style.opacity = '0'; }, Math.max(300, durationMs - 400)));
   }
+  /** 全屏闪白（转阶段/登场演出的冲击帧，纯表现层） */
+  let flashEl: HTMLDivElement | null = null;
+  function showWhiteFlash(opacity = 0.8, durationMs = 380): void {
+    if (!flashEl) {
+      flashEl = document.createElement('div');
+      flashEl.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:9998;pointer-events:none;opacity:0;';
+      document.body.appendChild(flashEl);
+    }
+    flashEl.style.transition = 'none';
+    flashEl.style.opacity = String(opacity);
+    requestAnimationFrame(() => {
+      if (!flashEl) return;
+      flashEl.style.transition = `opacity ${durationMs}ms ease-out`;
+      flashEl.style.opacity = '0';
+    });
+  }
   flow.onPhaseChange = (phase, _mission) => {
     if (activeBoss) world.scene.remove(activeBoss.root);
     activeBoss = flow.activeBoss;
@@ -891,6 +907,8 @@ function boot(): void {
         if (activeBoss !== boss || !boss.alive) return;
         showAnnouncement(boss.spec.name, '#' + boss.spec.color.toString(16).padStart(6, '0'), 3000);
         sfx.roar();
+        addShake(0.35, 0.8);
+        showWhiteFlash(0.4, 500);
         shell.hud.boss(boss.spec.name, (boss.hp / boss.maxHp) * 100);
       }, 600);
     }
@@ -2077,6 +2095,8 @@ function boot(): void {
           shake: addShake,
           roar: () => sfx.roar(),
           announce: showAnnouncement,
+          hitStop: (t) => { hitStopT = Math.max(hitStopT, t); },
+          flashWhite: () => showWhiteFlash(0.65, 420),
           burst: (pos, color, scale) => fx.burst(pos, color, scale),
           emit: (pos, color, count, speed, scale) => fx.emit(pos, color, count, speed, scale),
           summon: (count, x, z) => {
@@ -2163,7 +2183,15 @@ function boot(): void {
             slotIndex: arsenal.index,
           }),
           snap.fire,
-          activeBoss && activeBoss.alive ? { name: activeBoss.spec.name, hp: activeBoss.hp, maxHp: activeBoss.maxHp } : null
+          activeBoss && activeBoss.alive
+            ? {
+                name: activeBoss.spec.name,
+                hp: activeBoss.hp,
+                maxHp: activeBoss.maxHp,
+                phase: activeBoss.phase,
+                thresholds: activeBoss.spec.phaseThresholds ?? [],
+              }
+            : null
         );
       }
 

@@ -261,7 +261,13 @@ export const THEME = `
   .bar.hp > div { background: linear-gradient(90deg, #8a2d22, var(--cinnabar)); }
   .bar.energy > div { background: linear-gradient(90deg, #274a6e, var(--indigo)); }
   .bar.bossbar { width: 380px; height: 12px; }
-  .bar.bossbar > div { background: linear-gradient(90deg, #6b5a1e, var(--amber)); }
+  .bar.bossbar > .fill { background: linear-gradient(90deg, #6b5a1e, var(--amber)); }
+  .bar.bossbar > .fill.rage { background: linear-gradient(90deg, #7a1e1e, #ff5a3c); }
+  .boss-ticks { position: absolute; inset: 0; pointer-events: none; }
+  .boss-ticks i {
+    position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px;
+    background: rgba(34,37,44,0.6); box-shadow: 0 0 0 1px rgba(255,255,255,0.65);
+  }
   .hud-label { color: var(--ink-dim); font-size: 10px; letter-spacing: 0.22em; margin-bottom: 3px; font-family: var(--mono); font-weight: 600; }
   .hud-num { color: var(--ink); font-size: 12.5px; margin-top: 3px; letter-spacing: 0.06em; font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; }
   #ss-boss-wrap { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 15; text-align: center; }

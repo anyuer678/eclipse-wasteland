@@ -37,7 +37,8 @@ export interface HudView {
     mag: number;
     reloading: boolean;
   }): void;
-  boss(name: string, hpPct: number): void;
+  /** phase>0 显示狂暴化标记并变色；thresholds 为阶段阈值（血量百分比），在血条上画分段刻度 */
+  boss(name: string, hpPct: number, phase?: number, thresholds?: number[]): void;
   hideBoss(): void;
   hit(): void;
   hitConfirm(): void;
@@ -127,7 +128,7 @@ export function createHud(): HudView {
   // BOSS 血条
   const bossWrap = el('div', 'hidden', '');
   bossWrap.id = 'ss-boss-wrap';
-  bossWrap.innerHTML = `<div id="ss-boss-name"></div><div class="bar bossbar" style="margin:0 auto"><div style="width:100%"></div></div>`;
+  bossWrap.innerHTML = `<div id="ss-boss-name"></div><div class="bar bossbar" style="margin:0 auto"><div class="fill" style="width:100%"></div><div class="boss-ticks"></div></div>`;
 
   // 武器背包栏（底部中央）
   const slotsWrap = el('div', '', '');
@@ -148,7 +149,8 @@ export function createHud(): HudView {
   const weaponInfo = root.querySelector('.hud-weapon') as HTMLElement;
   const waveInfo = root.querySelector('.hud-wave') as HTMLElement;
   const skillBody = skills.querySelector('.sk-body') as HTMLElement;
-  const bossBar = bossWrap.querySelector('.bar.bossbar > div') as HTMLElement;
+  const bossBar = bossWrap.querySelector('.bar.bossbar .fill') as HTMLElement;
+  const bossTicks = bossWrap.querySelector('.boss-ticks') as HTMLElement;
   const bossName = bossWrap.querySelector('#ss-boss-name') as HTMLElement;
   // 缓存：内容不变时跳过 DOM 重建（避免每帧 innerHTML / style 写入）
   let cacheSkill = '';
@@ -160,6 +162,7 @@ export function createHud(): HudView {
   let cacheEnergy = -1;
   let cacheEnergyMax = -1;
   let cacheSpread = -1;
+  let cacheTicks = '';
 
   return {
     root,
@@ -228,10 +231,19 @@ export function createHud(): HudView {
           .join('');
       }
     },
-    boss(name, pct) {
+    boss(name, pct, phase = 0, thresholds = []) {
       bossWrap.classList.remove('hidden');
-      bossName.textContent = name;
+      const label = phase > 0 ? `${name} · 狂暴化` : name;
+      if (bossName.textContent !== label) bossName.textContent = label;
       bossBar.style.width = `${pct}%`;
+      bossBar.classList.toggle('rage', phase > 0);
+      const key = thresholds.join(',');
+      if (key !== cacheTicks) {
+        cacheTicks = key;
+        bossTicks.innerHTML = thresholds
+          .map((t) => `<i style="left:${(Math.max(0, Math.min(1, t)) * 100).toFixed(1)}%"></i>`)
+          .join('');
+      }
     },
     hideBoss() {
       bossWrap.classList.add('hidden');

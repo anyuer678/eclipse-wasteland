@@ -7,6 +7,9 @@ export interface HudBossInfo {
   name: string;
   hp: number;
   maxHp: number;
+  /** 当前阶段（0=初始）与阶段阈值（血量百分比），驱动血条分段刻度与狂暴变色 */
+  phase?: number;
+  thresholds?: number[];
 }
 
 export function applyHudFrame(
@@ -17,6 +20,6 @@ export function applyHudFrame(
 ): void {
   hud.update(data);
   hud.setSpread(firing ? 0.5 : 0);
-  if (boss) hud.boss(boss.name, Math.max(0, (boss.hp / boss.maxHp) * 100));
+  if (boss) hud.boss(boss.name, Math.max(0, (boss.hp / boss.maxHp) * 100), boss.phase ?? 0, boss.thresholds ?? []);
   else hud.hideBoss();
 }

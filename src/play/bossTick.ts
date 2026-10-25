@@ -42,6 +42,9 @@ export interface BossTickDeps {
   shake(amp: number, dur: number): void;
   roar(): void;
   announce(text: string, color: string, durationMs: number): void;
+  /** 转阶段演出钩子（可选，纯表现层）：顿帧与全屏闪白 */
+  hitStop?(t: number): void;
+  flashWhite?(): void;
   burst(pos: THREE.Vector3, color: number, scale: number): void;
   emit(pos: THREE.Vector3, color: number, count: number, speed: number, scale: number): void;
   summon(count: number, x: number, z: number): void;
@@ -59,6 +62,8 @@ export function tickBoss(boss: BossLike, d: BossTickDeps): number {
       d.burst(boss.root.position, 0xff4a22, 6);
       boss.centerInto(d.scratch);
       d.emit(d.scratch, 0xff5a22, 22, 6.5, 2);
+      d.hitStop?.(0.14);
+      d.flashWhite?.();
     }
     phaseSeen = boss.phase;
   }
