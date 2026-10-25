@@ -1075,14 +1075,26 @@ function boot(): void {
     runPierce: { targets: 0, falloff: 0.6 },
     tracer,
     onShot: (): void => {
-      sfx.shot(arsenal.current.def.archetype);
-      // 枪口闪光：短促高亮粒子，配合 Bloom 形成枪口焰
+      const arch = arsenal.current.def.archetype;
+      sfx.shot(arch);
+      // 枪口观感按枪型分化（P14.4）：霰弹大而散、狙击快而亮、冲锋枪细碎、手枪短促、步枪基准
+      const muzzle: Record<string, { color: number; count: number; speed: number; size: number }> = {
+        rifle: { color: 0xffd08a, count: 2, speed: 0.9, size: 1.15 },
+        shotgun: { color: 0xffb35a, count: 6, speed: 1.7, size: 1.9 },
+        pistol: { color: 0xd8e4ff, count: 1, speed: 0.8, size: 0.95 },
+        smg: { color: 0xcfe8ff, count: 2, speed: 1.25, size: 0.75 },
+        sniper: { color: 0xaad4ff, count: 4, speed: 2.3, size: 1.5 },
+      };
+      const m = muzzle[arch] ?? muzzle.rifle;
       muzzleScratch.copy(fireCtx.origin).addScaledVector(fireCtx.direction, 0.85);
-      fx.emit(muzzleScratch, 0xffd08a, settings.lowMotion ? 1 : 2, 0.9, 1.15);
-      fovKick = Math.min(fovKick + (settings.lowMotion ? 0.35 : 0.9), 3.5);
+      fx.emit(muzzleScratch, m.color, settings.lowMotion ? Math.max(1, m.count - 1) : m.count, m.speed, m.size);
+      // FOV 冲击同样按枪型：霰弹/狙击重、冲锋枪轻
+      const fovByArch: Record<string, number> = { rifle: 0.9, shotgun: 1.5, pistol: 0.7, smg: 0.55, sniper: 1.25 };
+      const fovKickBase = fovByArch[arch] ?? 0.9;
+      fovKick = Math.min(fovKick + (settings.lowMotion ? fovKickBase * 0.4 : fovKickBase), 3.5);
       // 镜头后坐力：按枪型给不同的上抬，指数回落
       const kick: Record<string, number> = { rifle: 0.011, pistol: 0.008, smg: 0.006, shotgun: 0.028, sniper: 0.04 };
-      recoil = Math.min(recoil + (kick[arsenal.current.def.archetype] ?? 0.012), 0.07);
+      recoil = Math.min(recoil + (kick[arch] ?? 0.012), 0.07);
     },
     resolveHit(origin, dir) {
       const cast = castHitscan({
