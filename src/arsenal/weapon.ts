@@ -17,7 +17,7 @@ import {
 } from './combat';
 import type { WeaponDef } from './defs';
 import type { TracerPool } from './tracer';
-import { beamAscensionMods, chainAscensionMods, slowAscensionMods, energyAscensionMods, overloadAscensionMods, lockonAscensionMods, chargeAscensionMods } from '../growth';
+import { beamAscensionMods, chainAscensionMods, slowAscensionMods, energyAscensionMods, overloadAscensionMods, lockonAscensionMods, chargeAscensionMods, guardAscensionMods, burstAscensionMods, pierceAscensionMods } from '../growth';
 import type { ChargeAscensionMods } from '../growth';
 
 /** 射击上下文：由外部（玩家系统）注入 */
@@ -39,6 +39,8 @@ export interface FireContext {
   onChain?: (pos: THREE.Vector3, damage: number, jumps: number, falloff: number) => void;
   /** 治疗玩家（guard 机制） */
   onHeal?: (amount: number) => void;
+  /** 给玩家伤害护盾（guard 进阶 2：治疗附加护盾；shieldTimer > 0 期间减伤） */
+  onShield?: (seconds: number) => void;
   /** 扣动扳机且真的开火了（供音效；一次 discharge 只触发一次） */
   onShot?: () => void;
 }
@@ -180,10 +182,12 @@ export class Weapon {
     } else if (m.kind === 'overload') {
       this.toggleOverload();
     } else if (m.kind === 'guard') {
-      // 圣辉守护：E 治疗玩家（带冷却）
+      // 圣辉守护：E 治疗玩家（带冷却；进阶给治疗量/附加护盾/冷却缩减）
       if (this.guardCooldown <= 0 && ctx.onHeal) {
-        this.guardCooldown = m.cooldown;
-        ctx.onHeal(m.heal);
+        const gm = guardAscensionMods(this.growthAscension);
+        this.guardCooldown = m.cooldown * gm.cooldownMult;
+        ctx.onHeal(m.heal * gm.healMult);
+        if (gm.shieldSeconds > 0) ctx.onShield?.(gm.shieldSeconds);
       }
     }
   }
@@ -237,6 +241,8 @@ export class Weapon {
     let shotDmg = shotDamage(d.damage, damageMult, this.growthDamage);
     // 过载期间开火：进阶 1 过载伤害 ×1.1
     if (d.mech.kind === 'overload' && s.overloaded) shotDmg *= overloadAscensionMods(this.growthAscension).dmgMult;
+    // pierce 机制：进阶 3 穿透伤害 ×1.2（整发，含主命中）
+    if (d.mech.kind === 'pierce') shotDmg *= pierceAscensionMods(this.growthAscension).dmgMult;
 
     // beam 机制（烈焰风暴）：持续射线耗能量、不耗弹药；进阶给射程/伤害/能耗
     let beamRange = Infinity;
@@ -295,24 +301,27 @@ export class Weapon {
             ctx.onHitEnemy?.(rest[i], shotDmg * Math.pow(ctx.runPierce.falloff, i), {});
           }
         }
-        // burst 机制（三连突击）：同一次开火连发多发
+        // burst 机制（三连突击）：同一次开火连发多发；进阶给弹数/伤害/散射收束
         if (d.mech.kind === 'burst') {
           const m = d.mech as { shots: number };
-          for (let i = 1; i < m.shots; i++) {
-            const dir2 = this.spreadDir(ctx.direction, d.spreadDeg, p + i);
+          const bm = burstAscensionMods(this.growthAscension);
+          const burstDmg = shotDmg * bm.dmgMult;
+          for (let i = 1; i < m.shots + bm.shotsBonus; i++) {
+            const dir2 = this.spreadDir(ctx.direction, d.spreadDeg * bm.spreadMult, p + i);
             const hit2 = ctx.resolveHit(origin, dir2);
             ctx.tracer.fire(origin, hit2, d.color, lineIntensity * 0.8);
-            ctx.onHitEnemy?.(hit2, shotDmg, {});
+            ctx.onHitEnemy?.(hit2, burstDmg, {});
           }
         }
-        // pierce 机制（穿云狙击）：沿射线穿透多个敌人，伤害递减
+        // pierce 机制（穿云狙击）：沿射线穿透多个敌人，伤害递减；进阶给目标数/衰减/伤害
         if (d.mech.kind === 'pierce') {
           const m = d.mech as { targets: number; falloff: number };
-          const rest = ctx.resolvePierce?.(origin, ctx.direction, m.targets + 1) ?? [];
+          const pm = pierceAscensionMods(this.growthAscension);
+          const rest = ctx.resolvePierce?.(origin, ctx.direction, m.targets + pm.targetsBonus + 1) ?? [];
           // 跳过第一个（已由主命中处理）
           for (let i = 1; i < rest.length; i++) {
             ctx.tracer.fire(origin, rest[i], d.color, lineIntensity * (1 - i * 0.25));
-            ctx.onHitEnemy?.(rest[i], shotDmg * Math.pow(m.falloff, i), {});
+            ctx.onHitEnemy?.(rest[i], shotDmg * Math.pow(pm.falloffOverride ?? m.falloff, i), {});
           }
         }
         // chain 机制（雷暴投枪）：命中后弹跳；进阶给弹跳次数/衰减/首跳伤害

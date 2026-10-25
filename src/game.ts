@@ -1295,6 +1295,9 @@ function boot(): void {
     onHeal(amount) {
       setHp(hp + amount);
     },
+    onShield(seconds) {
+      shieldTimer = Math.max(shieldTimer, seconds);
+    },
   };
 
   const keyState = {

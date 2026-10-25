@@ -47,7 +47,17 @@ export const ASCENSION_EFFECTS: Record<string, AscensionEffect[]> = {
     { text: '弹跳衰减降低', num: 0.75 },
     { text: '首跳伤害 +20%', num: 1.2 },
   ],
-  guard: [{ text: '治疗量 +40%' }, { text: '治疗附加 2s 护盾' }, { text: '冷却时间 -25%' }],
+  guard: [{ text: '治疗量 +40%', num: 1.4 }, { text: '治疗附加 2s 护盾', num: 2 }, { text: '冷却时间 -25%', num: 0.75 }],
+  burst: [
+    { text: '三连发弹数 +1', num: 1 },
+    { text: '三连发伤害 +15%', num: 1.15 },
+    { text: '三连发散射 -40%', num: 0.6 },
+  ],
+  pierce: [
+    { text: '穿透目标数 +1', num: 1 },
+    { text: '穿透衰减降低', num: 0.75 },
+    { text: '穿透伤害 +20%', num: 1.2 },
+  ],
 };
 
 /** 某武器当前进阶已解锁/下一阶效果文案 */
@@ -146,6 +156,42 @@ export interface ChargeAscensionMods {
 export function chargeAscensionMods(ascension: number): ChargeAscensionMods {
   const [speed, pierce, crit] = ascensionNums('charge', ascension);
   return { speedMult: speed ?? 1, fullPierce: pierce ?? 0, critBonus: crit ?? 0 };
+}
+
+export interface GuardAscensionMods {
+  healMult: number;
+  shieldSeconds: number;
+  cooldownMult: number;
+}
+
+/** guard 进阶数值：阶1 治疗量 ×1.4 · 阶2 治疗附加 2s 护盾 · 阶3 冷却 ×0.75 */
+export function guardAscensionMods(ascension: number): GuardAscensionMods {
+  const [heal, shield, cd] = ascensionNums('guard', ascension);
+  return { healMult: heal ?? 1, shieldSeconds: shield ?? 0, cooldownMult: cd ?? 1 };
+}
+
+export interface BurstAscensionMods {
+  shotsBonus: number;
+  dmgMult: number;
+  spreadMult: number;
+}
+
+/** burst 进阶数值：阶1 弹数 +1 · 阶2 伤害 ×1.15 · 阶3 散射 ×0.6 */
+export function burstAscensionMods(ascension: number): BurstAscensionMods {
+  const [shots, dmg, spread] = ascensionNums('burst', ascension);
+  return { shotsBonus: shots ?? 0, dmgMult: dmg ?? 1, spreadMult: spread ?? 1 };
+}
+
+export interface PierceAscensionMods {
+  targetsBonus: number;
+  falloffOverride: number | null;
+  dmgMult: number;
+}
+
+/** pierce 进阶数值：阶1 穿透目标 +1 · 阶2 衰减改 0.75 · 阶3 伤害 ×1.2 */
+export function pierceAscensionMods(ascension: number): PierceAscensionMods {
+  const [targets, falloff, dmg] = ascensionNums('pierce', ascension);
+  return { targetsBonus: targets ?? 0, falloffOverride: falloff ?? null, dmgMult: dmg ?? 1 };
 }
 /** 符文：每级伤害加成 */
 export const RUNE_DAMAGE_STEP = 0.02;

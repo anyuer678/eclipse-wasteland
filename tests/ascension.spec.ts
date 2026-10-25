@@ -9,15 +9,18 @@ import {
   overloadAscensionMods,
   lockonAscensionMods,
   chargeAscensionMods,
+  guardAscensionMods,
+  burstAscensionMods,
+  pierceAscensionMods,
 } from '../src/growth/upgrade'
 
 describe('growth/ascension mods（文案与数值同表）', () => {
-  it('每系 3 阶都有文案；实装系每阶都有数值载荷', () => {
+  it('每系 3 阶都有文案与数值载荷（全 9 系实装）', () => {
     for (const [kind, rows] of Object.entries(ASCENSION_EFFECTS)) {
       expect(rows.length).toBe(3)
-      for (const r of rows) expect(r.text.length).toBeGreaterThan(0)
-      if (kind !== 'guard') {
-        for (const r of rows) expect(typeof r.num).toBe('number')
+      for (const r of rows) {
+        expect(r.text.length).toBeGreaterThan(0)
+        expect(typeof r.num).toBe('number')
       }
     }
   })
@@ -82,5 +85,26 @@ describe('growth/ascension mods（文案与数值同表）', () => {
     expect(chargeAscensionMods(1)).toEqual({ speedMult: 1.25, fullPierce: 0, critBonus: 0 })
     expect(chargeAscensionMods(2)).toEqual({ speedMult: 1.25, fullPierce: 1, critBonus: 0 })
     expect(chargeAscensionMods(3)).toEqual({ speedMult: 1.25, fullPierce: 1, critBonus: 0.12 })
+  })
+
+  it('guard：阶0 无加成，阶1 治疗量 ×1.4，阶2 治疗附加 2s 护盾，阶3 冷却 ×0.75', () => {
+    expect(guardAscensionMods(0)).toEqual({ healMult: 1, shieldSeconds: 0, cooldownMult: 1 })
+    expect(guardAscensionMods(1)).toEqual({ healMult: 1.4, shieldSeconds: 0, cooldownMult: 1 })
+    expect(guardAscensionMods(2)).toEqual({ healMult: 1.4, shieldSeconds: 2, cooldownMult: 1 })
+    expect(guardAscensionMods(3)).toEqual({ healMult: 1.4, shieldSeconds: 2, cooldownMult: 0.75 })
+  })
+
+  it('burst：阶0 无加成，阶1 弹数 +1，阶2 伤害 ×1.15，阶3 散射 ×0.6', () => {
+    expect(burstAscensionMods(0)).toEqual({ shotsBonus: 0, dmgMult: 1, spreadMult: 1 })
+    expect(burstAscensionMods(1)).toEqual({ shotsBonus: 1, dmgMult: 1, spreadMult: 1 })
+    expect(burstAscensionMods(2)).toEqual({ shotsBonus: 1, dmgMult: 1.15, spreadMult: 1 })
+    expect(burstAscensionMods(3)).toEqual({ shotsBonus: 1, dmgMult: 1.15, spreadMult: 0.6 })
+  })
+
+  it('pierce：阶0 无加成，阶1 目标 +1，阶2 衰减 0.75，阶3 伤害 ×1.2', () => {
+    expect(pierceAscensionMods(0)).toEqual({ targetsBonus: 0, falloffOverride: null, dmgMult: 1 })
+    expect(pierceAscensionMods(1)).toEqual({ targetsBonus: 1, falloffOverride: null, dmgMult: 1 })
+    expect(pierceAscensionMods(2)).toEqual({ targetsBonus: 1, falloffOverride: 0.75, dmgMult: 1 })
+    expect(pierceAscensionMods(3)).toEqual({ targetsBonus: 1, falloffOverride: 0.75, dmgMult: 1.2 })
   })
 })
