@@ -218,6 +218,17 @@ export function createDebugApi(d: CommandDeps): Record<string, unknown> {
       }
       return list.length;
     },
+    /** 调试：生成一只保底精英摆到玩家正前方（精英播报/光环探针用） */
+    spawnElite(): number {
+      d.spawner.spawnWave({ chasers: 1, boomers: 0, spitters: 0 }, { eliteGuaranteed: 1, eliteChance: 1 });
+      const list = d.spawner.all();
+      const e = list[list.length - 1];
+      const x = d.player.position.x;
+      const z = d.player.position.z - 6;
+      e.place(x, z, d.player.terrainHeight(x, z));
+      d.syncBossModel();
+      return list.length;
+    },
     /** 关卡切换用的环境统计已由 envInfo 提供 */
 
     /** 开关自动开火（压测命中特效链路） */

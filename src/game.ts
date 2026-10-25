@@ -1480,6 +1480,8 @@ function boot(): void {
       sfx.streak(killStreak);
       if (ev.heal > 0) setHp(hp + ev.heal);
     }
+    // 精英击杀播报（右上 feed，纯展示层，不与中央横幅抢位）
+    if (e.elite) shell.hud.killFeed(`⚔ 精英·${e.elite.name} 被击败`, '#ffd700');
     return leveled;
   }
   const computeStats = (): ReturnType<typeof applyBuffs> => {
