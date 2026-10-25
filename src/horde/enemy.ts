@@ -111,6 +111,7 @@ export class Enemy {
   private flashing = false;
   /** 倒地动画剩余时间（>0 时尸体还在场上，播完才回收） */
   private corpseT = 0;
+  private halo?: THREE.Mesh;
   /** 可被回收（倒地动画播完） */
   get removable(): boolean {
     return !this.alive && this.corpseT <= 0;
@@ -190,6 +191,7 @@ export class Enemy {
       halo.position.y = tpl.height + 0.02;
       halo.rotation.x = Math.PI / 2;
       this.root.add(halo);
+      this.halo = halo;
       // 精英整体偏亮（词缀可辨识）
       this.bodyMat.color.setHex(0xffd9a0);
     }
@@ -565,7 +567,7 @@ export class Enemy {
     return false;
   }
 
-  /** 死亡：进入倒地动画（由 game 每帧 tickCorpse 推进，播完才回收） */
+  /** 死亡：进入倒地动画（由 game 每帧 tickCorpse 推进，播完才回收）；尸体按兵种色发光衰减 */
   die(): void {
     if (!this.alive) return;
     this.alive = false;
@@ -573,19 +575,24 @@ export class Enemy {
     this.corpseT = 0.9;
     this.barSprite.visible = false;
     this.flashing = false;
-    this.bodyMat.emissive.setHex(0x000000);
+    this.bodyMat.emissive.setHex(this.def.color);
+    this.bodyMat.emissiveIntensity = 1.1;
+    if (this.halo) this.halo.visible = false;
     const anim = this.bodyMat.userData.anim as Record<string, { value: number }> | undefined;
     if (anim) anim.uMove.value = 0;
   }
 
-  /** 倒地动画：绕脚踝前扑 + 末段下沉收缩 */
+  /** 倒地动画：绕脚踝前扑 + 末段发光衰减、下沉收缩与透明渐隐 */
   tickCorpse(dt: number): void {
     if (this.alive || this.corpseT <= 0) return;
     this.corpseT -= dt;
     const t = 1 - Math.max(0, this.corpseT) / 0.9;
+    this.bodyMat.emissiveIntensity = 1.1 * (1 - t);
     // 负角度 = 朝面向方向（-z）前扑
     this.root.rotation.x = -1.45 * Math.min(1, t * 2.6);
-    if (t > 0.6) {
+    if (t > 0.55) {
+      this.bodyMat.transparent = true;
+      this.bodyMat.opacity = Math.max(0, 1 - (t - 0.55) / 0.45);
       this.root.position.y -= dt * 0.5;
       this.body.scale.setScalar(Math.max(0.25, 1 - (t - 0.6) * 1.5));
     }

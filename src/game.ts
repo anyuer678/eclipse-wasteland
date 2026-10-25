@@ -1450,7 +1450,7 @@ function boot(): void {
     sfx.kill();
     const leveled = awardKillExp(e);
     maybeDropOrb(e.root.position);
-    addKillBurst(e.root.position);
+    addKillBurst(e.root.position, elementBurstColor(currentElement()));
     spawnParticles(e.root.position, 0xffd24a, 4, 3.5);
     killStreak += 1;
     killStreakTimer = 2.5;
@@ -1541,8 +1541,15 @@ function boot(): void {
     fx.emit(pos, color, count, speed);
   };
   /** 击杀冲击环（贴地扩散） */
-  const addKillBurst = (pos: THREE.Vector3): void => {
-    fx.burst(pos, 0xffd24a, 2.0);
+  /** 击杀冲击环颜色跟随武器元素（物理金 / 烈焰橙 / 霜锋蓝 / 能量紫） */
+  const elementBurstColor = (elem: Element): number => {
+    if (elem === 'fire') return 0xff7a33;
+    if (elem === 'ice') return 0x6fd8ff;
+    if (elem === 'energy') return 0xb48cff;
+    return 0xffd24a;
+  };
+  const addKillBurst = (pos: THREE.Vector3, color = 0xffd24a): void => {
+    fx.burst(pos, color, 2.0);
   };
   const addDamagePopup = (worldPos: THREE.Vector3, text: string, color: string, size = 17, key = ''): void => {
     fx.popup(worldPos, text, color, size, key);
