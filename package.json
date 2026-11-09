@@ -16,7 +16,7 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.4",
     "@types/three": "^0.186.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
